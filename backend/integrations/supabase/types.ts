@@ -1,0 +1,1340 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5";
+  };
+  public: {
+    Tables: {
+      admin_roles: {
+        Row: {
+          user_id: string;
+          email: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          email: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          email?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      ad_events: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          viewer_id: string | null;
+          kind: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          viewer_id: string | null;
+          kind: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          viewer_id?: string | null;
+          kind?: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      ad_exposures: {
+        Row: {
+          campaign_id: string;
+          viewer_id: string;
+          last_shown_at: string;
+          impression_count: number;
+          interaction_count: number;
+          hidden: boolean;
+          muted: boolean;
+        };
+        Insert: {
+          campaign_id: string;
+          viewer_id: string;
+          last_shown_at?: string;
+          impression_count?: number;
+          interaction_count?: number;
+          hidden?: boolean;
+          muted?: boolean;
+        };
+        Update: {
+          campaign_id?: string;
+          viewer_id?: string;
+          last_shown_at?: string;
+          impression_count?: number;
+          interaction_count?: number;
+          hidden?: boolean;
+          muted?: boolean;
+        };
+        Relationships: [];
+      };
+      ad_packages: {
+        Row: {
+          id: string;
+          label: string;
+          price_cents: number;
+          currency: string;
+          duration_days: number;
+          impressions_target: number;
+          is_active: boolean;
+          metadata: Json;
+        };
+        Insert: {
+          id: string;
+          label: string;
+          price_cents?: number;
+          currency?: string;
+          duration_days?: number;
+          impressions_target?: number;
+          is_active?: boolean;
+          metadata?: Json;
+        };
+        Update: {
+          id?: string;
+          label?: string;
+          price_cents?: number;
+          currency?: string;
+          duration_days?: number;
+          impressions_target?: number;
+          is_active?: boolean;
+          metadata?: Json;
+        };
+        Relationships: [];
+      };
+      ad_payments: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          amount_cents: number;
+          currency: string;
+          method: string;
+          status: string;
+          receipt: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          amount_cents: number;
+          currency?: string;
+          method?: string;
+          status?: string;
+          receipt?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          amount_cents?: number;
+          currency?: string;
+          method?: string;
+          status?: string;
+          receipt?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      ad_preferences: {
+        Row: {
+          user_id: string;
+          personalized: boolean;
+          interests: string[];
+          muted_advertisers: string[];
+          metadata: Json;
+        };
+        Insert: {
+          user_id: string;
+          personalized?: boolean;
+          interests?: string[];
+          muted_advertisers?: string[];
+          metadata?: Json;
+        };
+        Update: {
+          user_id?: string;
+          personalized?: boolean;
+          interests?: string[];
+          muted_advertisers?: string[];
+          metadata?: Json;
+        };
+        Relationships: [];
+      };
+      news_stories: {
+        Row: {
+          id: string;
+          headline: string;
+          summary: string;
+          summary_short: string;
+          category: string;
+          state: string;
+          cover_image_url: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          headline: string;
+          summary?: string;
+          summary_short?: string;
+          category?: string;
+          state?: string;
+          cover_image_url?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          headline?: string;
+          summary?: string;
+          summary_short?: string;
+          category?: string;
+          state?: string;
+          cover_image_url?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      story_follows: {
+        Row: {
+          story_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          story_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          story_id?: string;
+          user_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      story_posts: {
+        Row: {
+          story_id: string;
+          post_id: string;
+          relevance_score: number;
+          added_at: string;
+        };
+        Insert: {
+          story_id: string;
+          post_id: string;
+          relevance_score?: number;
+          added_at?: string;
+        };
+        Update: {
+          story_id?: string;
+          post_id?: string;
+          relevance_score?: number;
+          added_at?: string;
+        };
+        Relationships: [];
+      };
+      story_relevant_people: {
+        Row: {
+          story_id: string;
+          profile_id: string;
+          rank: number;
+        };
+        Insert: {
+          story_id: string;
+          profile_id: string;
+          rank?: number;
+        };
+        Update: {
+          story_id?: string;
+          profile_id?: string;
+          rank?: number;
+        };
+        Relationships: [];
+      };
+      story_saves: {
+        Row: {
+          story_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          story_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          story_id?: string;
+          user_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      trending_topics: {
+        Row: {
+          id: string;
+          label: string;
+          context: string;
+          post_count: number;
+          rank: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          label: string;
+          context?: string;
+          post_count?: number;
+          rank?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          label?: string;
+          context?: string;
+          post_count?: number;
+          rank?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      news_comments: {
+        Row: {
+          id: string;
+          story_id: string | null;
+          article_ref: string;
+          author_id: string;
+          parent_id: string | null;
+          body: string;
+          is_deleted: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          story_id?: string | null;
+          article_ref?: string;
+          author_id: string;
+          parent_id?: string | null;
+          body: string;
+          is_deleted?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          story_id?: string | null;
+          article_ref?: string;
+          author_id?: string;
+          parent_id?: string | null;
+          body?: string;
+          is_deleted?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "news_comments_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ad_campaigns: {
+        Row: {
+          advertiser_id: string;
+          budget_cents: number;
+          cta_label: string;
+          cta_url: string;
+          clicks: number;
+          created_at: string;
+          currency: string;
+          ends_at: string | null;
+          engagements: number;
+          frequency_cap_per_day: number;
+          frequency_every_n: number;
+          hides: number;
+          id: string;
+          impressions: number;
+          metadata: Json;
+          name: string;
+          objective: string;
+          package: string;
+          placement: string;
+          post_id: string | null;
+          rejection_reason: string;
+          spend_cents: number;
+          starts_at: string | null;
+          status: string;
+          targeting: Json;
+          updated_at: string;
+        };
+        Insert: {
+          advertiser_id: string;
+          budget_cents?: number;
+          cta_label?: string;
+          cta_url?: string;
+          clicks?: number;
+          created_at?: string;
+          currency?: string;
+          ends_at?: string | null;
+          engagements?: number;
+          frequency_cap_per_day?: number;
+          frequency_every_n?: number;
+          hides?: number;
+          id?: string;
+          impressions?: number;
+          metadata?: Json;
+          name?: string;
+          objective?: string;
+          package?: string;
+          placement?: string;
+          post_id?: string | null;
+          rejection_reason?: string;
+          spend_cents?: number;
+          starts_at?: string | null;
+          status?: string;
+          targeting?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          advertiser_id?: string;
+          budget_cents?: number;
+          cta_label?: string;
+          cta_url?: string;
+          clicks?: number;
+          created_at?: string;
+          currency?: string;
+          ends_at?: string | null;
+          engagements?: number;
+          frequency_cap_per_day?: number;
+          frequency_every_n?: number;
+          hides?: number;
+          id?: string;
+          impressions?: number;
+          metadata?: Json;
+          name?: string;
+          objective?: string;
+          package?: string;
+          placement?: string;
+          post_id?: string | null;
+          rejection_reason?: string;
+          spend_cents?: number;
+          starts_at?: string | null;
+          status?: string;
+          targeting?: Json;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ad_campaigns_advertiser_id_fkey";
+            columns: ["advertiser_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ad_campaigns_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      blocks: {
+        Row: {
+          blocked_id: string;
+          blocker_id: string;
+          created_at: string;
+        };
+        Insert: {
+          blocked_id: string;
+          blocker_id: string;
+          created_at?: string;
+        };
+        Update: {
+          blocked_id?: string;
+          blocker_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "blocks_blocked_id_fkey";
+            columns: ["blocked_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "blocks_blocker_id_fkey";
+            columns: ["blocker_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      comment_likes: {
+        Row: {
+          comment_id: string;
+          created_at: string;
+          user_id: string;
+        };
+        Insert: {
+          comment_id: string;
+          created_at?: string;
+          user_id: string;
+        };
+        Update: {
+          comment_id?: string;
+          created_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "comment_likes_comment_id_fkey";
+            columns: ["comment_id"];
+            isOneToOne: false;
+            referencedRelation: "comments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "comment_likes_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      comments: {
+        Row: {
+          author_id: string;
+          body: string;
+          created_at: string;
+          id: string;
+          is_deleted: boolean;
+          is_edited: boolean;
+          metadata: Json;
+          parent_id: string | null;
+          post_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          author_id: string;
+          body: string;
+          created_at?: string;
+          id?: string;
+          is_deleted?: boolean;
+          is_edited?: boolean;
+          metadata?: Json;
+          parent_id?: string | null;
+          post_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          author_id?: string;
+          body?: string;
+          created_at?: string;
+          id?: string;
+          is_deleted?: boolean;
+          is_edited?: boolean;
+          metadata?: Json;
+          parent_id?: string | null;
+          post_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "comments_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "comments_parent_id_fkey";
+            columns: ["parent_id"];
+            isOneToOne: false;
+            referencedRelation: "comments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "comments_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      content_audit: {
+        Row: {
+          action: string;
+          actor_id: string;
+          created_at: string;
+          id: string;
+          ref_id: string;
+        };
+        Insert: {
+          action: string;
+          actor_id: string;
+          created_at?: string;
+          id?: string;
+          ref_id?: string;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string;
+          created_at?: string;
+          id?: string;
+          ref_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "content_audit_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      conversations: {
+        Row: {
+          created_at: string;
+          id: string;
+          last_message_at: string;
+          user_a_id: string;
+          user_b_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          last_message_at?: string;
+          user_a_id: string;
+          user_b_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          last_message_at?: string;
+          user_a_id?: string;
+          user_b_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "conversations_user_a_id_fkey";
+            columns: ["user_a_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "conversations_user_b_id_fkey";
+            columns: ["user_b_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      feed_events: {
+        Row: {
+          author_id: string | null;
+          created_at: string;
+          event: string;
+          id: string;
+          meta: Json;
+          post_id: string;
+          user_id: string;
+        };
+        Insert: {
+          author_id?: string | null;
+          created_at?: string;
+          event: string;
+          id?: string;
+          meta?: Json;
+          post_id: string;
+          user_id: string;
+        };
+        Update: {
+          author_id?: string | null;
+          created_at?: string;
+          event?: string;
+          id?: string;
+          meta?: Json;
+          post_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feed_events_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      follows: {
+        Row: {
+          created_at: string;
+          followee_id: string;
+          follower_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          followee_id: string;
+          follower_id: string;
+        };
+        Update: {
+          created_at?: string;
+          followee_id?: string;
+          follower_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "follows_followee_id_fkey";
+            columns: ["followee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "follows_follower_id_fkey";
+            columns: ["follower_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      follow_requests: {
+        Row: {
+          created_at: string;
+          followee_id: string;
+          requester_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          followee_id: string;
+          requester_id: string;
+        };
+        Update: {
+          created_at?: string;
+          followee_id?: string;
+          requester_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "follow_requests_followee_id_fkey";
+            columns: ["followee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "follow_requests_requester_id_fkey";
+            columns: ["requester_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      messages: {
+        Row: {
+          body: string;
+          conversation_id: string;
+          created_at: string;
+          id: string;
+          is_read: boolean;
+          sender_id: string;
+        };
+        Insert: {
+          body: string;
+          conversation_id: string;
+          created_at?: string;
+          id?: string;
+          is_read?: boolean;
+          sender_id: string;
+        };
+        Update: {
+          body?: string;
+          conversation_id?: string;
+          created_at?: string;
+          id?: string;
+          is_read?: boolean;
+          sender_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "conversations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey";
+            columns: ["sender_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notifications: {
+        Row: {
+          actor_id: string;
+          created_at: string;
+          id: string;
+          is_read: boolean;
+          kind: string;
+          ref_id: string;
+          text: string;
+          user_id: string;
+        };
+        Insert: {
+          actor_id: string;
+          created_at?: string;
+          id?: string;
+          is_read?: boolean;
+          kind: string;
+          ref_id?: string;
+          text?: string;
+          user_id: string;
+        };
+        Update: {
+          actor_id?: string;
+          created_at?: string;
+          id?: string;
+          is_read?: boolean;
+          kind?: string;
+          ref_id?: string;
+          text?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      post_likes: {
+        Row: {
+          created_at: string;
+          post_id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          post_id: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          post_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "post_likes_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "post_likes_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      post_stats: {
+        Row: {
+          completes: number;
+          impressions: number;
+          plays: number;
+          post_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          completes?: number;
+          impressions?: number;
+          plays?: number;
+          post_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          completes?: number;
+          impressions?: number;
+          plays?: number;
+          post_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      posts: {
+        Row: {
+          allow_duet: boolean;
+          allow_downloads: boolean;
+          allow_remix: boolean;
+          allow_sharing: boolean;
+          author_id: string;
+          caption: string;
+          category: string;
+          comments_count: number;
+          comments_enabled: boolean;
+          content_kind: string;
+          content_type: string;
+          created_at: string;
+          hashtags: string[];
+          id: string;
+          image_path: string;
+          image_url: string | null;
+          is_edited: boolean;
+          is_pinned: boolean;
+          location: string | null;
+          scheduled_at: string | null;
+          status: string;
+          story_background: string | null;
+          story_expires_at: string | null;
+          story_overlays: string[];
+          thumbnail_path: string;
+          thumbnail_url: string;
+          updated_at: string;
+          video_height: number;
+          video_path: string;
+          video_url: string;
+          video_width: number;
+          visibility: string;
+        };
+        Insert: {
+          allow_duet?: boolean;
+          allow_downloads?: boolean;
+          allow_remix?: boolean;
+          allow_sharing?: boolean;
+          author_id: string;
+          caption?: string;
+          category?: string;
+          comments_count?: number;
+          comments_enabled?: boolean;
+          content_kind?: string;
+          content_type?: string;
+          created_at?: string;
+          hashtags?: string[];
+          id?: string;
+          image_path?: string;
+          image_url?: string | null;
+          is_edited?: boolean;
+          is_pinned?: boolean;
+          location?: string | null;
+          scheduled_at?: string | null;
+          status?: string;
+          story_background?: string | null;
+          story_expires_at?: string | null;
+          story_overlays?: string[];
+          thumbnail_path?: string;
+          thumbnail_url?: string;
+          updated_at?: string;
+          video_height?: number;
+          video_path?: string;
+          video_url?: string;
+          video_width?: number;
+          visibility?: string;
+        };
+        Update: {
+          allow_duet?: boolean;
+          allow_downloads?: boolean;
+          allow_remix?: boolean;
+          allow_sharing?: boolean;
+          author_id?: string;
+          caption?: string;
+          category?: string;
+          comments_count?: number;
+          comments_enabled?: boolean;
+          content_kind?: string;
+          content_type?: string;
+          created_at?: string;
+          hashtags?: string[];
+          id?: string;
+          image_path?: string;
+          image_url?: string | null;
+          is_edited?: boolean;
+          is_pinned?: boolean;
+          location?: string | null;
+          scheduled_at?: string | null;
+          status?: string;
+          story_background?: string | null;
+          story_expires_at?: string | null;
+          story_overlays?: string[];
+          thumbnail_path?: string;
+          thumbnail_url?: string;
+          updated_at?: string;
+          video_height?: number;
+          video_path?: string;
+          video_url?: string;
+          video_width?: number;
+          visibility?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "posts_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      profiles: {
+        Row: {
+          avatar_url: string | null;
+          bio: string;
+          created_at: string;
+          display_name: string;
+          id: string;
+          is_private: boolean;
+          updated_at: string;
+          username: string;
+          verified: boolean;
+        };
+        Insert: {
+          avatar_url?: string | null;
+          bio?: string;
+          created_at?: string;
+          display_name: string;
+          id: string;
+          is_private?: boolean;
+          updated_at?: string;
+          username: string;
+          verified?: boolean;
+        };
+        Update: {
+          avatar_url?: string | null;
+          bio?: string;
+          created_at?: string;
+          display_name?: string;
+          id?: string;
+          is_private?: boolean;
+          updated_at?: string;
+          username?: string;
+          verified?: boolean;
+        };
+        Relationships: [];
+      };
+      reports: {
+        Row: {
+          created_at: string;
+          details: string;
+          id: string;
+          kind: string;
+          reason: string;
+          ref_id: string;
+          ref_title: string;
+          reporter_id: string;
+          resolution: string;
+          status: string;
+          target_user_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          details?: string;
+          id?: string;
+          kind: string;
+          reason: string;
+          ref_id: string;
+          ref_title?: string;
+          reporter_id: string;
+          resolution?: string;
+          status?: string;
+          target_user_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          details?: string;
+          id?: string;
+          kind?: string;
+          reason?: string;
+          ref_id?: string;
+          ref_title?: string;
+          reporter_id?: string;
+          resolution?: string;
+          status?: string;
+          target_user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reports_reporter_id_fkey";
+            columns: ["reporter_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      warnings: {
+        Row: {
+          created_at: string;
+          id: string;
+          is_read: boolean;
+          message: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          is_read?: boolean;
+          message: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          is_read?: boolean;
+          message?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "warnings_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      saves: {
+        Row: {
+          created_at: string;
+          post_id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          post_id: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          post_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "saves_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "saves_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      admin_metrics: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
+      get_follow_counts: {
+        Args: { target_user_id: string };
+        Returns: Json;
+      };
+      get_follow_list: {
+        Args: { list_kind: string; target_user_id: string };
+        Returns: {
+          avatar_url: string;
+          bio: string;
+          display_name: string;
+          id: string;
+          is_private: boolean;
+          username: string;
+          verified: boolean;
+        }[];
+      };
+      is_admin: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      is_following: {
+        Args: { _followee: string; _follower: string };
+        Returns: boolean;
+      };
+      posting_integrity_ready: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      profile_is_private: {
+        Args: { _id: string };
+        Returns: boolean;
+      };
+      publish_due_posts: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
+  };
+};
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R;
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R;
+      }
+      ? R
+      : never
+    : never;
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I;
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I;
+      }
+      ? I
+      : never
+    : never;
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U;
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U;
+      }
+      ? U
+      : never
+    : never;
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never;
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never;
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const;

@@ -1,0 +1,19 @@
+.env
+.env.*
+node_modules/
+dist/
+
+# Build / deploy output — regenerateable, never committed
+.output/
+.wrangler/
+
+# Local planning notes
+shora/
+.gradle/
+build/
+local.properties
+.DS_Store
+*.apk
+.vercel
+android/
+www/
