@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchExternalNews } from "@/backend/api/news-provider.functions";
 
 export type StoryState = "breaking" | "developing" | "updated" | "trending" | "live" | "archived";
 
@@ -15,6 +16,15 @@ export interface NewsStory {
   postCount: number;
   /** Hashtag-derived fallback when news_stories is absent. */
   synthetic: boolean;
+
+  /** Full body text when available (external articles carry a longer summary). */
+  content?: string;
+  updatedAt?: string | null;
+
+  /** Publisher attribution for externally-sourced (GNews) stories. */
+  sourceName?: string;
+  sourceUrl?: string;
+  articleUrl?: string;
 }
 
 function isMissingTable(error: unknown): boolean {
@@ -120,3 +130,48 @@ export const newsStoriesQueryOptions = queryOptions({
 export function useNewsStories() {
   return useQuery(newsStoriesQueryOptions);
 }
+
+/**
+ * External headlines pulled from GNews.io via the server function.
+ *
+ * Degrades gracefully: the server returns an empty list when no API key is
+ * configured or the upstream fails, so this simply yields no external stories
+ * and the news screen keeps rendering internal/seeded ones. Never throws.
+ */
+export const externalNewsQueryOptions = queryOptions({
+  queryKey: ["external-news", "general"],
+  staleTime: 5 * 60 * 1000,
+  retry: false,
+  queryFn: async (): Promise<NewsStory[]> => {
+    try {
+      const response = await fetchExternalNews({
+        data: {
+          category: "general",
+        },
+      });
+
+      return (response?.articles ?? []).map((article) => ({
+        id: article.id,
+        headline: article.headline,
+        summary: article.summary,
+        // GNews has no separate short summary or body — reuse the description
+        // for both so the list and detail views have something to render.
+        summaryShort: article.summary,
+        content: article.summary,
+        category: article.category,
+        state: article.state,
+        coverImageUrl: article.coverImageUrl,
+        createdAt: article.createdAt,
+        updatedAt: null,
+        postCount: article.postCount,
+        synthetic: article.synthetic,
+        sourceName: article.sourceName,
+        sourceUrl: article.sourceUrl,
+        articleUrl: article.articleUrl,
+      }));
+    } catch {
+      // Graceful degradation — external news is a nice-to-have, never fatal.
+      return [];
+    }
+  },
+});

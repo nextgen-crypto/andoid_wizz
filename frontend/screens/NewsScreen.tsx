@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
-import { useSuspenseQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { MoreHorizontal, Loader2, Newspaper } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { creators, explorePhotos } from "@/backend/database/seed";
@@ -11,7 +11,11 @@ import { NewsComposer } from "@/frontend/components/news/NewsComposer";
 import { NewsFeedCard, type NewsFeedPost } from "@/frontend/components/news/NewsFeedCard";
 import { NewsSidebar } from "@/frontend/components/news/NewsSidebar";
 import { formatCount } from "@/frontend/components/news/newsFormat";
-import { newsStoriesQueryOptions } from "@/frontend/hooks/useNewsStories";
+import {
+  newsStoriesQueryOptions,
+  externalNewsQueryOptions,
+  type NewsStory,
+} from "@/frontend/hooks/useNewsStories";
 import { trendingTopicsQueryOptions } from "@/frontend/hooks/useTrendingTopics";
 import { useNewsPrefs } from "@/frontend/hooks/useNewsPrefs";
 import { useSession } from "@/frontend/hooks/useSession";
@@ -26,7 +30,21 @@ const FIRST_POST_PROMPT_KEY = "wizz:news-first-post-prompt-dismissed";
 /** Screen 1 — Today's News: heading, search, tabs, composer, feed, trending, sidebar. */
 export function NewsScreen() {
   const { data } = useSuspenseQuery(newsStoriesQueryOptions);
-  const stories = data?.stories ?? [];
+  const { data: externalStories = [], isPending: isExternalNewsPending } =
+    useQuery(externalNewsQueryOptions);
+
+  // Merge internal (DB/seed) stories with external GNews headlines, dedupe by
+  // id, and sort newest-first. External news never replaces internal stories —
+  // it only augments them, so a missing/failed GNews key leaves the feed intact.
+  const stories = useMemo<NewsStory[]>(() => {
+    const combined = [...(data?.stories ?? []), ...externalStories];
+    const unique = new Map(combined.map((story) => [story.id, story]));
+
+    return [...unique.values()].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [data?.stories, externalStories]);
+
   const { data: trends = [] } = useSuspenseQuery(trendingTopicsQueryOptions);
   const prefs = useNewsPrefs();
   const { q } = useSearch({ from: "/news" });
@@ -237,6 +255,12 @@ export function NewsScreen() {
                     {feed.map((s) => (
                       <StoryListItem key={s.id} story={s} />
                     ))}
+                    {isExternalNewsPending && (
+                      <div className="flex items-center justify-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="size-4 animate-spin" />
+                        Loading external headlines…
+                      </div>
+                    )}
                   </div>
                 )}
               </>

@@ -23,7 +23,14 @@ function homeContext(context: unknown): HomeAuthContext {
 }
 
 function preventSharedCaching() {
-  setResponseHeaders({ "Cache-Control": "private, no-store", Vary: "Authorization" } as never);
+  // setResponseHeaders iterates its argument as [name, value] pairs, so it
+  // needs a Headers instance — a plain object throws "headers is not iterable".
+  setResponseHeaders(
+    new Headers({
+      "Cache-Control": "private, no-store",
+      Vary: "Authorization",
+    }),
+  );
 }
 
 type HomeInput = { cursor?: string | null; profile?: unknown; scope?: "public" | "viewer" };
