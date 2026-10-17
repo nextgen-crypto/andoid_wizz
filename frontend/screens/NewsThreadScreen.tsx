@@ -8,6 +8,7 @@ import { writeErrorMessage } from "@/frontend/lib/writeError";
 import { AppShell } from "@/frontend/components/AppShell";
 import { formatCount, newsTimeAgo } from "@/frontend/components/news/newsFormat";
 import { RelevantPersonRow } from "@/frontend/components/news/RelevantPersonRow";
+import { NewsRecommendations } from "@/frontend/components/news/NewsRecommendations";
 import { StoryPostCard } from "@/frontend/components/news/StoryPostCard";
 import { TopLatestTabs } from "@/frontend/components/news/TopLatestTabs";
 import {
@@ -418,6 +419,10 @@ export function NewsThreadScreen() {
             </div>
           </section>
         )}
+
+        {/* Recommended rail — mirrors the external reader so both story kinds
+            surface follow-on reads. Renders nothing when no candidates exist. */}
+        <NewsRecommendations story={story} />
         <div className="h-10" aria-hidden="true" />
       </div>
 

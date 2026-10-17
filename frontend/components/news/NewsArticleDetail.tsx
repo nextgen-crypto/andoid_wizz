@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Bookmark, Check, ExternalLink, Share2 } from "lucide-react";
 
 import type { NewsStory } from "@/frontend/hooks/useNewsStories";
+import { NewsRecommendations } from "@/frontend/components/news/NewsRecommendations";
 import { cn } from "@/lib/utils";
 
 interface NewsArticleDetailProps {
@@ -158,6 +159,11 @@ export function NewsArticleDetail({ story }: NewsArticleDetailProps) {
             </a>
           )}
         </article>
+
+        {/* Recommended rail — sibling of the article, shares the page column. */}
+        <div className="mt-12">
+          <NewsRecommendations story={story} />
+        </div>
       </div>
     </main>
   );

@@ -5,6 +5,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type Handler = (payload: unknown) => void;
 
+/** Types supabase-js refuses to bind after subscribe() (isJoined || isJoining). */
+const STRICT_TYPES = new Set(["postgres_changes", "presence"]);
+
 class FakeChannel {
   state = "closed";
   topic: string;
@@ -16,6 +19,10 @@ class FakeChannel {
   }
 
   on(type: string, _filter: unknown, cb: Handler): this {
+    // Mirror RealtimeChannel.on(): strict types throw once joined/joining.
+    if (STRICT_TYPES.has(type) && (this.state === "joined" || this.state === "joining")) {
+      throw new Error(`cannot add \`${type}\` callbacks for ${this.topic} after \`subscribe()\`.`);
+    }
     const list = this.handlers.get(type) ?? [];
     list.push(cb);
     this.handlers.set(type, list);
@@ -45,12 +52,20 @@ const removeChannel = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    // Mirror RealtimeClient.channel(): reuse an existing instance by topic.
     channel: vi.fn((topic: string) => {
+      const existing = channels.find((c) => c.topic === topic);
+      if (existing) return existing;
       const ch = new FakeChannel(topic);
       channels.push(ch);
       return ch;
     }),
-    removeChannel: (ch: RealtimeChannel) => removeChannel(ch),
+    removeChannel: (ch: RealtimeChannel) => {
+      removeChannel(ch);
+      const i = channels.findIndex((c) => c.topic === (ch as unknown as FakeChannel).topic);
+      if (i >= 0) channels.splice(i, 1);
+      return Promise.resolve("ok");
+    },
   },
 }));
 
@@ -79,6 +94,28 @@ describe("useSharedRealtimeChannel registry", () => {
 
     expect(a).toHaveBeenCalledWith({ hello: 1 });
     expect(b).toHaveBeenCalledWith({ hello: 1 });
+  });
+
+  it("does not crash when a second postgres_changes binder joins a subscribed topic", () => {
+    const filter = { event: "INSERT", schema: "public", table: "notifications" } as const;
+    // First subscriber opens the channel and subscribes.
+    renderHook(() =>
+      useSharedRealtimeChannel("pg-topic", (channel) => {
+        channel.on("postgres_changes", filter, () => undefined);
+      }),
+    );
+    // Second subscriber registers the same filter on the now-subscribed
+    // channel. Before the fix this reused the live instance and threw
+    // "cannot add `postgres_changes` callbacks ... after `subscribe()`".
+    expect(() =>
+      renderHook(() =>
+        useSharedRealtimeChannel("pg-topic", (channel) => {
+          channel.on("postgres_changes", filter, () => undefined);
+        }),
+      ),
+    ).not.toThrow();
+    // Exactly one real channel for the topic (no rebuild churn).
+    expect(channels.filter((c) => c.topic === "pg-topic").length).toBe(1);
   });
 
   it("tears down the channel when the last subscriber unmounts", () => {
