@@ -1,31 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { newsStoriesQueryOptions } from "@/frontend/hooks/useNewsStories";
-import { trendingTopicsQueryOptions } from "@/frontend/hooks/useTrendingTopics";
-import { NewsError, NewsPending, NewsScreen } from "@/frontend/screens/NewsScreen";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 
+/**
+ * Layout route for `/news`.
+ *
+ * `validateSearch` lives here (not on the index) so the `q` param is shared by
+ * every child — the index feed and `/news/$articleId` alike. The component is a
+ * bare `<Outlet />`: the actual screens render in the child routes. Without
+ * this Outlet the child `$articleId` route would run its loader but never paint
+ * its component, so clicking a headline would silently show the feed again.
+ */
 export const Route = createFileRoute("/news")({
   validateSearch: (search: Record<string, unknown>) => ({
     q: typeof search["q"] === "string" ? (search["q"] as string) : "",
   }),
-  head: () => ({
-    meta: [
-      { title: "WIZZ — News" },
-      { name: "description", content: "Live and breaking stories curated for your WIZZ feed." },
-      { property: "og:title", content: "WIZZ — News" },
-      {
-        property: "og:description",
-        content: "Live and breaking stories curated for your WIZZ feed.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(newsStoriesQueryOptions).catch(() => null),
-      context.queryClient.ensureQueryData(trendingTopicsQueryOptions).catch(() => null),
-    ]),
-  pendingComponent: NewsPending,
-  errorComponent: NewsError,
-  component: NewsScreen,
+  component: () => <Outlet />,
 });

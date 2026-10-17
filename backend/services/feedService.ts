@@ -264,6 +264,10 @@ async function tryRealSelect(
     )
     .eq("status", "published")
     .eq("content_kind", "post")
+    // News-category posts live only in the News tab; keep them out of Home.
+    // `.or(is.null…)` so older NULL-category posts still show (`!= 'News'`
+    // would drop NULLs in Postgres).
+    .or("category.is.null,category.neq.News")
     .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()}`)
     // Shorts live in their own feed, never mixed into the home feed.
     .or("content_type.neq.short,content_type.is.null")
@@ -280,6 +284,7 @@ async function tryRealSelect(
       "id, author_id, caption, image_url, video_url, comments_count, comments_enabled, visibility, hashtags, location, category, created_at",
     )
     .eq("status", "published")
+    .or("category.is.null,category.neq.News")
     .order("created_at", { ascending: false })
     .limit(REAL_POST_LIMIT);
   if (!compatible.error) {
@@ -292,6 +297,7 @@ async function tryRealSelect(
   const legacy = await supabase
     .from("posts")
     .select("id, author_id, caption, image_url, hashtags, location, category, created_at")
+    .or("category.is.null,category.neq.News")
     .order("created_at", { ascending: false })
     .limit(REAL_POST_LIMIT);
   return { data: legacy.data as unknown[] | null, error: legacy.error };

@@ -20,6 +20,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ShortsRouteImport } from './routes/shorts'
 import { Route as VideosRouteImport } from './routes/videos'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as NewsIndexRouteImport } from './routes/news.index'
 import { Route as NewsArticleIdRouteImport } from './routes/news.$articleId'
 import { Route as PostPostIdRouteImport } from './routes/post.$postId'
 import { Route as TopicsTopicRouteImport } from './routes/topics.$topic'
@@ -84,6 +85,11 @@ const WelcomeRoute = WelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NewsIndexRoute = NewsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NewsRoute,
+} as any)
 const NewsArticleIdRoute = NewsArticleIdRouteImport.update({
   id: '/$articleId',
   path: '/$articleId',
@@ -142,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/topics/$topic': typeof TopicsTopicRoute
   '/videos/$videoId': typeof VideosVideoIdRoute
   '/watch/$videoId': typeof WatchVideoIdRoute
+  '/news/': typeof NewsIndexRoute
   '/u/$username/followers': typeof UUsernameFollowersRoute
   '/u/$username/following': typeof UUsernameFollowingRoute
   '/u/$username/': typeof UUsernameIndexRoute
@@ -153,7 +160,6 @@ export interface FileRoutesByTo {
   '/bookmarks': typeof BookmarksRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
-  '/news': typeof NewsRouteWithChildren
   '/profile': typeof ProfileRoute
   '/shorts': typeof ShortsRoute
   '/videos': typeof VideosRouteWithChildren
@@ -163,6 +169,7 @@ export interface FileRoutesByTo {
   '/topics/$topic': typeof TopicsTopicRoute
   '/videos/$videoId': typeof VideosVideoIdRoute
   '/watch/$videoId': typeof WatchVideoIdRoute
+  '/news': typeof NewsIndexRoute
   '/u/$username/followers': typeof UUsernameFollowersRoute
   '/u/$username/following': typeof UUsernameFollowingRoute
   '/u/$username': typeof UUsernameIndexRoute
@@ -185,6 +192,7 @@ export interface FileRoutesById {
   '/topics/$topic': typeof TopicsTopicRoute
   '/videos/$videoId': typeof VideosVideoIdRoute
   '/watch/$videoId': typeof WatchVideoIdRoute
+  '/news/': typeof NewsIndexRoute
   '/u/$username/followers': typeof UUsernameFollowersRoute
   '/u/$username/following': typeof UUsernameFollowingRoute
   '/u/$username/': typeof UUsernameIndexRoute
@@ -208,6 +216,7 @@ export interface FileRouteTypes {
     | '/topics/$topic'
     | '/videos/$videoId'
     | '/watch/$videoId'
+    | '/news/'
     | '/u/$username/followers'
     | '/u/$username/following'
     | '/u/$username/'
@@ -219,7 +228,6 @@ export interface FileRouteTypes {
     | '/bookmarks'
     | '/explore'
     | '/messages'
-    | '/news'
     | '/profile'
     | '/shorts'
     | '/videos'
@@ -229,6 +237,7 @@ export interface FileRouteTypes {
     | '/topics/$topic'
     | '/videos/$videoId'
     | '/watch/$videoId'
+    | '/news'
     | '/u/$username/followers'
     | '/u/$username/following'
     | '/u/$username'
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/topics/$topic'
     | '/videos/$videoId'
     | '/watch/$videoId'
+    | '/news/'
     | '/u/$username/followers'
     | '/u/$username/following'
     | '/u/$username/'
@@ -354,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/news/': {
+      id: '/news/'
+      path: '/'
+      fullPath: '/news/'
+      preLoaderRoute: typeof NewsIndexRouteImport
+      parentRoute: typeof NewsRoute
+    }
     '/news/$articleId': {
       id: '/news/$articleId'
       path: '/$articleId'
@@ -415,10 +432,12 @@ declare module '@tanstack/react-router' {
 
 interface NewsRouteChildren {
   NewsArticleIdRoute: typeof NewsArticleIdRoute
+  NewsIndexRoute: typeof NewsIndexRoute
 }
 
 const NewsRouteChildren: NewsRouteChildren = {
   NewsArticleIdRoute: NewsArticleIdRoute,
+  NewsIndexRoute: NewsIndexRoute,
 }
 
 const NewsRouteWithChildren = NewsRoute._addFileChildren(NewsRouteChildren)

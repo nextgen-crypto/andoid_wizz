@@ -16,6 +16,8 @@ export interface GNewsArticle {
 }
 
 interface GNewsApiArticle {
+  /** URL-safe hex identifier from GNews. Used for the reader route. */
+  id?: string;
   title?: string;
   description?: string | null;
   content?: string | null;
@@ -115,7 +117,11 @@ export async function fetchGNews(options: GNewsOptions = {}): Promise<GNewsArtic
     return (result.articles ?? [])
       .filter((article) => Boolean(article.title && article.url))
       .map((article) => ({
-        id: `gnews:${article.url}`,
+        // Route id must be a single URL segment. GNews's `id` is a URL-safe hex
+        // string, so use it; if it's ever absent, fall back to a sanitized hash
+        // of the URL. Never put the raw article URL here — it contains slashes
+        // and would break the /news/$articleId route (extra path segments).
+        id: `gnews:${article.id ?? article.url.replace(/[^a-zA-Z0-9]/g, "")}`,
         headline: article.title ?? "Untitled story",
         summary: article.description ?? "",
         category: toNewsCategory(options.category),
