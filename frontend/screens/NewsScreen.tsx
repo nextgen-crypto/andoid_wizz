@@ -198,7 +198,15 @@ export function NewsScreen() {
               </div>
             </div>
 
-            {tab === "For You" && <NewsComposer />}
+            {tab === "For You" && (
+              <NewsComposer
+                onPosted={() => {
+                  // Refresh the news feed so the new post appears immediately
+                  // instead of waiting out the staleTime.
+                  void postsQuery.refetch();
+                }}
+              />
+            )}
 
             {/* Live news posts feed — shown on every tab */}
             {postsQuery.isLoading ? (

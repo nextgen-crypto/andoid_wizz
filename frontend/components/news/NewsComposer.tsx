@@ -4,30 +4,68 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
+import { useServerFn } from "@tanstack/react-start";
+import { fetchPostingCapabilities } from "@/backend/api/posts.functions";
+import { uploadStoredObject, uploadAndSign } from "@/frontend/lib/storageUpload";
 import { cn } from "@/lib/utils";
+
+/** Extract #hashtags from the draft, lowercased and de-duplicated. */
+function extractHashtags(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .split(/\s+/)
+        .map((w) => w.replace(/^#/, "").toLowerCase())
+        .filter((w) => w.length > 1 && /^[\p{L}\p{N}_]+$/u.test(w)),
+    ),
+  ].slice(0, 20);
+}
 
 export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
   const { user } = useSession();
   const requireAuth = useAuthGate();
+  const inspectPostingSchema = useServerFn(fetchPostingCapabilities);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  async function uploadPhoto(): Promise<{ path: string; url: string | null } | null> {
+    if (!photo || !user) return null;
+    const path = `${user.id}/news-${Date.now()}.jpg`;
+    const capabilities = await inspectPostingSchema();
+    if (capabilities.media) {
+      await uploadStoredObject("post-images", path, photo);
+      return { path, url: null };
+    }
+    return { path, url: await uploadAndSign("post-images", path, photo, { width: 1280 }) };
+  }
+
   async function publish() {
     const text = draft.trim();
-    if (!text && !imagePreview) return;
+    if (!text && !photo) return;
     if (!requireAuth()) return;
     setPosting(true);
     try {
-      const { data, error } = await supabase
-        .from("posts")
-        .insert({ author_id: user!.id, caption: text || "Photo update", status: "published" })
-        .select("id")
-        .single();
+      const uploaded = await uploadPhoto();
+      const hashtags = extractHashtags(text);
+      const { error } = await supabase.from("posts").insert({
+        author_id: user!.id,
+        caption: text || "Photo update",
+        // Posts created here belong to the News feed, which filters on this
+        // exact category — without it the post silently never appears.
+        category: "News",
+        image_url: uploaded?.url ?? null,
+        ...(uploaded?.path ? { image_path: uploaded.path } : {}),
+        hashtags,
+        status: "published",
+      });
       if (error) throw error;
       setDraft("");
+      setPhoto(null);
       setImagePreview(null);
+      if (fileRef.current) fileRef.current.value = "";
       toast("Posted to News.");
       onPosted?.();
     } catch (e) {
@@ -48,9 +86,8 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
       toast.error("Image must be under 10MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
+    setPhoto(file);
+    setImagePreview(URL.createObjectURL(file));
   }
 
   return (
@@ -70,9 +107,17 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
           />
           {imagePreview && (
             <div className="relative mt-2">
-              <img src={imagePreview} alt="Upload preview" className="max-h-64 rounded-xl border border-border object-cover" />
+              <img
+                src={imagePreview}
+                alt="Upload preview"
+                className="max-h-64 rounded-xl border border-border object-cover"
+              />
               <button
-                onClick={() => { setImagePreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+                onClick={() => {
+                  setPhoto(null);
+                  setImagePreview(null);
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
                 aria-label="Remove image"
                 className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/60 text-white"
               >
@@ -88,13 +133,19 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
             >
               <Image className="size-5" />
             </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFile}
+            />
             <button
               onClick={() => void publish()}
-              disabled={(!draft.trim() && !imagePreview) || posting}
+              disabled={(!draft.trim() && !photo) || posting}
               className={cn(
                 "rounded-full bg-brand px-5 py-2 text-sm font-bold text-brand-foreground transition-opacity",
-                (!draft.trim() && !imagePreview) || posting ? "opacity-50" : "hover:bg-brand/90",
+                (!draft.trim() && !photo) || posting ? "opacity-50" : "hover:bg-brand/90",
               )}
             >
               {posting ? "Posting…" : "Post"}
