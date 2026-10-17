@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
+import { CommentsProvider } from "@/frontend/components/comments/CommentsContext";
 import appCss from "../styles.css?url";
 import { reportAppError } from "../lib/error-reporting";
 
@@ -119,8 +120,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      {/* Global single comments sheet + its open-state context (see CommentsContext). */}
+      <CommentsProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </CommentsProvider>
       <Toaster position="top-center" />
     </QueryClientProvider>
   );

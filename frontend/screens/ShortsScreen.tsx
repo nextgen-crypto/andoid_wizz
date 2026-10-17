@@ -9,9 +9,10 @@ import { useSession } from "@/frontend/hooks/useSession";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { useMyProfile } from "@/frontend/hooks/useMyProfile";
 import { useFollowList, useFollowState } from "@/frontend/hooks/usePublicProfile";
+import { useDemoComments } from "@/frontend/hooks/useDemoComments";
+import { useComments } from "@/frontend/components/comments/CommentsContext";
 import { useBlend, type BlendRemoteState } from "@/frontend/hooks/useBlend";
 import { BlendSheet } from "@/frontend/components/shorts/BlendSheet";
-import { CommentsSheet } from "@/frontend/components/shorts/CommentsSheet";
 import { MusicSheet } from "@/frontend/components/shorts/MusicSheet";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { cn } from "@/lib/utils";
@@ -50,11 +51,13 @@ function ShortCard({
 }) {
   const [liked, setLiked] = useState(false);
   const [burst, setBurst] = useState(0);
-  const [commentsOpen, setCommentsOpen] = useState(false);
-  const [extraComments, setExtraComments] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
   const requireAuth = useAuthGate();
+  const { openComments } = useComments();
+  // Reels are demo/seed items; the comment count reads the same demo store the
+  // global comments sheet renders, so the badge and sheet always agree.
+  const demoComments = useDemoComments(item.short.id, "you");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const tapTimer = useRef<number | null>(null);
@@ -217,13 +220,13 @@ function ShortCard({
           aria-label="Comments"
           onClick={() => {
             if (!requireAuth()) return;
-            setCommentsOpen(true);
+            openComments(item.short.id);
           }}
           className="press flex flex-col items-center gap-1"
         >
           <MessageCircle className="size-7 text-on-media" />
           <span className="text-[11px] font-semibold text-on-media">
-            {compact.format(item.short.metrics.comments + extraComments)}
+            {compact.format(demoComments.total)}
           </span>
         </button>
         <button
@@ -251,13 +254,6 @@ function ShortCard({
         />
       </div>
 
-      <CommentsSheet
-        open={commentsOpen}
-        onClose={() => setCommentsOpen(false)}
-        shortId={item.short.id}
-        baseCount={item.short.metrics.comments}
-        onCount={setExtraComments}
-      />
       <ShareSheet
         open={sharing}
         onClose={() => setSharing(false)}

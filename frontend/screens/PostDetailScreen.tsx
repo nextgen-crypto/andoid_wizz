@@ -1,28 +1,32 @@
 import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, Loader2, MessageCircle, Heart, Repeat2, Share2, Bookmark, BadgeCheck, Eye } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft, MessageCircle, Heart, Share2, Bookmark, BadgeCheck, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/frontend/components/AppShell";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { usePostLikes } from "@/frontend/hooks/usePostLikes";
+import { usePostComments } from "@/frontend/hooks/usePostComments";
+import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
+import { useComments } from "@/frontend/components/comments/CommentsContext";
 import { ReportDialog } from "@/frontend/components/moderation/ReportDialog";
 import { formatCount, newsTimeAgo } from "@/frontend/components/news/newsFormat";
-import { writeErrorMessage } from "@/frontend/lib/writeError";
 import { cn } from "@/lib/utils";
 
 export function PostDetailScreen() {
   const { postId } = useParams({ from: "/post/$postId" });
   const { user } = useSession();
   const requireAuth = useAuthGate();
-  const queryClient = useQueryClient();
-  const like = usePostLikes(postId, user?.id ?? null);
-  const [draft, setDraft] = useState("");
-  const [posting, setPosting] = useState(false);
+  const userId = user?.id ?? null;
+  const like = usePostLikes(postId, userId);
+  const { openComments } = useComments();
+  const comments = usePostComments(postId, userId);
+  const { data: savedPosts = [] } = useSavedPosts(userId);
+  const toggleSave = useToggleSave(userId);
   const [reporting, setReporting] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const isSaved = savedPosts.some((p) => p.id === postId);
 
   const postQuery = useQuery({
     queryKey: ["post-detail", postId],
@@ -42,32 +46,6 @@ export function PostDetailScreen() {
         author: row.profiles ? { id: row.profiles.id, username: row.profiles.username ?? "?", displayName: row.profiles.display_name ?? "?", avatarUrl: row.profiles.avatar_url, verified: row.profiles.verified === true } : null,
       };
     },
-  });
-
-  const commentsQuery = useQuery({
-    queryKey: ["post-comments", postId],
-    staleTime: 15_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("comments").select("*, profiles!inner(id, username, display_name, avatar_url, verified)").eq("post_id", postId).eq("is_deleted", false).order("created_at", { ascending: true }).limit(50);
-      if (error) throw error;
-      return (data ?? []) as { id: string; body: string; created_at: string; profiles: { id: string; username: string; display_name: string; avatar_url: string | null; verified: boolean } | null }[];
-    },
-  });
-
-  const replyMutation = useMutation({
-    mutationFn: async () => {
-      const text = draft.trim();
-      if (!text) throw new Error("Empty reply");
-      const { error } = await supabase.from("comments").insert({ post_id: postId, author_id: user!.id, body: text });
-      if (error) throw error;
-      setDraft("");
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["post-comments", postId] });
-      void queryClient.invalidateQueries({ queryKey: ["post-detail", postId] });
-      toast("Reply posted.");
-    },
-    onError: (e) => toast.error(writeErrorMessage(e, "Could not reply.")),
   });
 
   if (postQuery.isLoading) {
@@ -120,54 +98,39 @@ export function PostDetailScreen() {
                   <Heart className={cn("size-4", like.liked && "fill-live text-live")} />
                   <span className="text-xs font-semibold">{formatCount(like.count)}</span>
                 </button>
-                <span className="flex items-center gap-1.5 rounded-full px-2 py-1.5"><MessageCircle className="size-4" /><span className="text-xs font-semibold">{formatCount(post.commentsCount)}</span></span>
+                <button aria-label="Comment" onClick={() => { if (!requireAuth()) return; openComments(postId); }} className="flex items-center gap-1.5 rounded-full px-2 py-1.5 hover:bg-secondary">
+                  <MessageCircle className="size-4" />
+                  <span className="text-xs font-semibold">{formatCount(comments.data?.total ?? 0)}</span>
+                </button>
                 <span className="flex items-center gap-1.5 rounded-full px-2 py-1.5"><Eye className="size-4" /><span className="text-xs font-semibold">0</span></span>
                 <button aria-label="Share" onClick={() => { try { void navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`); toast("Link copied."); } catch { toast("Could not copy link."); } }} className="rounded-full p-2 hover:bg-secondary"><Share2 className="size-4" /></button>
-                <button aria-label={saved ? "Unsave" : "Save"} aria-pressed={saved} onClick={() => { if (!requireAuth()) return; setSaved(v => !v); toast(saved ? "Removed from saved." : "Saved."); }} className="rounded-full p-2 hover:bg-secondary"><Bookmark className={cn("size-4", saved && "fill-brand text-brand")} /></button>
+                <button aria-label={isSaved ? "Unsave" : "Save"} aria-pressed={isSaved} onClick={() => { if (!requireAuth()) return; if (!toggleSave.remote) { toast("Sign in to save posts."); return; } toggleSave.mutate({ postId, save: !isSaved }); toast(isSaved ? "Removed from saved." : "Saved."); }} className="rounded-full p-2 hover:bg-secondary"><Bookmark className={cn("size-4", isSaved && "fill-brand text-brand")} /></button>
               </div>
             </div>
           </div>
         </article>
 
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") replyMutation.mutate(); }}
-            placeholder="Post your reply"
-            aria-label="Post your reply"
-            className="min-w-0 flex-1 rounded-full bg-secondary px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <button onClick={() => replyMutation.mutate()} disabled={!draft.trim() || posting} className="shrink-0 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background disabled:opacity-50">
-            {posting ? "Posting…" : "Reply"}
-          </button>
-        </div>
-
-        {commentsQuery.isLoading ? (
-          <div className="space-y-3 px-4 py-4">
-            {[0, 1].map((i) => <div key={i} className="h-12 animate-pulse rounded-2xl bg-secondary" />)}
-          </div>
-        ) : commentsQuery.data?.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-sm text-muted-foreground">No replies yet — start the conversation.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {commentsQuery.data?.map((c) => (
-              <div key={c.id} className="flex items-start gap-2.5 px-4 py-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-foreground">{(c.profiles?.display_name ?? "?").slice(0, 1).toUpperCase()}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <span className="truncate text-sm font-semibold text-foreground">{c.profiles?.display_name ?? "Someone"}</span>
-                    {c.profiles?.verified && <BadgeCheck className="size-3.5 shrink-0 text-brand" />}
-                    <span className="truncate text-xs text-muted-foreground">@{c.profiles?.username ?? "?"} · {newsTimeAgo(c.created_at)}</span>
-                  </div>
-                  <p className="mt-0.5 text-sm leading-relaxed text-foreground">{c.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Comment preview — reads the same shared store as the sheet, then
+            opens the one global <CommentsSheet>. */}
+        <button
+          onClick={() => { if (!requireAuth()) return; openComments(postId); }}
+          className="flex w-full items-center gap-2 border-b border-border px-4 py-3 text-left hover:bg-secondary"
+        >
+          <MessageCircle className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            {comments.data?.comments[0] ? (
+              <>
+                <span className="font-semibold text-foreground">{comments.data.comments[0].user}</span>{" "}
+                {comments.data.comments[0].text}
+              </>
+            ) : (
+              "View all comments"
+            )}
+          </span>
+          <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+            {formatCount(comments.data?.total ?? 0)}
+          </span>
+        </button>
       </div>
       {reporting && <ReportDialog open onClose={() => setReporting(false)} target={{ kind: "post", refId: post.id, refTitle: post.caption.slice(0, 80), ...(post.author?.id ? { targetUserId: post.author.id } : {}) }} />}
     </AppShell>

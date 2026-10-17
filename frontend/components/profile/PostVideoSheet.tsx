@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Heart, MessageCircle, Share2, Bookmark, X } from "lucide-react";
 import { PostMenu } from "@/frontend/components/profile/PostMenu";
-import { CommentsSheet } from "@/frontend/components/shorts/CommentsSheet";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { usePostLikes } from "@/frontend/hooks/usePostLikes";
-import { useToggleSave } from "@/frontend/hooks/useSavedPosts";
+import { usePostComments } from "@/frontend/hooks/usePostComments";
+import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
+import { useComments } from "@/frontend/components/comments/CommentsContext";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { cn } from "@/lib/utils";
 import type { ProfilePost } from "@/frontend/hooks/useMyProfileData";
@@ -37,10 +38,13 @@ export function PostVideoSheet({
   onDeleted?: (id: string) => void;
 }) {
   const requireAuth = useAuthGate();
-  const [commentsOpen, setCommentsOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [extraComments, setExtraComments] = useState(0);
+  const { openComments } = useComments();
+  // Profile posts are real Supabase rows; comment count + save state read the
+  // shared stores so they match everywhere else in the app.
+  const comments = usePostComments(isUuid(post.id) ? post.id : null, userId);
+  const { data: savedPosts = [] } = useSavedPosts(userId);
+  const isSaved = savedPosts.some((p) => p.id === post.id);
   const toggleSave = useToggleSave(userId);
   const postLike = usePostLikes(isUuid(post.id) ? post.id : null, userId);
 
@@ -103,13 +107,13 @@ export function PostVideoSheet({
           aria-label="Comments"
           onClick={() => {
             if (!requireAuth()) return;
-            setCommentsOpen(true);
+            openComments(post.id);
           }}
           className="press flex flex-col items-center gap-1"
         >
           <MessageCircle className="size-7 text-on-media" />
           <span className="text-[11px] font-semibold text-on-media">
-            {compact.format((post.comments_count ?? 0) + extraComments)}
+            {compact.format(comments.data?.total ?? 0)}
           </span>
         </button>
         <button
@@ -122,15 +126,15 @@ export function PostVideoSheet({
         </button>
         <button
           aria-label="Save"
-          aria-pressed={saved}
+          aria-pressed={isSaved}
           onClick={() => {
             if (!requireAuth()) return;
-            setSaved((v) => !v);
-            if (userId) toggleSave.mutate({ postId: post.id, save: true });
+            if (!toggleSave.remote) return;
+            toggleSave.mutate({ postId: post.id, save: !isSaved });
           }}
           className="press flex flex-col items-center gap-1"
         >
-          <Bookmark className={cn("size-7", saved ? "fill-brand text-brand" : "text-on-media")} />
+          <Bookmark className={cn("size-7", isSaved ? "fill-brand text-brand" : "text-on-media")} />
           <span className="text-[11px] font-semibold text-on-media">Save</span>
         </button>
         {/* More — owner gets delete/edit/archive, viewers get save/share/report */}
@@ -156,13 +160,6 @@ export function PostVideoSheet({
         </div>
       </div>
 
-      <CommentsSheet
-        open={commentsOpen}
-        onClose={() => setCommentsOpen(false)}
-        shortId={post.id}
-        baseCount={post.comments_count ?? 0}
-        onCount={setExtraComments}
-      />
       {sharing && (
         <ShareSheet
           open

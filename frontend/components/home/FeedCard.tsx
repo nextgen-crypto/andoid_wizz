@@ -17,19 +17,12 @@ import { imageSrcSet, imageUrl, placeholderUrl, videoUrl } from "@/backend/domai
 import type { FeedItem } from "@/backend/services/feedService";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { ReportDialog, type ReportTarget } from "@/frontend/components/moderation/ReportDialog";
-import {
-  PostCommentsSheet,
-  loadPostComments,
-  savePostComments,
-  seedPostComments,
-  topPostComment,
-  type PostComment,
-  type UiComment,
-} from "@/frontend/components/home/PostCommentsSheet";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { useMyProfile } from "@/frontend/hooks/useMyProfile";
 import { usePostComments } from "@/frontend/hooks/usePostComments";
+import { useDemoComments } from "@/frontend/hooks/useDemoComments";
+import { useComments } from "@/frontend/components/comments/CommentsContext";
 import { usePostLikes } from "@/frontend/hooks/usePostLikes";
 import { useFollowState } from "@/frontend/hooks/usePublicProfile";
 import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
@@ -83,9 +76,6 @@ export function FeedCard({
   const [localFollowing, setLocalFollowing] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false);
-  const [localMine, setLocalMine] = useState<PostComment[]>(() => loadPostComments(post.id));
-  const [localLiked, setLocalLiked] = useState<Set<string>>(new Set());
   const [menuOpen, setMenuOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
@@ -124,49 +114,24 @@ export function FeedCard({
   const liked = likeReal ? postLike.liked : localPostLiked;
   const likeCount = likeReal ? postLike.count : post.metrics.likes + (localPostLiked ? 1 : 0);
 
-  // Relational path for real Supabase posts, local fallback for demo items.
+  // ONE source of truth per post: live Supabase comments for real posts,
+  // localStorage demo comments for seed items. The badge, the inline preview,
+  // and the global comments sheet all read this same data, so they can never
+  // disagree (fixes the old card=1 / sheet=0 mismatch caused by falling back
+  // to the denormalized `posts.comments_count`, which counted replies and
+  // wasn't RLS-filtered).
   const isRealPost = isUuid(post.id);
+  const { openComments } = useComments();
   const remote = usePostComments(isRealPost ? post.id : null, userId);
+  const demo = useDemoComments(isRealPost ? null : post.id, displayName || "you");
 
-  const localComments: UiComment[] = [
-    ...localMine,
-    ...seedPostComments(post.id).filter((s) => !localMine.some((m) => m.id === s.id)),
-  ].map((c) => ({ ...c, isLiked: localLiked.has(c.id) }));
+  const uiComments = isRealPost ? (remote.data?.comments ?? []) : demo.comments;
+  const totalComments = isRealPost ? (remote.data?.total ?? 0) : demo.total;
+  const preview: { user: string; text: string } | undefined = uiComments[0];
 
-  const uiComments: UiComment[] = remote.data?.comments ?? localComments;
-  const totalComments = remote.data?.total ?? post.metrics.comments + localMine.length;
-  const preview: { user: string; text: string } = uiComments[0] ?? topPostComment(post.id);
-
-  function postComment(text: string) {
-    track?.("video_comment", post.id, { authorId: author.id });
-    if (isRealPost && userId) {
-      remote.postComment(text);
-      return;
-    }
-    const comment: PostComment = {
-      id: `m-${Date.now()}`,
-      user: displayName ?? user?.email?.split("@")[0] ?? "you",
-      text: text.slice(0, 280),
-      time: "now",
-      likes: 0,
-    };
-    const next = [comment, ...localMine];
-    setLocalMine(next);
-    savePostComments(post.id, next);
-  }
-
-  function toggleCommentLike(id: string) {
-    const current = uiComments.find((c) => c.id === id);
-    if (isRealPost && userId && remote.data) {
-      remote.toggleLike({ commentId: id, like: !(current?.isLiked ?? false) });
-      return;
-    }
-    setLocalLiked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function openCardComments() {
+    if (!requireAuth()) return;
+    openComments(post.id);
   }
 
   // Real saves only work for Supabase posts + signed-in viewers; seed items fall back local.
@@ -495,10 +460,7 @@ export function FeedCard({
         {commentsEnabled && (
           <button
             aria-label="Comment"
-            onClick={() => {
-              if (!requireAuth()) return;
-              setCommentsOpen(true);
-            }}
+            onClick={openCardComments}
             className="press flex items-center gap-2"
           >
             <MessageCircle className="size-5 text-foreground" />
@@ -534,13 +496,10 @@ export function FeedCard({
         </button>
       </div>
 
-      {commentsEnabled && (
+      {commentsEnabled && preview && (
         <div className="px-3 pb-3 sm:px-5">
           <button
-            onClick={() => {
-              if (!requireAuth()) return;
-              setCommentsOpen(true);
-            }}
+            onClick={openCardComments}
             aria-label="Open comments"
             className="flex w-full items-center gap-2 rounded-xl px-1 py-1.5 text-left hover:bg-secondary"
           >
@@ -565,35 +524,6 @@ export function FeedCard({
         onClose={() => setSharing(false)}
         url={shareUrl}
         message={`${author.displayName} on WIZZ: ${post.caption}`}
-      />
-      <PostCommentsSheet
-        open={commentsOpen}
-        onClose={() => {
-          setCommentsOpen(false);
-          setLocalMine(loadPostComments(post.id));
-        }}
-        total={totalComments}
-        comments={uiComments}
-        canPost={userId !== null}
-        posterInitial={(displayName ?? user?.email ?? "Y").slice(0, 1)}
-        posting={remote.posting}
-        postError={
-          remote.postError instanceof Error
-            ? remote.postError.message
-            : remote.error
-              ? "Comments server not set up yet — run the migration in Supabase, then pull to refresh."
-              : null
-        }
-        onPost={postComment}
-        onToggleLike={toggleCommentLike}
-        onReportComment={(c) =>
-          setReportTarget({
-            kind: "comment",
-            refId: c.id,
-            refTitle: c.text,
-            targetUserId: author.id,
-          })
-        }
       />
       {reportTarget && (
         <ReportDialog open onClose={() => setReportTarget(null)} target={reportTarget} />
