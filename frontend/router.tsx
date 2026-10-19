@@ -1,8 +1,12 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { installNativeRpcBridge } from "@/frontend/lib/native";
 
 export const getRouter = () => {
+  // Route loaders call server functions, so the native bridge has to exist
+  // before the first navigation — not after React mounts.
+  installNativeRpcBridge();
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
