@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { Link, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronLeft, Flag, Loader2, MoreHorizontal, Share2 } from "lucide-react";
@@ -105,8 +106,7 @@ export function NewsThreadScreen() {
   const cut = !summaryOpen && story.summary.length > short.length;
   const items = (posts.data?.pages ?? []).flatMap((p) => p.items);
   const visible = items.filter((p) => !mutedAuthors.includes(p.author?.id ?? ""));
-  const shareUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/news/${story.id}` : "";
+  const shareUrl = typeof window !== "undefined" ? publicUrl(`/news/${story.id}`) : "";
 
   function copyLink() {
     try {

@@ -104,24 +104,42 @@ pagination everywhere (no `OFFSET`).
 
 ## Android
 
-Capacitor shell in `android/` (not committed — local tooling only):
+Capacitor shell in `android/` (not committed — local tooling only). The APK
+bundles its web assets, so the app boots from local files and never depends on
+the Vercel deployment being reachable:
 
 ```sh
-npx cap sync android   # copy web assets + update plugins
-npx cap open android   # open in Android Studio
+npm run app:sync   # build the native bundle + cap sync android
+npm run app:open   # same, then open in Android Studio
+npm run app:run    # same, then install + launch on a connected device
 ```
 
-`capacitor.config.ts` may point `server.url` at the deployed site (live-load
-mode); remove it to bundle local assets for offline testing.
+`npm run build:app` is what makes bundling possible. The production build is
+SSR and writes no `index.html` — nitro's Build Output API emits static assets
+plus a server function, which the WebView cannot load. Setting
+`WIZZ_TARGET=app` switches the same Vite config to TanStack Start's SPA mode,
+which emits a client-only shell. No route uses a server function (every route
+queries Supabase from the browser), so nothing is lost by dropping SSR on
+native. `scripts/copy-app-bundle.mjs` then stages that shell into `app-dist/`,
+Capacitor's `webDir`, which keeps a later `npm run build` from clobbering what
+the app ships.
+
+Native-only behaviour lives in `frontend/lib/native.ts` and
+`frontend/components/NativeStartup.tsx`: splash dismissal, the Android back
+button, external links through `@capacitor/browser`, and Supabase email
+redirects pointed at the public web origin rather than the WebView's
+`https://localhost`.
 
 ## Scripts
 
-| Command                           | Purpose                       |
-| --------------------------------- | ----------------------------- |
-| `npm run dev`                     | Local dev server              |
-| `npm run build`                   | Production build (keep green) |
-| `npm run preview`                 | Preview the build             |
-| `npm run lint` / `npm run format` | ESLint / Prettier             |
+| Command                                     | Purpose                               |
+| ------------------------------------------- | ------------------------------------- |
+| `npm run dev`                               | Local dev server                      |
+| `npm run build`                             | Production build (keep green)         |
+| `npm run preview`                           | Preview the build                     |
+| `npm run lint` / `npm run format`           | ESLint / Prettier                     |
+| `npm run build:app`                         | Static shell for the APK              |
+| `npm run app:sync` / `app:run` / `app:open` | Build, then sync / run / open Android |
 
 ## Working agreements
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -82,7 +83,7 @@ export function PostMenu({
 
   const postUrl =
     typeof window !== "undefined" && username
-      ? `${window.location.origin}/u/${username}#post-${post.id}`
+      ? publicUrl(`/u/${username}#post-${post.id}`)
       : `post-${post.id}`;
   const mediaSrc = post.video_url || post.image_url;
 

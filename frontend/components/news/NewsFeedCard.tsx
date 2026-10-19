@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { usePostLikes } from "@/frontend/hooks/usePostLikes";
+import { publicUrl } from "@/frontend/lib/native";
 import { ReportDialog } from "@/frontend/components/moderation/ReportDialog";
 import { formatCount, newsTimeAgo } from "@/frontend/components/news/newsFormat";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,7 @@ export function NewsFeedCard({ post }: { post: NewsFeedPost }) {
 
   function copyLink() {
     try {
-      void navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`);
+      void navigator.clipboard.writeText(publicUrl(`/post/${post.id}`));
       toast("Link copied.");
     } catch {
       toast("Could not copy link.");

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Loader2, Mail, Smartphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { authRedirectOrigin } from "@/frontend/lib/native";
 import { cn } from "@/lib/utils";
 
 type Channel = "email" | "phone";
@@ -51,7 +52,7 @@ export function PasswordReset({ onBack }: { onBack: () => void }) {
       setBusy(true);
       try {
         const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin,
+          redirectTo: authRedirectOrigin(),
         });
         if (err) throw err;
         setNotice("Reset link sent — open it in your inbox to choose a new password.");

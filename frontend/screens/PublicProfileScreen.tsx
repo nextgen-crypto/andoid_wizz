@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   BadgeCheck,
@@ -101,8 +102,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
   const isPrivate = profile.is_private === true;
   const locked = isPrivate && !isFollowing && !isMe;
   const muted = mutedUsernames().includes(profile.username.toLowerCase());
-  const profileUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/u/${profile.username}` : "";
+  const profileUrl = typeof window !== "undefined" ? publicUrl(`/u/${profile.username}`) : "";
 
   async function shareProfile() {
     try {

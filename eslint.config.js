@@ -14,6 +14,8 @@ export default tseslint.config(
       ".vercel",
       ".wrangler",
       ".tanstack",
+      // Capacitor's staged web bundle — built output, never hand-written.
+      "app-dist",
       "android",
       "www",
       "shora",

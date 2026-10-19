@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -92,8 +93,7 @@ export function PostManageSheet({
     editDuet !== (post.allow_duet ?? false) ||
     editSharing !== (post.allow_sharing ?? true);
 
-  const shareUrl =
-    typeof window !== "undefined" && username ? `${window.location.origin}/u/${username}` : "";
+  const shareUrl = typeof window !== "undefined" && username ? publicUrl(`/u/${username}`) : "";
   const thumb = post.thumbnail_url || post.image_url;
   const hasMedia = Boolean(post.video_url || post.image_url);
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import {
   BadgeCheck,
   Bookmark,
@@ -54,7 +55,7 @@ export function StoryPostCard({
 
   function copyLink() {
     try {
-      void navigator.clipboard.writeText(`${window.location.origin}/news#${post.postId}`);
+      void navigator.clipboard.writeText(publicUrl(`/news#${post.postId}`));
       toast("Link copied.");
     } catch {
       toast("Could not copy link.");

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Sheet } from "@/frontend/components/overlays/Sheet";
 import { getPaymentProvider } from "@/frontend/lib/paymentProvider";
+import { openExternalUrl } from "@/frontend/lib/native";
 
 /** Reasons a payment matters on WIZZ, shown inside the payment sheet. */
 const reasons = [
@@ -51,7 +52,11 @@ export function PaymentSheet({
         reference: `tip-${Date.now()}`,
         description: creatorName ? `Tip ${creatorName}` : "WIZZ tip",
       });
-      window.location.href = session.checkoutUrl;
+      // Opens the system browser on native. Navigating the WebView itself
+      // would tear down the Capacitor bridge and strand the user off-origin,
+      // with no way back to the app.
+      await openExternalUrl(session.checkoutUrl);
+      setBusy(false);
     } catch {
       toast.error("Checkout is unavailable right now.");
       setBusy(false);

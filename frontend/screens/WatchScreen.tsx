@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { Link, useParams } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
@@ -347,7 +348,7 @@ export function WatchScreen() {
     staleTime: 30_000,
     queryFn: () => fetchFollowCounts(authorId as string),
   });
-  const followerCount = realAuthor ? (followCounts?.followers ?? 0) : item?.authorFollowers ?? 0;
+  const followerCount = realAuthor ? (followCounts?.followers ?? 0) : (item?.authorFollowers ?? 0);
 
   useEffect(() => {
     setLiked(null);
@@ -376,8 +377,7 @@ export function WatchScreen() {
   }
 
   const baseLikes = Math.max(1, Math.round(item.video.views * 0.04));
-  const shareUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/watch/${item.video.id}` : "";
+  const shareUrl = typeof window !== "undefined" ? publicUrl(`/watch/${item.video.id}`) : "";
 
   return (
     <AppShell title={item.video.title}>

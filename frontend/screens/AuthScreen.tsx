@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/frontend/hooks/useSession";
 import { PasswordReset } from "@/frontend/components/auth/PasswordReset";
 import { formatWait, useLoginThrottle } from "@/frontend/hooks/useLoginThrottle";
+import { authRedirectOrigin } from "@/frontend/lib/native";
 import { cn } from "@/lib/utils";
 
 type Mode = "signin" | "signup";
@@ -44,7 +45,7 @@ export function AuthScreen() {
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: authRedirectOrigin(),
             data: { full_name: name || email.split("@")[0] },
           },
         });
@@ -99,7 +100,7 @@ export function AuthScreen() {
     try {
       const { error: err } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: authRedirectOrigin() },
       });
       if (err) throw err;
       setNotice("Sign-in link sent — tap it in your inbox and you're in, no password needed.");

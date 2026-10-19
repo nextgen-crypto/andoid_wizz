@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { useNavigate } from "@tanstack/react-router";
 import { EyeOff, Flag, Heart, Link2, MoreHorizontal, Play, Share2 } from "lucide-react";
 import { toast } from "sonner";
@@ -38,8 +39,7 @@ export function VideoCard({
   const [reporting, setReporting] = useState(false);
   const [hidden, setHidden] = useState(false);
 
-  const videoUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/watch/${item.video.id}` : "";
+  const videoUrl = typeof window !== "undefined" ? publicUrl(`/watch/${item.video.id}`) : "";
 
   function copyLink() {
     try {

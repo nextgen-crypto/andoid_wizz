@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Heart, MessageCircle, Music, PhoneOff, Plus, Share2, Users, Check } from "lucide-react";
@@ -101,9 +102,7 @@ function ShortCard({
         localStorage.setItem(
           FOLLOWS_KEY,
           JSON.stringify(
-            next
-              ? [...new Set([...ids, authorId])]
-              : ids.filter((id) => id !== authorId),
+            next ? [...new Set([...ids, authorId])] : ids.filter((id) => id !== authorId),
           ),
         );
       } catch {
@@ -113,7 +112,7 @@ function ShortCard({
     });
   }
 
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/shorts` : "";
+  const shareUrl = typeof window !== "undefined" ? publicUrl(`/shorts`) : "";
 
   function handleTap() {
     if (tapTimer.current) {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import {
   BadgeCheck,
   Bookmark,
@@ -86,8 +87,7 @@ export function FeedCard({
   const progressRef = useRef<Set<number>>(new Set());
   const impressedRef = useRef(false);
   const articleRef = useRef<HTMLElement | null>(null);
-  const shareUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/u/${author.username}` : "";
+  const shareUrl = typeof window !== "undefined" ? publicUrl(`/u/${author.username}`) : "";
 
   const { user, displayName } = useSession();
   const requireAuth = useAuthGate();

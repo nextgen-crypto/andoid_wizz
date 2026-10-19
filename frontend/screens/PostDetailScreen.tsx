@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, MessageCircle, Heart, Share2, Bookmark, BadgeCheck, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { publicUrl } from "@/frontend/lib/native";
 import { AppShell } from "@/frontend/components/AppShell";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
@@ -103,7 +104,7 @@ export function PostDetailScreen() {
                   <span className="text-xs font-semibold">{formatCount(comments.data?.total ?? 0)}</span>
                 </button>
                 <span className="flex items-center gap-1.5 rounded-full px-2 py-1.5"><Eye className="size-4" /><span className="text-xs font-semibold">0</span></span>
-                <button aria-label="Share" onClick={() => { try { void navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`); toast("Link copied."); } catch { toast("Could not copy link."); } }} className="rounded-full p-2 hover:bg-secondary"><Share2 className="size-4" /></button>
+                <button aria-label="Share" onClick={() => { try { void navigator.clipboard.writeText(publicUrl(`/post/${post.id}`)); toast("Link copied."); } catch { toast("Could not copy link."); } }} className="rounded-full p-2 hover:bg-secondary"><Share2 className="size-4" /></button>
                 <button aria-label={isSaved ? "Unsave" : "Save"} aria-pressed={isSaved} onClick={() => { if (!requireAuth()) return; if (!toggleSave.remote) { toast("Sign in to save posts."); return; } toggleSave.mutate({ postId, save: !isSaved }); toast(isSaved ? "Removed from saved." : "Saved."); }} className="rounded-full p-2 hover:bg-secondary"><Bookmark className={cn("size-4", isSaved && "fill-brand text-brand")} /></button>
               </div>
             </div>

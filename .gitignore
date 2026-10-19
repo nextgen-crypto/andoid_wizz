@@ -6,6 +6,7 @@ dist/
 # Build / deploy output — regenerateable, never committed
 .output/
 .wrangler/
+app-dist/
 
 # Local planning notes
 shora/

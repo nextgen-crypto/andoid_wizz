@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { publicUrl } from "@/frontend/lib/native";
 import { Heart, MessageCircle, Share2, Bookmark, X } from "lucide-react";
 import { PostMenu } from "@/frontend/components/profile/PostMenu";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
@@ -50,7 +51,7 @@ export function PostVideoSheet({
 
   const shareUrl =
     typeof window !== "undefined" && username
-      ? `${window.location.origin}/u/${username}#post-${post.id}`
+      ? publicUrl(`/u/${username}#post-${post.id}`)
       : `post-${post.id}`;
 
   return (
