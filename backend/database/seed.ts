@@ -865,7 +865,6 @@ const videoSeed: VideoSeed[] = [
     url: V("ForBiggerJoyrides"),
     views: 1200000,
     publishedAt: "3 weeks ago",
-    progress: 180,
   },
   {
     id: "v-3",
@@ -923,7 +922,6 @@ export const videos: LongVideo[] = videoSeed.map((s) => ({
   },
   views: s.views,
   publishedAt: s.publishedAt,
-  ...(s.progress ? { progressSeconds: s.progress } : {}),
 }));
 
 /** Explore grid: mixed aspect ratios so the masonry has visual rhythm. */

@@ -149,7 +149,6 @@ export interface LongVideo {
   video: MediaVideo;
   views: number;
   publishedAt: string;
-  progressSeconds?: number;
 }
 
 export interface BuzzNotification {

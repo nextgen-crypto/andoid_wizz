@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { imageUrl, videoUrl } from "@/backend/domain/media";
 import { relatedQueryOptions, videoQueryOptions } from "@/frontend/queries/sections";
+import { getWatchProgress, saveWatchProgress } from "@/frontend/lib/watchProgress";
 import { AppShell } from "@/frontend/components/AppShell";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { ReportDialog } from "@/frontend/components/moderation/ReportDialog";
@@ -50,16 +51,23 @@ function Player({
   poster,
   title,
   onDoubleLike,
+  onProgress,
+  startAtSeconds,
 }: {
   src: string;
   poster: string;
   title: string;
   onDoubleLike: () => void;
+  /** Real playback position, throttled to one report per 5s (forced on pause/end). */
+  onProgress?: (position: { progressSeconds: number; durationSeconds: number }) => void;
+  /** Resume position, applied once when metadata loads. */
+  startAtSeconds?: number | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hideTimer = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
+  const lastReportedRef = useRef(0);
   const [burst, setBurst] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -141,6 +149,19 @@ function Player({
     setCurrent(v.currentTime);
   }
 
+  /** Feed the real position to "continue watching" (throttled to one per 5s). */
+  function reportProgress(force: boolean) {
+    const v = videoRef.current;
+    if (!v || !onProgress) return;
+    const t = v.currentTime;
+    if (!force && Math.abs(t - lastReportedRef.current) < 5) return;
+    lastReportedRef.current = t;
+    onProgress({
+      progressSeconds: t,
+      durationSeconds: Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0,
+    });
+  }
+
   const progress = duration > 0 ? (current / duration) * 100 : 0;
 
   return (
@@ -176,11 +197,21 @@ function Player({
         onPause={() => {
           setPlaying(false);
           setControls(true);
+          reportProgress(true);
         }}
-        onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
+        onEnded={() => reportProgress(true)}
+        onTimeUpdate={(e) => {
+          setCurrent(e.currentTarget.currentTime);
+          reportProgress(false);
+        }}
         onLoadedMetadata={(e) => {
-          setDuration(e.currentTarget.duration);
-          e.currentTarget.playbackRate = rate;
+          const v = e.currentTarget;
+          setDuration(v.duration);
+          v.playbackRate = rate;
+          // Resume where this viewer left off.
+          if (startAtSeconds && startAtSeconds > 0 && v.duration > 0) {
+            v.currentTime = Math.min(startAtSeconds, Math.max(0, v.duration - 2));
+          }
         }}
         onRateChange={(e) => setRate(e.currentTarget.playbackRate)}
         onVolumeChange={(e) => {
@@ -357,6 +388,9 @@ export function WatchScreen() {
     setSharing(false);
   }, [videoId]);
 
+  // Real history only — seeded demo videos no longer fake a resume point.
+  const resumeFromSeconds = getWatchProgress(user?.id, videoId)?.progressSeconds;
+
   if (!item) {
     return (
       <AppShell title="Video not found">
@@ -402,6 +436,10 @@ export function WatchScreen() {
               src={videoUrl(item.video.video.objectKey)}
               poster={imageUrl(item.video.video.posterKey, "large", 16 / 9)}
               title={item.video.title}
+              startAtSeconds={resumeFromSeconds}
+              onProgress={({ progressSeconds, durationSeconds }) => {
+                saveWatchProgress(user?.id, videoId, progressSeconds, durationSeconds);
+              }}
               onDoubleLike={() => {
                 if (!requireAuth()) return;
                 setLiked((v) => (v === "up" ? v : "up"));

@@ -2,6 +2,9 @@ import { Fragment, useState } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { videosQueryOptions } from "@/frontend/queries/sections";
+import type { VideoItem } from "@/backend/api/sections.functions";
+import { useSession } from "@/frontend/hooks/useSession";
+import { getContinueWatching } from "@/frontend/lib/watchProgress";
 import { AppShell } from "@/frontend/components/AppShell";
 import { VideoCard } from "@/frontend/components/videos/VideoCard";
 import { useAds } from "@/frontend/components/ads/ads";
@@ -10,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 export function VideosScreen() {
   const { data } = useSuspenseQuery(videosQueryOptions);
+  const { user } = useSession();
   const [category, setCategory] = useState("For You");
   const [query, setQuery] = useState("");
   const [visible, setVisible] = useState(6);
@@ -26,7 +30,11 @@ export function VideosScreen() {
     );
   });
   const shown = filtered.slice(0, visible);
-  const continueWatching = data.filter((v) => v.video.progressSeconds);
+  // Real history only: the section renders for people who actually watched
+  // something — seeded demo videos no longer fabricate a resume list.
+  const continueWatching = getContinueWatching(user?.id)
+    .map((p) => data.find((v) => v.video.id === p.videoId))
+    .filter((v): v is VideoItem => v !== undefined);
   const ads = useAds();
 
   return (

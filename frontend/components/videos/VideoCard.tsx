@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { imageUrl } from "@/backend/domain/media";
 import type { VideoItem } from "@/backend/api/sections.functions";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/frontend/hooks/useSession";
+import { getWatchProgress } from "@/frontend/lib/watchProgress";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { ReportDialog } from "@/frontend/components/moderation/ReportDialog";
 
@@ -31,6 +33,7 @@ export function VideoCard({
   variant?: "grid" | "rail";
 }) {
   const navigate = useNavigate();
+  const { user } = useSession();
   const [liked, setLiked] = useState(false);
   const [burst, setBurst] = useState(0);
   const tapTimer = useRef<number | null>(null);
@@ -38,6 +41,12 @@ export function VideoCard({
   const [sharing, setSharing] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [hidden, setHidden] = useState(false);
+  // Resume bar reflects this viewer's real watch time, not seeded demo data.
+  const watched = getWatchProgress(user?.id, item.video.id);
+  const watchedPct =
+    watched && watched.totalSeconds > 0
+      ? Math.min(100, (watched.progressSeconds / watched.totalSeconds) * 100)
+      : 0;
 
   const videoUrl = typeof window !== "undefined" ? publicUrl(`/watch/${item.video.id}`) : "";
 
@@ -217,12 +226,12 @@ export function VideoCard({
               <span className="absolute bottom-2 right-2 rounded bg-scrim px-1.5 py-0.5 text-[11px] font-medium text-on-media">
                 {formatDuration(item.video.video.durationSeconds)}
               </span>
-              <span
-                className="absolute bottom-0 left-0 h-1 bg-brand"
-                style={{
-                  width: `${Math.min(100, ((item.video.progressSeconds ?? 0) / item.video.video.durationSeconds) * 100)}%`,
-                }}
-              />
+              {watchedPct > 0 && (
+                <span
+                  className="absolute bottom-0 left-0 h-1 bg-brand"
+                  style={{ width: `${watchedPct}%` }}
+                />
+              )}
             </div>
             <div className="mt-1.5 flex items-start gap-2">
               <h4 className="line-clamp-1 min-w-0 flex-1 text-sm font-semibold text-foreground">
