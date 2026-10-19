@@ -77,7 +77,7 @@ export type ResolveAction =
 
 export const resolveAdminReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id?: string; action?: ResolveAction; note?: string } | undefined) => ({
+  .validator((data: { id?: string; action?: ResolveAction; note?: string } | undefined) => ({
     id: data?.id ?? "",
     action: data?.action ?? "approve",
     note: (data?.note ?? "").slice(0, 300),
@@ -155,7 +155,7 @@ export const resolveAdminReport = createServerFn({ method: "POST" })
 /** Send a warning straight to a user's inbox. */
 export const sendUserWarning = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { userId?: string; message?: string } | undefined) => ({
+  .validator((data: { userId?: string; message?: string } | undefined) => ({
     userId: data?.userId ?? "",
     message: (data?.message ?? "").slice(0, 300),
   }))
@@ -258,7 +258,7 @@ const CAMPAIGN_STATUS: Record<CampaignReviewAction, string> = {
 
 export const reviewAdminCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     (data: { id?: string; action?: CampaignReviewAction; note?: string } | undefined) => ({
       id: data?.id ?? "",
       action: (data?.action ?? "approve") as CampaignReviewAction,

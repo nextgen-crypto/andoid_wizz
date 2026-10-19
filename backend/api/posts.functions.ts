@@ -91,7 +91,7 @@ function isUuid(value: string): boolean {
 /** Owner-authorized status mutation with positive post-mutation verification. */
 export const setOwnedPostStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { postId?: string; status?: string } | undefined) => ({
+  .validator((data: { postId?: string; status?: string } | undefined) => ({
     postId: data?.postId ?? "",
     status: data?.status ?? "",
   }))
@@ -142,7 +142,7 @@ export const setOwnedPostStatus = createServerFn({ method: "POST" })
 /** Permanent owner deletion; the client removes media only after this succeeds. */
 export const deleteOwnedPost = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { postId?: string } | undefined) => ({ postId: data?.postId ?? "" }))
+  .validator((data: { postId?: string } | undefined) => ({ postId: data?.postId ?? "" }))
   .handler(async ({ context, data }) => {
     const userId = (context as unknown as { userId: string }).userId;
     if (!isUuid(data.postId)) throw new Error("Post not found.");

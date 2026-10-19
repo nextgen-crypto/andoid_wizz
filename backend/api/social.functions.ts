@@ -7,7 +7,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  */
 export const respondFollowRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { requesterId?: string; accept?: boolean } | undefined) => ({
+  .validator((data: { requesterId?: string; accept?: boolean } | undefined) => ({
     requesterId: data?.requesterId ?? "",
     accept: data?.accept === true,
   }))

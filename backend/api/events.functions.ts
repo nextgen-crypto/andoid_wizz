@@ -43,7 +43,7 @@ function isRetryableWrite(error: { code?: string; message: string }): boolean {
 /** Authenticated, validated analytics ingest. The caller controls no user id. */
 export const recordFeedEvents = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { events?: EventInput[] } | undefined) => ({
+  .validator((data: { events?: EventInput[] } | undefined) => ({
     events: Array.isArray(data?.events) ? data.events.slice(0, 50) : [],
   }))
   .handler(async ({ context, data }) => {

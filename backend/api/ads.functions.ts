@@ -41,7 +41,7 @@ async function adminDb() {
  */
 export const createCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     (
       data:
         | {
@@ -164,7 +164,7 @@ export const listMyCampaigns = createServerFn({ method: "GET" })
 
 export const updateMyCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id?: string; action?: string } | undefined) => ({
+  .validator((data: { id?: string; action?: string } | undefined) => ({
     id: data?.id ?? "",
     action: data?.action ?? "",
   }))
@@ -343,7 +343,7 @@ const EVENT_KINDS = [
 /** Viewer-side event log + frequency-cap bookkeeping. Silent no-op on failure. */
 export const logAdEvent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { campaignId?: string; kind?: string } | undefined) => ({
+  .validator((data: { campaignId?: string; kind?: string } | undefined) => ({
     campaignId: data?.campaignId ?? "",
     kind: data?.kind ?? "impression",
   }))

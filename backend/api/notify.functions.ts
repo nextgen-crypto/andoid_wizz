@@ -7,7 +7,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  */
 export const notifyBlendInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { toUserId?: string; roomId?: string; shortId?: string } | undefined) => ({
+  .validator((data: { toUserId?: string; roomId?: string; shortId?: string } | undefined) => ({
     toUserId: data?.toUserId ?? "",
     roomId: (data?.roomId ?? "").slice(0, 80),
     shortId: (data?.shortId ?? "").slice(0, 80),

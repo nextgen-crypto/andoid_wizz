@@ -313,7 +313,7 @@ export function discussionCount(id: string): number {
 }
 
 export const fetchArticle = createServerFn({ method: "GET" })
-  .inputValidator((data: { articleId?: string } | undefined) => ({
+  .validator((data: { articleId?: string } | undefined) => ({
     articleId: data?.articleId ?? "",
   }))
   .handler(async ({ data }): Promise<NewsArticle | null> => {
@@ -330,7 +330,7 @@ export const fetchArticle = createServerFn({ method: "GET" })
 
 /** Related threads: category + tags + title affinity + live discussion. */
 export const fetchRelatedNews = createServerFn({ method: "GET" })
-  .inputValidator((data: { articleId?: string } | undefined) => ({
+  .validator((data: { articleId?: string } | undefined) => ({
     articleId: data?.articleId ?? "",
   }))
   .handler(async ({ data }): Promise<NewsArticle[]> => {
@@ -442,7 +442,7 @@ function toVideoItem(video: LongVideo): VideoItem {
 }
 
 export const fetchVideo = createServerFn({ method: "GET" })
-  .inputValidator((data: { videoId?: string } | undefined) => ({ videoId: data?.videoId ?? "" }))
+  .validator((data: { videoId?: string } | undefined) => ({ videoId: data?.videoId ?? "" }))
   .handler(async ({ data }): Promise<VideoItem | null> => {
     if (!data.videoId) return null;
     return cacheAside(`video:${data.videoId}`, TTL.feed, async () => {
@@ -486,7 +486,7 @@ function keywords(title: string): Set<string> {
  * log-views break ties, fresh uploads get a small lift.
  */
 export const fetchRelated = createServerFn({ method: "GET" })
-  .inputValidator((data: { videoId?: string } | undefined) => ({ videoId: data?.videoId ?? "" }))
+  .validator((data: { videoId?: string } | undefined) => ({ videoId: data?.videoId ?? "" }))
   .handler(async ({ data }): Promise<VideoItem[]> => {
     if (!data.videoId) return [];
     return cacheAside(`related:${data.videoId}`, TTL.feed, async () => {
@@ -548,7 +548,7 @@ function roughAgeHours(publishedAt: string): number | null {
 }
 
 export const fetchProfile = createServerFn({ method: "GET" })
-  .inputValidator((data: { userId?: string } | undefined) => ({
+  .validator((data: { userId?: string } | undefined) => ({
     userId: data?.userId ?? CURRENT_USER_ID,
   }))
   .handler(async ({ data }) =>

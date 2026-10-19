@@ -46,7 +46,7 @@ function validateNewsRequest(data: NewsRequest | undefined): GNewsOptions {
 export const fetchExternalNews = createServerFn({
   method: "GET",
 })
-  .inputValidator((data: NewsRequest | undefined) => validateNewsRequest(data))
+  .validator((data: NewsRequest | undefined) => validateNewsRequest(data))
   .handler(async ({ data }) => {
     const articles = await fetchGNews(data);
 

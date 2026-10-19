@@ -72,7 +72,7 @@ function cleanProfile(data: HomeInput | undefined): {
 
 export const fetchHome = createServerFn({ method: "GET" })
   .middleware([optionalSupabaseAuth])
-  .inputValidator((data: HomeInput | undefined) =>
+  .validator((data: HomeInput | undefined) =>
     data?.profile !== undefined
       ? cleanProfile(data)
       : { cursor: data?.cursor ?? null, profile: EMPTY_PROFILE, scope: data?.scope ?? "public" },
@@ -88,7 +88,7 @@ export const fetchHome = createServerFn({ method: "GET" })
 
 export const fetchFeedPage = createServerFn({ method: "GET" })
   .middleware([optionalSupabaseAuth])
-  .inputValidator((data: HomeInput | undefined) =>
+  .validator((data: HomeInput | undefined) =>
     data?.profile !== undefined
       ? cleanProfile(data)
       : { cursor: data?.cursor ?? null, profile: EMPTY_PROFILE },

@@ -44,7 +44,7 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
     _middleware: { _server?: (ctx: unknown) => Promise<void> }[];
     _validator: ((data: unknown) => unknown) | null;
     middleware(mws: unknown[]): ServerFnBuilder;
-    inputValidator(validator: (data: unknown) => unknown): ServerFnBuilder;
+    validator(validator: (data: unknown) => unknown): ServerFnBuilder;
     handler(
       fn: (args: { context: unknown; data: unknown }) => unknown,
     ): (opts?: { data?: unknown }) => Promise<unknown>;
@@ -57,7 +57,7 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
         builder._middleware = [...builder._middleware, ...mws];
         return builder;
       },
-      inputValidator(validator: (data: unknown) => unknown) {
+      validator(validator: (data: unknown) => unknown) {
         builder._validator = validator;
         return builder;
       },
