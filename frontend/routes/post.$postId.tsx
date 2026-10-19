@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PostDetailScreen, PostDetailPending, PostDetailError } from "@/frontend/screens/PostDetailScreen";
+import {
+  PostDetailScreen,
+  PostDetailPending,
+  PostDetailError,
+} from "@/frontend/screens/PostDetailScreen";
 
 export const Route = createFileRoute("/post/$postId")({
   head: () => ({

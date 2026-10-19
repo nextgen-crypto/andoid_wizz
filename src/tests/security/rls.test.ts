@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RLS_TEST_MATRIX } from "../../../backend/security/rls-matrix";
+import { RLS_TEST_MATRIX, type RlsTestCase } from "../../../backend/security/rls-matrix";
 
 /**
  * RLS matrix runner. When SUPABASE_URL is set and reachable, cases can be
@@ -21,8 +21,15 @@ const roleNames: Record<string, string> = {
 
 // A tiny policy simulator that mirrors the intent of the SQL policies.
 // Each entry returns true if the action is allowed.
-function simulate(tc: any): boolean {
-  const entry = RLS_TEST_MATRIX.find((e) => e.table === tc.table && e.role === tc.role && e.action === tc.action && e.description === tc.description && e.policy === tc.policy);
+function simulate(tc: RlsTestCase): boolean {
+  const entry = RLS_TEST_MATRIX.find(
+    (e) =>
+      e.table === tc.table &&
+      e.role === tc.role &&
+      e.action === tc.action &&
+      e.description === tc.description &&
+      e.policy === tc.policy,
+  );
   return entry ? entry.expected === "allow" : false;
 }
 

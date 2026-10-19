@@ -148,7 +148,10 @@ export function useMyStats(userId: string | null) {
     staleTime: 5_000,
     queryFn: async (): Promise<ProfileStats> => {
       if (!userId) return { posts: 0, followers: 0, following: 0 };
-      const [posts, counts] = await Promise.all([countOwnerPosts(userId), fetchFollowCounts(userId)]);
+      const [posts, counts] = await Promise.all([
+        countOwnerPosts(userId),
+        fetchFollowCounts(userId),
+      ]);
       return { posts, followers: counts.followers, following: counts.following };
     },
   });

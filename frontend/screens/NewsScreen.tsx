@@ -70,7 +70,9 @@ export function NewsScreen() {
     queryFn: async ({ pageParam }) => {
       let query = supabase
         .from("posts")
-        .select("id, caption, image_url, video_url, created_at, comments_count, author_id, profiles!inner(id, username, display_name, avatar_url, verified)")
+        .select(
+          "id, caption, image_url, video_url, created_at, comments_count, author_id, profiles!inner(id, username, display_name, avatar_url, verified)",
+        )
         .eq("status", "published")
         .eq("category", "News");
 
@@ -88,7 +90,9 @@ export function NewsScreen() {
         query = query.order("created_at", { ascending: false });
         if (pageParam) query = query.lt("created_at", pageParam);
       } else {
-        query = query.order("comments_count", { ascending: false }).order("created_at", { ascending: false });
+        query = query
+          .order("comments_count", { ascending: false })
+          .order("created_at", { ascending: false });
       }
 
       const { data, error } = await query.limit(10);
@@ -101,7 +105,13 @@ export function NewsScreen() {
         created_at: string;
         comments_count: number;
         author_id: string;
-        profiles: { id: string; username: string; display_name: string; avatar_url: string | null; verified: boolean } | null;
+        profiles: {
+          id: string;
+          username: string;
+          display_name: string;
+          avatar_url: string | null;
+          verified: boolean;
+        } | null;
       }[];
       const items: NewsFeedPost[] = rows.map((r) => ({
         id: r.id,
@@ -408,7 +418,11 @@ function TrendRow({
   return (
     <div className="flex items-center gap-2 px-4 py-2.5">
       <div className="min-w-0 flex-1">
-        <Link to="/topics/$topic" params={{ topic: label.replace(/^#/, "").toLowerCase() }} className="block">
+        <Link
+          to="/topics/$topic"
+          params={{ topic: label.replace(/^#/, "").toLowerCase() }}
+          className="block"
+        >
           <p className="truncate text-sm font-semibold text-foreground hover:underline">{label}</p>
         </Link>
         <p className="truncate text-xs text-muted-foreground">
@@ -513,7 +527,9 @@ function FirstPostPrompt({
       </p>
       <div className="mt-4 flex items-center justify-center gap-2">
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent("open-create", { detail: { kind: "text" } }))}
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("open-create", { detail: { kind: "text" } }))
+          }
           className="rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-brand-foreground press"
         >
           Write a post

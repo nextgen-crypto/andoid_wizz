@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BookmarksScreen, BookmarksPending, BookmarksError } from "@/frontend/screens/BookmarksScreen";
+import {
+  BookmarksScreen,
+  BookmarksPending,
+  BookmarksError,
+} from "@/frontend/screens/BookmarksScreen";
 
 export const Route = createFileRoute("/bookmarks")({
   head: () => ({
