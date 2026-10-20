@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Ban,
   Check,
+  Gem,
   HeartHandshake,
   ImagePlus,
   Link2,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/frontend/components/AppShell";
+import { isPremiumActive } from "@/frontend/lib/membership";
 import { PaymentSheet } from "@/frontend/components/profile/PaymentSheet";
 import { ReportDialog } from "@/frontend/components/moderation/ReportDialog";
 import { useSession } from "@/frontend/hooks/useSession";
@@ -328,6 +330,9 @@ export function PublicProfileScreen({ username }: { username: string }) {
             {profile.display_name}
           </h2>
           {profile.verified && <BadgeCheck className="size-4.5 text-brand" />}
+          {isPremiumActive(profile.premium_until) && (
+            <Gem className="size-4.5 text-amber-500" aria-label="WIZZ Premium" />
+          )}
           {isPrivate && (
             <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Private

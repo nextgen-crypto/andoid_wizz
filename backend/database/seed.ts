@@ -36,7 +36,7 @@ export const creators: Creator[] = [
     displayName: "Alex Rivera",
     avatarKey: "avatar/alex-rivera",
     verified: true,
-    bio: "Building things - Coffee & code - BUZZ early adopter",
+    bio: "Building things - Coffee & code - WIZZ early adopter",
     followers: 1300,
     following: 342,
     posts: 6,
@@ -115,7 +115,7 @@ const minutesAgo = (m: number) => new Date(now - m * 60_000).toISOString();
 export const trending: TrendingTopic[] = [
   {
     id: "t-buzz",
-    label: "#buzz",
+    label: "#wizz",
     kind: "hashtag",
     category: "Trending",
     postCount: 128000,
@@ -871,11 +871,11 @@ const videoSeed: VideoSeed[] = [
   {
     id: "v-4",
     authorId: "u-nina",
-    title: "Design system tour — building BUZZ",
+    title: "Design system tour — building WIZZ",
     description:
-      "A walkthrough of the BUZZ interface kit: tokens, the purple accent rules, sheet motion, and how we keep every screen feeling like one product.",
+      "A walkthrough of the WIZZ interface kit: tokens, the purple accent rules, sheet motion, and how we keep every screen feeling like one product.",
     category: "Tech",
-    tags: ["design system", "ui design", "tutorial", "buzz"],
+    tags: ["design system", "ui design", "tutorial", "wizz"],
     url: V("ForBiggerEscapes"),
     views: 38000,
     publishedAt: "4 days ago",

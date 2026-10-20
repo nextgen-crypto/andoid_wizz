@@ -34,7 +34,14 @@ function post(id: string, overrides: Partial<Post> = {}): Post {
 function item(p: Post): FeedItem {
   return {
     post: p,
-    author: { id: p.authorId, username: "u", displayName: "U", avatarKey: "", verified: false },
+    author: {
+      id: p.authorId,
+      username: "u",
+      displayName: "U",
+      avatarKey: "",
+      verified: false,
+      premiumUntil: null,
+    },
   };
 }
 

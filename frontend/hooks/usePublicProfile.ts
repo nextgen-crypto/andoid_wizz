@@ -23,7 +23,7 @@ export function useProfileByUsername(username: string, viewerId: string | null =
     queryFn: async (): Promise<PublicProfile | null> => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, username, display_name, bio, avatar_url, verified, is_private")
+        .select("id, username, display_name, bio, avatar_url, verified, premium_until, is_private")
         .ilike("username", username)
         .maybeSingle();
       if (error) throw error;

@@ -8,6 +8,8 @@ export type MyProfile = {
   bio: string;
   avatar_url: string | null;
   verified: boolean;
+  /** WIZZ Premium expiry (null when not a subscriber). */
+  premium_until: string | null;
   is_private: boolean;
 };
 
@@ -21,7 +23,7 @@ export function useMyProfile(userId: string | null) {
       if (!userId) return null;
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, username, display_name, bio, avatar_url, verified, is_private")
+        .select("id, username, display_name, bio, avatar_url, verified, premium_until, is_private")
         .eq("id", userId)
         .maybeSingle();
       if (error) throw error;

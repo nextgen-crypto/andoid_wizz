@@ -139,7 +139,13 @@ const supabaseAdmin = {
     },
     update: (payload: unknown) => {
       db.calls.push({ table, op: "update", payload });
-      return { eq: async () => ({ error: db.updateError }) };
+      // Thenable + chainable — `setUserVerified` stacks two `.eq()` filters.
+      const chain = {
+        eq: () => chain,
+        then: (onF?: (v: { error: unknown }) => unknown, onR?: (e: unknown) => unknown) =>
+          Promise.resolve({ error: db.updateError }).then(onF, onR),
+      };
+      return chain;
     },
     insert: (payload: unknown) => {
       db.calls.push({ table, op: "insert", payload });
@@ -1370,5 +1376,133 @@ describe("fetchAdminRoles", () => {
     requireAdminMock.mockRejectedValue(new Error("Unauthorized: admin access required."));
     await expect(invoke(adminFns.fetchAdminRoles)).rejects.toThrow("Unauthorized");
     expect(db.calls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Verification queue (Settings › Verified → console review)
+// ---------------------------------------------------------------------------
+
+describe("fetchVerificationRequests", () => {
+  it("joins profiles onto the queue rows", async () => {
+    db.listed.set("verification_requests", {
+      data: [
+        {
+          id: "r1",
+          user_id: "u1",
+          reviewer_note: "News outlet",
+          status: "pending",
+          created_at: "2026-10-20T00:00:00Z",
+        },
+      ],
+      error: null,
+    });
+    db.inRows.set("profiles", [
+      { id: "u1", username: "mina", display_name: "Mina K", avatar_url: null },
+    ]);
+    await expect(invoke(adminFns.fetchVerificationRequests)).resolves.toEqual({
+      live: true,
+      requests: [
+        {
+          id: "r1",
+          user_id: "u1",
+          username: "mina",
+          display_name: "Mina K",
+          avatar_url: null,
+          note: "News outlet",
+          status: "pending",
+          created_at: "2026-10-20T00:00:00Z",
+        },
+      ],
+    });
+    expect(requireAdminMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to placeholder names for missing profiles", async () => {
+    db.listed.set("verification_requests", {
+      data: [
+        {
+          id: "r2",
+          user_id: "ghost",
+          reviewer_note: null,
+          status: "pending",
+          created_at: "2026-10-19",
+        },
+      ],
+      error: null,
+    });
+    db.inRows.set("profiles", null);
+    const res = (await invoke(adminFns.fetchVerificationRequests)) as {
+      requests: { username: string; display_name: string }[];
+      live: boolean;
+    };
+    expect(res.live).toBe(true);
+    expect(res.requests[0]).toMatchObject({ username: "?", display_name: "?" });
+  });
+
+  it("degrades to live:false when the query errors", async () => {
+    db.listed.set("verification_requests", { data: null, error: { message: "boom" } });
+    await expect(invoke(adminFns.fetchVerificationRequests)).resolves.toEqual({
+      requests: [],
+      live: false,
+    });
+  });
+
+  it("refuses non-admins before touching the database", async () => {
+    requireAdminMock.mockRejectedValue(new Error("Unauthorized: admin access required."));
+    await expect(invoke(adminFns.fetchVerificationRequests)).rejects.toThrow("Unauthorized");
+    expect(db.calls).toHaveLength(0);
+  });
+});
+
+describe("setUserVerified", () => {
+  const uuid = "11111111-1111-1111-1111-111111111111";
+
+  it("validator coerces and caps", () => {
+    const validate = validatorOf(adminFns.setUserVerified);
+    expect(validate(undefined)).toEqual({ userId: "", verified: false, note: "" });
+    expect(validate({ userId: uuid, verified: true, note: "hi" })).toEqual({
+      userId: uuid,
+      verified: true,
+      note: "hi",
+    });
+    expect(validate({ note: 7 })["note"]).toBe("");
+    expect(validate({ note: "n".repeat(400) })["note"] as string).toHaveLength(300);
+  });
+
+  it("approves: flips profiles.verified and closes the pending request", async () => {
+    const res = await invoke(adminFns.setUserVerified, { userId: uuid, verified: true });
+    expect(res).toEqual({ ok: true, verified: true });
+    expect(callsTo("profiles", "update")).toEqual([{ verified: true }]);
+    const queueWrites = callsTo("verification_requests", "update") as Record<string, unknown>[];
+    expect(queueWrites).toHaveLength(1);
+    expect(queueWrites[0]).toMatchObject({ status: "approved", reviewed_at: expect.any(String) });
+    expect(requireAdminMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects: marks the pending request rejected with the note", async () => {
+    const res = await invoke(adminFns.setUserVerified, {
+      userId: uuid,
+      verified: false,
+      note: "Not notable yet",
+    });
+    expect(res).toEqual({ ok: true, verified: false });
+    expect(callsTo("profiles", "update")).toEqual([{ verified: false }]);
+    const queueWrites = callsTo("verification_requests", "update") as Record<string, unknown>[];
+    expect(queueWrites[0]).toMatchObject({ status: "rejected", reviewer_note: "Not notable yet" });
+  });
+
+  it("throws on a non-uuid user id before writing anything", async () => {
+    await expect(
+      invoke(adminFns.setUserVerified, { userId: "not-a-uuid", verified: true }),
+    ).rejects.toThrow("User not found.");
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it("propagates a write error to the caller", async () => {
+    db.updateError = { message: "permission denied" };
+    await expect(
+      invoke(adminFns.setUserVerified, { userId: uuid, verified: true }),
+    ).rejects.toBeTruthy();
   });
 });

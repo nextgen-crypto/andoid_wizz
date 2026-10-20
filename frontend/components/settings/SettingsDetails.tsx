@@ -10,6 +10,7 @@ import { useMyPosts, useMyStats } from "@/frontend/hooks/useMyProfileData";
 import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
 import { useFollowList } from "@/frontend/hooks/usePublicProfile";
 import { setOwnedPostStatus } from "@/backend/api/posts.functions";
+import { useSubscription, useSubscriptionActions } from "@/frontend/hooks/useSubscription";
 import { toast } from "sonner";
 
 /** Persistent local preference backed by localStorage. */
@@ -166,9 +167,9 @@ export function SettingsDetail({ id, userId }: { id: string; userId: string | nu
     case "like-counts":
       return <LikeCountsDetail />;
     case "premium":
-      return <PremiumDetail />;
+      return <PremiumDetail userId={userId} />;
     case "verified":
-      return <VerifiedDetail />;
+      return <VerifiedDetail userId={userId} />;
     case "help":
       return <HelpDetail />;
     case "privacy-centre":
@@ -1004,40 +1005,129 @@ function LikeCountsDetail() {
   );
 }
 
-function PremiumDetail() {
-  const [sub, setSub] = useLocalSetting("premium-sub", false);
+function PremiumDetail({ userId }: { userId: string | null }) {
+  const [localSub, setLocalSub] = useLocalSetting("premium-sub", false);
+  const { data } = useSubscription(userId);
+  const actions = useSubscriptionActions();
+  // Backend reachable → database state is authoritative; otherwise keep the
+  // old device-local toggle so the screen never dead-ends.
+  const live = data?.live === true;
+  const active = live ? data.premiumActive : localSub;
+  const busy = actions.activate.isPending || actions.cancel.isPending;
+  const expiresLabel = (() => {
+    const at = data?.live === true ? data.premiumUntil : null;
+    if (!at) return null;
+    const parsed = Date.parse(at);
+    if (!Number.isFinite(parsed)) return null;
+    return new Date(parsed).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  })();
+
+  function toggle() {
+    if (!live) {
+      setLocalSub(!localSub);
+      return;
+    }
+    if (active) {
+      actions.cancel.mutate(undefined, {
+        onError: () => toast("Couldn't cancel the subscription. Try again."),
+      });
+    } else {
+      actions.activate.mutate(undefined, {
+        onError: () => toast("Couldn't activate Premium. Try again."),
+      });
+    }
+  }
+
   return (
     <div className="px-2 py-2">
       <p className="text-[15px] font-semibold text-foreground">
-        {sub ? "You're on Premium" : "WIZZ Premium"}
+        {active ? "You're on Premium" : "WIZZ Premium"}
       </p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Ad-free feed, priority upload, exclusive filters.
+        {active
+          ? expiresLabel
+            ? `Premium badge active · renews ${expiresLabel}`
+            : "Premium badge active across WIZZ."
+          : "Supporter badge on your profile and posts, plus early access to new features."}
+        {!live && " Offline — stored on this device only."}
       </p>
       <button
-        onClick={() => setSub(!sub)}
-        className="mt-3 w-full rounded-full bg-brand py-2.5 text-sm font-bold text-brand-foreground"
+        onClick={toggle}
+        disabled={busy}
+        className="mt-3 w-full rounded-full bg-brand py-2.5 text-sm font-bold text-brand-foreground disabled:opacity-60"
       >
-        {sub ? "Cancel subscription" : "Subscribe"}
+        {busy ? "Saving…" : active ? "Cancel subscription" : "Subscribe"}
       </button>
+      {live && !active && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Free preview — billing starts automatically once a payment provider is connected.
+        </p>
+      )}
     </div>
   );
 }
 
-function VerifiedDetail() {
-  const [req, setReq] = useLocalSetting("verified-req", false);
+function VerifiedDetail({ userId }: { userId: string | null }) {
+  const [localReq, setLocalReq] = useLocalSetting("verified-req", false);
+  const { data } = useSubscription(userId);
+  const actions = useSubscriptionActions();
+  const live = data?.live === true;
+  const status: "none" | "pending" | "verified" = live
+    ? data.verificationStatus
+    : localReq
+      ? "pending"
+      : "none";
+  const busy = actions.request.isPending;
+
+  if (live && status === "verified") {
+    return (
+      <div className="px-2 py-2">
+        <p className="text-[15px] font-semibold text-foreground">You're verified</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Your badge is visible everywhere your posts appear.
+        </p>
+      </div>
+    );
+  }
+
+  function request() {
+    if (!live) {
+      setLocalReq(!localReq);
+      return;
+    }
+    if (status === "pending") return;
+    actions.request.mutate(undefined, {
+      onError: () => toast("Couldn't send the request. Try again."),
+      onSuccess: () => toast("Verification request sent — we'll review it soon."),
+    });
+  }
+
   return (
     <div className="px-2 py-2">
       <p className="text-[15px] font-semibold text-foreground">Get verified</p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Prove you're a notable creator or brand.
+        Prove you're a notable creator or brand. A WIZZ admin reviews every request.
       </p>
       <button
-        onClick={() => setReq(!req)}
-        className="mt-3 w-full rounded-full bg-secondary py-2.5 text-sm font-semibold text-foreground"
+        onClick={request}
+        disabled={busy || status === "pending"}
+        className="mt-3 w-full rounded-full bg-secondary py-2.5 text-sm font-semibold text-foreground disabled:opacity-60"
       >
-        {req ? "Request pending — withdraw" : "Request verification"}
+        {busy
+          ? "Sending…"
+          : status === "pending"
+            ? "Request pending — in review"
+            : "Request verification"}
       </button>
+      {!live && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Offline — request stored on this device only.
+        </p>
+      )}
     </div>
   );
 }

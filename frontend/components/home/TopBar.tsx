@@ -47,6 +47,7 @@ import { EditProfileSheet } from "@/frontend/components/profile/EditProfileSheet
 import { PaymentSheet } from "@/frontend/components/profile/PaymentSheet";
 import { SETTING_TITLES, SettingsDetail } from "@/frontend/components/settings/SettingsDetails";
 import { useSession } from "@/frontend/hooks/useSession";
+import { useSubscription } from "@/frontend/hooks/useSubscription";
 import { useConversations } from "@/frontend/hooks/useMessages";
 import {
   InboxIcon,
@@ -386,6 +387,7 @@ export function TopBar() {
     timeAgo: inboxAgo,
   } = useNotifications(user?.id ?? null);
   const { data: myProfile } = useMyProfile(user?.id ?? null);
+  const subscription = useSubscription(user?.id ?? null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -555,27 +557,46 @@ export function TopBar() {
             .map((group) => (
               <section key={group.title} className="mt-4 border-t border-border pt-3">
                 <p className="pb-1 text-sm font-semibold text-muted-foreground">{group.title}</p>
-                {group.rows.map(({ id, label, hint, value, Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => openSetting(id)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-secondary"
-                  >
-                    <Icon className="size-5 shrink-0 text-foreground" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-semibold leading-tight text-foreground">
-                        {label}
-                      </span>
-                      {hint && (
-                        <span className="block text-xs leading-snug text-muted-foreground">
-                          {hint}
+                {group.rows.map(({ id, label, hint, value, Icon }) => {
+                  // Subscriptions rows reflect real account state; every
+                  // other row keeps its static label.
+                  const sub = subscription.data;
+                  const rowValue =
+                    id === "premium" && sub?.live
+                      ? sub.premiumActive
+                        ? "Active"
+                        : "Not subscribed"
+                      : id === "verified" && sub?.live
+                        ? sub.verified
+                          ? "Verified"
+                          : sub.verificationStatus === "pending"
+                            ? "In review"
+                            : "Not subscribed"
+                        : value;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => openSetting(id)}
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-secondary"
+                    >
+                      <Icon className="size-5 shrink-0 text-foreground" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] font-semibold leading-tight text-foreground">
+                          {label}
                         </span>
+                        {hint && (
+                          <span className="block text-xs leading-snug text-muted-foreground">
+                            {hint}
+                          </span>
+                        )}
+                      </span>
+                      {rowValue && (
+                        <span className="text-[13px] text-muted-foreground">{rowValue}</span>
                       )}
-                    </span>
-                    {value && <span className="text-[13px] text-muted-foreground">{value}</span>}
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                  </button>
-                ))}
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  );
+                })}
               </section>
             ))}
 

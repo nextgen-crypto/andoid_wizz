@@ -1024,6 +1024,7 @@ export type Database = {
           display_name: string;
           id: string;
           is_private: boolean;
+          premium_until: string | null;
           updated_at: string;
           username: string;
           verified: boolean;
@@ -1035,6 +1036,7 @@ export type Database = {
           display_name: string;
           id: string;
           is_private?: boolean;
+          premium_until?: string | null;
           updated_at?: string;
           username: string;
           verified?: boolean;
@@ -1046,6 +1048,7 @@ export type Database = {
           display_name?: string;
           id?: string;
           is_private?: boolean;
+          premium_until?: string | null;
           updated_at?: string;
           username?: string;
           verified?: boolean;
@@ -1127,6 +1130,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "warnings_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      verification_requests: {
+        Row: {
+          created_at: string;
+          id: string;
+          reviewed_at: string | null;
+          reviewer_note: string | null;
+          status: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          reviewed_at?: string | null;
+          reviewer_note?: string | null;
+          status?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          reviewed_at?: string | null;
+          reviewer_note?: string | null;
+          status?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "verification_requests_user_id_fkey";
             columns: ["user_id"];
             isOneToOne: false;
             referencedRelation: "profiles";

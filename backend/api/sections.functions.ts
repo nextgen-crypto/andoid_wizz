@@ -574,7 +574,9 @@ export const fetchProfile = createServerFn({ method: "GET" })
       if (supabase) {
         const { data: profile, error } = await supabase
           .from("profiles")
-          .select("id, username, display_name, bio, avatar_url, verified, is_private")
+          .select(
+            "id, username, display_name, bio, avatar_url, verified, premium_until, is_private",
+          )
           .eq("id", data.userId)
           .maybeSingle();
         if (!error && profile) {
@@ -590,6 +592,7 @@ export const fetchProfile = createServerFn({ method: "GET" })
               displayName: profile.display_name,
               avatarKey: profile.avatar_url ?? "",
               verified: profile.verified,
+              premiumUntil: (profile.premium_until as string | null) ?? null,
               bio: profile.bio ?? "",
               followers: seedMatch?.followers ?? 0,
               following: seedMatch?.following ?? 0,

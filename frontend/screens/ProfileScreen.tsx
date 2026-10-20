@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck,
   Bookmark,
+  Gem,
   Grid3X3,
   ImagePlus,
   LogOut,
@@ -15,6 +16,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { AppShell } from "@/frontend/components/AppShell";
+import { isPremiumActive } from "@/frontend/lib/membership";
 import { PostManageSheet } from "@/frontend/components/profile/PostManageSheet";
 import { hiddenPostIds } from "@/frontend/components/profile/PostMenu";
 import { PostVideoSheet } from "@/frontend/components/profile/PostVideoSheet";
@@ -222,6 +224,9 @@ export function ProfileScreen() {
             {shownName}
           </h2>
           {myProfile?.verified && <BadgeCheck className="size-4.5 text-brand" />}
+          {isPremiumActive(myProfile?.premium_until) && (
+            <Gem className="size-4.5 text-amber-500" aria-label="WIZZ Premium" />
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           {shownHandle.includes("@") ? shownHandle : `@${shownHandle}`}

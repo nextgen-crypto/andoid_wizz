@@ -5,6 +5,7 @@ import {
   Bookmark,
   EyeOff,
   Flag,
+  Gem,
   Heart,
   MessageCircle,
   MoreHorizontal,
@@ -19,6 +20,7 @@ import type { FeedItem } from "@/backend/services/feedService";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { ReportDialog, type ReportTarget } from "@/frontend/components/moderation/ReportDialog";
 import { useSession } from "@/frontend/hooks/useSession";
+import { isPremiumActive, PREMIUM_BADGE_CLASS } from "@/frontend/lib/membership";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { useMyProfile } from "@/frontend/hooks/useMyProfile";
 import { usePostComments } from "@/frontend/hooks/usePostComments";
@@ -252,6 +254,9 @@ export function FeedCard({
           <div className="flex min-w-0 items-center gap-1">
             <span className="truncate text-sm font-bold text-foreground">{author.displayName}</span>
             {author.verified && <BadgeCheck className="size-4 shrink-0 text-brand" />}
+            {isPremiumActive(author.premiumUntil) && (
+              <Gem className={`size-4 shrink-0 ${PREMIUM_BADGE_CLASS}`} aria-label="WIZZ Premium" />
+            )}
           </div>
           <p className="truncate text-xs text-muted-foreground">
             @{author.username} · {timeAgoCompact(post.createdAt, REFERENCE_NOW)}

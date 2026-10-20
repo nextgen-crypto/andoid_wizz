@@ -62,7 +62,7 @@ export function imageSrcSet(objectKey: string, aspect = 1): string {
 export function videoUrl(objectKey: string): string {
   if (objectKey.startsWith("http")) return objectKey;
   const base = process.env["MEDIA_BASE_URL"]?.replace(/\/$/, "");
-  return base ? `${base}/${objectKey}` : `https://cdn.buzz.app/${objectKey}`;
+  return base ? `${base}/${objectKey}` : `https://cdn.wizz.app/${objectKey}`;
 }
 
 /** Quality ladder for adaptive bitrate streaming. */

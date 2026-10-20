@@ -32,6 +32,8 @@ export interface FeedAuthor {
   displayName: string;
   avatarKey: string;
   verified: boolean;
+  /** WIZZ Premium expiry — drives the supporter badge in the feed. */
+  premiumUntil: string | null;
 }
 
 export interface FeedItem {
@@ -225,6 +227,7 @@ interface RealProfileRow {
   display_name: string;
   avatar_url: string | null;
   verified: boolean;
+  premium_until: string | null;
 }
 
 function toAuthor(id: string): FeedAuthor {
@@ -236,6 +239,7 @@ function toAuthor(id: string): FeedAuthor {
     displayName: c.displayName,
     avatarKey: c.avatarKey,
     verified: c.verified,
+    premiumUntil: null,
   };
 }
 
@@ -334,7 +338,7 @@ async function fetchRealCandidates(viewerClient?: SupabaseClient | null): Promis
   const [{ data: profileRows }, { data: followRows }, likeRows, saveRows] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, verified")
+      .select("id, username, display_name, avatar_url, verified, premium_until")
       .in("id", authorIds),
     supabase.from("follows").select("followee_id").in("followee_id", authorIds).limit(5000),
     supabase
@@ -418,6 +422,7 @@ async function fetchRealCandidates(viewerClient?: SupabaseClient | null): Promis
           displayName: profile.display_name,
           avatarKey: profile.avatar_url ?? "",
           verified: profile.verified,
+          premiumUntil: profile.premium_until ?? null,
         },
         ...(row.video_url ? { videoSrc: row.video_url } : {}),
         ...(row.image_path ? { imagePath: row.image_path } : {}),
@@ -886,7 +891,7 @@ async function fetchRealStories(viewerClient?: SupabaseClient | null): Promise<S
   const authorIds = [...new Set(rows.map((row) => row.author_id))];
   const { data: profileRows } = await supabase
     .from("profiles")
-    .select("id, username, display_name, avatar_url, verified")
+    .select("id, username, display_name, avatar_url, verified, premium_until")
     .in("id", authorIds);
   const profiles = new Map(
     ((profileRows ?? []) as RealProfileRow[]).map((profile) => [profile.id, profile]),
@@ -912,6 +917,7 @@ async function fetchRealStories(viewerClient?: SupabaseClient | null): Promise<S
           displayName: profile.display_name,
           avatarKey: profile.avatar_url ?? "",
           verified: profile.verified,
+          premiumUntil: profile.premium_until ?? null,
         },
         mediaUrl: videoUrl ?? imageUrl ?? "",
         mediaType: videoUrl ? "video" : imageUrl ? "image" : "text",

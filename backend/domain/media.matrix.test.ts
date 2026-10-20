@@ -277,8 +277,8 @@ describe("videoUrl — default CDN base", () => {
     "a:b/c.mp4",
   ];
 
-  it.each(rows)("videoUrl(%j) -> https://cdn.buzz.app/<key>", (key) => {
-    expect(media.videoUrl(key)).toBe(`https://cdn.buzz.app/${key}`);
+  it.each(rows)("videoUrl(%j) -> https://cdn.wizz.app/<key>", (key) => {
+    expect(media.videoUrl(key)).toBe(`https://cdn.wizz.app/${key}`);
   });
 
   const absolute: string[] = [
@@ -309,8 +309,8 @@ describe("videoUrl — MEDIA_BASE_URL variants", () => {
       "https://supabase.example.co/storage/v1/object/public",
       "https://supabase.example.co/storage/v1/object/public/clips/intro.mp4",
     ],
-    ["clips/intro.mp4", "", "https://cdn.buzz.app/clips/intro.mp4"],
-    ["clips/intro.mp4", "/", "https://cdn.buzz.app/clips/intro.mp4"],
+    ["clips/intro.mp4", "", "https://cdn.wizz.app/clips/intro.mp4"],
+    ["clips/intro.mp4", "/", "https://cdn.wizz.app/clips/intro.mp4"],
     ["a", "https://cdn.example.com", "https://cdn.example.com/a"],
     ["", "https://cdn.example.com", "https://cdn.example.com/"],
     ["https://cdn.x/clip.mp4", "https://cdn.example.com", "https://cdn.x/clip.mp4"],

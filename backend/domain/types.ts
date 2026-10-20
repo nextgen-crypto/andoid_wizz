@@ -1,5 +1,5 @@
 /**
- * BUZZ domain model.
+ * WIZZ domain model.
  * Mirrors the PostgreSQL schema in database/migrations. Media binaries never
  * live here — only object-storage keys plus derived-rendition metadata.
  */
