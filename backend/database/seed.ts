@@ -12,7 +12,20 @@ import type {
   TrendingTopic,
 } from "../domain/types";
 
-const V = (name: string) => `https://storage.googleapis.com/gtv-videos-bucket/sample/${name}.mp4`;
+// Demo clips are hosted on the deployment itself (public/videos). Google's
+// old gtv-videos-bucket samples started returning 403 after ~10 years, which
+// left every seed video unplayable ("preview does not open") — first-party
+// static hosting keeps the fallback content under our control. The native
+// bundle strips these files; the backend serves them to the app by URL.
+const DEMO_CLIPS: Record<string, string> = {
+  ForBiggerBlazes: "clip-bunny",
+  ForBiggerFun: "clip-flower",
+  ForBiggerJoyrides: "clip-sintel",
+  ForBiggerEscapes: "clip-jellyfish",
+  ForBiggerMeltdowns: "clip-bunny",
+};
+const V = (name: string) =>
+  `https://wizz-kohl.vercel.app/videos/${DEMO_CLIPS[name] ?? "clip-bunny"}.mp4`;
 
 export const CURRENT_USER_ID = "u-alex";
 

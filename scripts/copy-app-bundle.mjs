@@ -26,6 +26,11 @@ async function main() {
   await rm(target, { recursive: true, force: true });
   await cp(source, target, { recursive: true });
 
+  // Demo media for the deployed backend only — seed videos point at the web
+  // origin, so bundling them would add ~4 MB to the APK for files the
+  // WebView never loads.
+  await rm(resolve(target, "videos"), { recursive: true, force: true });
+
   const shell = await stat(resolve(target, "index.html")).catch(() => null);
   if (!shell) {
     throw new Error(
