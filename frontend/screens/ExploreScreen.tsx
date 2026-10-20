@@ -7,6 +7,7 @@ import { AppShell } from "@/frontend/components/AppShell";
 import { trendingTopicsQueryOptions } from "@/frontend/hooks/useTrendingTopics";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { formatCount } from "@/frontend/components/news/newsFormat";
+import { sanitizeFilterText } from "@/frontend/lib/format";
 import { cn } from "@/lib/utils";
 
 type SearchTab = "Top" | "Latest" | "People" | "Media" | "News" | "Topics";
@@ -30,7 +31,10 @@ export function ExploreScreen() {
     enabled: query.length >= 2,
     staleTime: 30_000,
     queryFn: async () => {
-      const q = query.trim();
+      const q = sanitizeFilterText(query.trim());
+      // Symbols-only queries sanitize to nothing; an empty filter would
+      // match everything — show no results instead.
+      if (!q) return { type: "people" as const, results: [] };
       if (tab === "People") {
         const { data, error } = await supabase
           .from("profiles")

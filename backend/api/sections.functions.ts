@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { CURRENT_USER_ID, creators, news, shorts, videos } from "../database/seed";
 import { cacheAside, TTL } from "../cache/redisCache";
 import { serverSupabase } from "../services/feedService";
-import type { LongVideo, NewsArticle, ShortVideo } from "../domain/types";
+import type { Creator, LongVideo, NewsArticle, ShortVideo } from "../domain/types";
 
 export interface ShortItem {
   short: ShortVideo;
@@ -21,6 +21,20 @@ export interface VideoItem {
 }
 
 const byId = new Map(creators.map((c) => [c.id, c]));
+/** Demo identity for display chrome. Falls back to the first seed creator so
+ *  a seed edit removing CURRENT_USER_ID can't crash every fallback path. */
+const SYNTHETIC_DEMO_USER: Creator = {
+  id: CURRENT_USER_ID,
+  username: "you",
+  displayName: "WIZZ",
+  avatarKey: "avatar/alex-rivera",
+  verified: true,
+  bio: "",
+  followers: 0,
+  following: 0,
+  posts: 0,
+};
+const demoUser = byId.get(CURRENT_USER_ID) ?? creators[0] ?? SYNTHETIC_DEMO_USER;
 
 const REAL_MEDIA_TTL = 5 * 60;
 
@@ -400,7 +414,7 @@ export const fetchShorts = createServerFn({ method: "GET" }).handler(
     cacheAside("shorts:rail", TTL.feed, async () => [
       ...(await realShortItems()),
       ...shorts.map((short) => {
-        const a = byId.get(short.authorId)!;
+        const a = byId.get(short.authorId) ?? demoUser;
         return {
           short,
           authorName: a.displayName,
@@ -416,7 +430,7 @@ export const fetchVideos = createServerFn({ method: "GET" }).handler(
     cacheAside("videos:list", TTL.feed, async () => [
       ...(await realVideoItems()),
       ...videos.map((video) => {
-        const a = byId.get(video.authorId)!;
+        const a = byId.get(video.authorId) ?? demoUser;
         return {
           video,
           authorName: a.displayName,
@@ -430,7 +444,7 @@ export const fetchVideos = createServerFn({ method: "GET" }).handler(
 );
 
 function toVideoItem(video: LongVideo): VideoItem {
-  const a = byId.get(video.authorId)!;
+  const a = byId.get(video.authorId) ?? demoUser;
   return {
     video,
     authorName: a.displayName,
@@ -584,7 +598,7 @@ export const fetchProfile = createServerFn({ method: "GET" })
         }
       }
       return {
-        user: byId.get(CURRENT_USER_ID)!,
+        user: demoUser,
         savedCount: 128,
         playlists: ["Watch Later", "Cooking ideas", "Travel inspo"],
       };

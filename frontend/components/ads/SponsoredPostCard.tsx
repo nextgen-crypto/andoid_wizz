@@ -4,6 +4,7 @@ import { ArrowUpRight, BadgeCheck, MoreHorizontal } from "lucide-react";
 import { fetchActivePromotions, logAdEvent, type Promotion } from "@/backend/api/ads.functions";
 import { ReportDialog } from "@/frontend/components/moderation/ReportDialog";
 import { supabase } from "@/integrations/supabase/client";
+import { timeAgoCompact } from "@/frontend/lib/format";
 
 /** Active promotions for feed injection. Empty (not error) when tables miss. */
 export function usePromotions(viewerId: string | null) {
@@ -30,14 +31,6 @@ export function usePromotions(viewerId: string | null) {
       }
     },
   });
-}
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const h = Math.round(mins / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.round(h / 24)}d`;
 }
 
 /**
@@ -134,7 +127,7 @@ export function SponsoredPostCard({
             {promo.author.verified && <BadgeCheck className="size-4 shrink-0 text-brand" />}
           </div>
           <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-            @{promo.author.username} · {timeAgo(promo.post.created_at)}
+            @{promo.author.username} · {timeAgoCompact(promo.post.created_at)}
             <span className="inline-flex items-center gap-1 font-bold uppercase tracking-wider">
               <span className="size-1 rounded-full bg-brand" aria-hidden="true" />
               Sponsored

@@ -108,7 +108,9 @@ export function useMyPosts(userId: string | null) {
           );
         }
       }
-      throw new Error("Could not load your posts.");
+      // Every column variant failed. A missing `posts` table (fresh backend)
+      // must render the profile's empty state, not the root error page.
+      return [];
     },
   });
 }

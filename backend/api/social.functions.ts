@@ -28,10 +28,11 @@ export const respondFollowRequest = createServerFn({ method: "POST" })
         .insert({ follower_id: data.requesterId, followee_id: me });
       if (followError && !followError.message.includes("duplicate")) throw followError;
     }
-    await supabaseAdmin
+    const { error: cleanupError } = await supabaseAdmin
       .from("follow_requests")
       .delete()
       .eq("requester_id", data.requesterId)
       .eq("followee_id", me);
+    if (cleanupError) throw cleanupError;
     return { ok: true as const, accepted: data.accept };
   });

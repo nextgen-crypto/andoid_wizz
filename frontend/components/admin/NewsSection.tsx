@@ -13,6 +13,12 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  adminCreateTrendingTopic,
+  adminDeleteNewsStory,
+  adminDeleteTrendingTopic,
+  adminSaveNewsStory,
+} from "@/backend/api/admin.functions";
 import { toast } from "sonner";
 import { useSession } from "@/frontend/hooks/useSession";
 import { Badge, Empty, Panel } from "@/frontend/components/admin/ui";
@@ -101,15 +107,20 @@ export function NewsAdminSection() {
     },
   });
 
+  // Reads stay on the browser client (news_stories / trending_topics have a
+  // public SELECT policy); every write goes through an admin-gated
+  // server function because the tables ship SELECT-only RLS — direct
+  // browser writes always failed with an RLS violation.
   const createStoryMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("news_stories").insert({
-        headline: storyForm.headline,
-        summary: storyForm.summary,
-        category: storyForm.category,
-        state: storyForm.state,
+      await adminSaveNewsStory({
+        data: {
+          headline: storyForm.headline,
+          summary: storyForm.summary,
+          category: storyForm.category,
+          state: storyForm.state,
+        },
       });
-      if (error) throw error;
       setStoryForm({ headline: "", summary: "", category: "General", state: "developing" });
       setActiveTab("stories");
     },
@@ -122,8 +133,7 @@ export function NewsAdminSection() {
 
   const deleteStoryMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("news_stories").delete().eq("id", id);
-      if (error) throw error;
+      await adminDeleteNewsStory({ data: { id } });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-news-stories"] });
@@ -134,16 +144,15 @@ export function NewsAdminSection() {
 
   const updateStoryMutation = useMutation({
     mutationFn: async (story: NewsStory) => {
-      const { error } = await supabase
-        .from("news_stories")
-        .update({
+      await adminSaveNewsStory({
+        data: {
+          id: story.id,
           headline: story.headline,
           summary: story.summary,
           category: story.category,
           state: story.state,
-        })
-        .eq("id", story.id);
-      if (error) throw error;
+        },
+      });
       setEditingStory(null);
     },
     onSuccess: () => {
@@ -155,14 +164,13 @@ export function NewsAdminSection() {
 
   const createTopicMutation = useMutation({
     mutationFn: async () => {
-      const maxRank = Math.max(0, ...(topicsQuery.data ?? []).map((t) => t.rank));
-      const { error } = await supabase.from("trending_topics").insert({
-        label: topicForm.label,
-        context: topicForm.context,
-        post_count: topicForm.post_count,
-        rank: maxRank + 1,
+      await adminCreateTrendingTopic({
+        data: {
+          label: topicForm.label,
+          context: topicForm.context,
+          postCount: topicForm.post_count,
+        },
       });
-      if (error) throw error;
       setTopicForm({ label: "", context: "", post_count: 0 });
       setCreatingTopic(false);
     },
@@ -175,8 +183,7 @@ export function NewsAdminSection() {
 
   const deleteTopicMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("trending_topics").delete().eq("id", id);
-      if (error) throw error;
+      await adminDeleteTrendingTopic({ data: { id } });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-trending-topics"] });

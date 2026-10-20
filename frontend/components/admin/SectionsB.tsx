@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
+import { toast } from "sonner";
+import { fetchAdminRoles, grantAdminRole, revokeAdminRole } from "@/backend/api/admin.functions";
 import { videos } from "@/backend/database/seed";
 import {
   Badge,
@@ -296,112 +299,107 @@ function ToggleRow({
   );
 }
 
-/* --------------------------------------------------------------- ROLES */
-const MATRIX: {
-  perm: string;
-  super: boolean;
-  content: boolean;
-  finance: boolean;
-  support: boolean;
-}[] = [
-  { perm: "Everything", super: true, content: false, finance: false, support: false },
-  { perm: "Posts / videos / comments", super: true, content: true, finance: false, support: false },
-  { perm: "Moderation queue", super: true, content: true, finance: false, support: true },
-  {
-    perm: "Transactions / withdrawals / payouts",
-    super: true,
-    content: false,
-    finance: true,
-    support: false,
-  },
-  { perm: "Users / reports / tickets", super: true, content: false, finance: false, support: true },
-  { perm: "App config / roles", super: true, content: false, finance: false, support: false },
-];
-
-export function RolesSection({ ops, act }: SectionProps) {
+export function RolesSection(_props: SectionProps) {
+  const queryClient = useQueryClient();
   const [emailInput, setEmailInput] = useState("");
-  const [role, setRole] = useState("support");
+  const [busy, setBusy] = useState(false);
+
+  // Real admin_roles rows through an admin-gated server function. `live:false`
+  // means the table/service role isn't configured — shown, not hidden.
+  const rolesQuery = useQuery({
+    queryKey: ["admin-roles"],
+    staleTime: 30_000,
+    queryFn: () => fetchAdminRoles(),
+  });
+
+  async function grant() {
+    setBusy(true);
+    try {
+      await grantAdminRole({ data: { email: emailInput.trim() } });
+      setEmailInput("");
+      toast("Admin granted.");
+      void queryClient.invalidateQueries({ queryKey: ["admin-roles"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not grant admin.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(userId: string, email: string) {
+    setBusy(true);
+    try {
+      await revokeAdminRole({ data: { userId } });
+      toast(`Removed ${email}.`);
+      void queryClient.invalidateQueries({ queryKey: ["admin-roles"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove admin.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rows = rolesQuery.data?.roles ?? [];
+  const live = rolesQuery.data?.live !== false;
+
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title="Permissions matrix">
-        <table className="w-full text-left text-[13px]">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="pb-2">Capability</th>
-              <th className="pb-2 text-center">Super</th>
-              <th className="pb-2 text-center">Content</th>
-              <th className="pb-2 text-center">Finance</th>
-              <th className="pb-2 text-center">Support</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {MATRIX.map((row) => (
-              <tr key={row.perm}>
-                <td className="py-2 pr-2 font-medium">{row.perm}</td>
-                {([row.super, row.content, row.finance, row.support] as boolean[]).map((has, i) => (
-                  <td key={i} className="py-2 text-center">
-                    <span
-                      className={cn(
-                        "inline-block size-2.5 rounded-full",
-                        has ? "bg-foreground" : "bg-border",
-                      )}
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Panel title="What an admin can do">
+        <ul className="space-y-2 text-[13px] text-foreground">
+          {[
+            "Moderate the report queue (hide, delete, warn)",
+            "Publish, edit and remove news stories and trending topics",
+            "Review advertising campaigns (approve, reject, pause)",
+            "Grant or revoke admin access for other accounts",
+          ].map((line) => (
+            <li key={line} className="flex items-start gap-2">
+              <Check className="mt-0.5 size-3.5 shrink-0 text-brand" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 rounded-xl bg-secondary p-3 text-xs text-muted-foreground">
+          Admin access is enforced on the server (admin_roles table + ADMIN_EMAILS env). This panel
+          edits the table directly — no email allowlist juggling.
+        </p>
       </Panel>
-      <Panel title={`Assignments (${ops.roles.length})`}>
+      <Panel title={`Admin accounts (${rows.length})`}>
+        {!live && (
+          <p className="mb-2 rounded-xl bg-secondary p-3 text-xs text-muted-foreground">
+            The admin_roles table isn't reachable — check SUPABASE_SERVICE_ROLE_KEY.
+          </p>
+        )}
         <div className="flex gap-2">
           <input
             value={emailInput}
             onChange={(e) => setEmailInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && emailInput.includes("@") && !busy) void grant();
+            }}
             placeholder="admin@example.com"
             aria-label="Admin email"
             className={cn(inputCls, "min-w-0 flex-1")}
           />
-          <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role">
-            <option value="super">Super</option>
-            <option value="content">Content</option>
-            <option value="finance">Finance</option>
-            <option value="support">Support</option>
-          </Select>
           <button
-            disabled={!emailInput.includes("@")}
-            onClick={() => {
-              const assigned = role as "super" | "content" | "finance" | "support";
-              act(`Assign ${assigned} role`, emailInput.trim(), (s) => ({
-                ...s,
-                roles: [
-                  ...s.roles.filter((r) => r.email !== emailInput.trim().toLowerCase()),
-                  { email: emailInput.trim().toLowerCase(), role: assigned },
-                ],
-              }));
-              setEmailInput("");
-            }}
+            disabled={!emailInput.includes("@") || busy}
+            onClick={() => void grant()}
             className="shrink-0 rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background disabled:opacity-50"
           >
-            Assign
+            {busy ? "…" : "Grant"}
           </button>
         </div>
-        {ops.roles.length === 0 ? (
-          <Empty text="No roles assigned yet." />
+        {rows.length === 0 ? (
+          <Empty text={live ? "No admin accounts yet — grant one above." : "Not available."} />
         ) : (
           <ul className="mt-2 divide-y divide-border">
-            {ops.roles.map((r) => (
-              <li key={r.email} className="flex items-center gap-3 py-2">
+            {rows.map((r) => (
+              <li key={r.user_id} className="flex items-center gap-3 py-2">
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{r.email}</span>
-                <Badge>{r.role}</Badge>
+                <Badge>admin</Badge>
                 <button
-                  onClick={() =>
-                    act("Remove role", r.email, (s) => ({
-                      ...s,
-                      roles: s.roles.filter((x) => x.email !== r.email),
-                    }))
-                  }
-                  className="rounded-full bg-secondary px-3 py-1 text-[11px] font-bold"
+                  disabled={busy}
+                  onClick={() => void revoke(r.user_id, r.email)}
+                  className="rounded-full bg-secondary px-3 py-1 text-[11px] font-bold disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -409,6 +407,9 @@ export function RolesSection({ ops, act }: SectionProps) {
             ))}
           </ul>
         )}
+        <p className="mt-2 text-xs text-muted-foreground">
+          Granting resolves the email against your auth users, so only real accounts can be added.
+        </p>
       </Panel>
     </div>
   );

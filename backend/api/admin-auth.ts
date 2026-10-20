@@ -1,8 +1,10 @@
 /**
  * Server-side admin gate. Primary check is the `admin_roles` table (DB
- * role); the legacy email allowlist is only a development fallback so a
- * fresh checkout keeps working before roles are seeded. Production deploys
- * must set ADMIN_EMAILS empty and grant rows in `admin_roles` instead.
+ * role); the email allowlist (ADMIN_EMAILS server env, plus the build-time
+ * VITE_ADMIN_EMAILS as a bootstrap for the very first admin) covers the
+ * period before roles are seeded. The AdminScreen asks the same question
+ * through the fetchAdminIdentity server function, so the UI and the server
+ * can never disagree about who is an admin.
  */
 export type AdminContext = {
   userId?: string;
@@ -10,21 +12,14 @@ export type AdminContext = {
 };
 
 function allowlist(): string[] {
-  const server = (process.env["ADMIN_EMAILS"] ?? "")
-    .split(",")
+  return ["ADMIN_EMAILS", "VITE_ADMIN_EMAILS"]
+    .flatMap((key) => (process.env[key] ?? "").split(","))
     .map((v) => v.trim().toLowerCase())
     .filter(Boolean);
-  const legacy =
-    process.env["NODE_ENV"] !== "production"
-      ? (process.env["VITE_ADMIN_EMAILS"] ?? "")
-          .split(",")
-          .map((v) => v.trim().toLowerCase())
-          .filter(Boolean)
-      : [];
-  return [...server, ...legacy];
 }
 
-export async function requireAdmin(context: unknown): Promise<void> {
+/** True when this context may perform admin actions. Never throws. */
+export async function checkIsAdmin(context: unknown): Promise<boolean> {
   const ctx = (context ?? {}) as AdminContext;
 
   // 1) DB role check — authoritative.
@@ -36,16 +31,20 @@ export async function requireAdmin(context: unknown): Promise<void> {
         .select("user_id")
         .eq("user_id", ctx.userId)
         .maybeSingle();
-      if (!error && data) return;
+      if (!error && data) return true;
       // Table missing or unreachable → fall through to the env allowlist.
     } catch {
       // Service role key or table not configured — fall through.
     }
   }
 
-  // 2) Env allowlist fallback (dev / bootstrap only).
+  // 2) Email allowlist (env-configured bootstrap admins).
   const email = ctx.claims?.email?.trim().toLowerCase();
-  if (email && allowlist().includes(email)) return;
+  return Boolean(email && allowlist().includes(email));
+}
 
-  throw new Error("Unauthorized: admin access required.");
+export async function requireAdmin(context: unknown): Promise<void> {
+  if (!(await checkIsAdmin(context))) {
+    throw new Error("Unauthorized: admin access required.");
+  }
 }

@@ -41,7 +41,8 @@ import {
 import { creators, news, trending, videos } from "@/backend/database/seed";
 import { imageUrl } from "@/backend/domain/media";
 import { Sheet } from "@/frontend/components/overlays/Sheet";
-import { isAdminEmail } from "@/frontend/components/admin/admin";
+import { useIsAdmin } from "@/frontend/components/admin/admin";
+import { sanitizeFilterText } from "@/frontend/lib/format";
 import { EditProfileSheet } from "@/frontend/components/profile/EditProfileSheet";
 import { PaymentSheet } from "@/frontend/components/profile/PaymentSheet";
 import { SETTING_TITLES, SettingsDetail } from "@/frontend/components/settings/SettingsDetails";
@@ -174,6 +175,7 @@ export function TopBar() {
   }, []);
 
   const { session, user, displayName, email, avatarUrl } = useSession();
+  const { isAdmin } = useIsAdmin();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [recentTick, setRecentTick] = useState(0);
@@ -234,12 +236,16 @@ export function TopBar() {
         username: string;
       }[]
     > => {
+      const filter = sanitizeFilterText(searchText);
+      // A query made only of filter metacharacters sanitizes to nothing;
+      // an empty .or() would match everything — show no results instead.
+      if (!filter) return [];
       const runSearch = (select: string) =>
         supabase
           .from("posts")
           .select(select)
           .eq("status", "published")
-          .or(`caption.ilike.%${searchText}%,category.ilike.%${searchText}%`)
+          .or(`caption.ilike.%${filter}%,category.ilike.%${filter}%`)
           .order("created_at", { ascending: false })
           .limit(6);
       const current = await runSearch(
@@ -337,7 +343,9 @@ export function TopBar() {
       const { data, error } = await supabase
         .from("profiles")
         .select("id, username, display_name, avatar_url")
-        .or(`username.ilike.%${searchText}%,display_name.ilike.%${searchText}%`)
+        .or(
+          `username.ilike.%${sanitizeFilterText(searchText)}%,display_name.ilike.%${sanitizeFilterText(searchText)}%`,
+        )
         .limit(8);
       if (error) throw error;
       return (data ?? []) as {
@@ -626,7 +634,7 @@ export function TopBar() {
             ← All settings
           </button>
           {activeSetting && <SettingsDetail id={activeSetting} userId={user?.id ?? null} />}
-          {activeSetting === "account-status" && isAdminEmail(email) && (
+          {activeSetting === "account-status" && isAdmin && (
             <Link
               to="/admin"
               onClick={() => {

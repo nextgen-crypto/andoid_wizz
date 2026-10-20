@@ -9,6 +9,8 @@ import { useFeedPrefs } from "@/frontend/hooks/useFeedPrefs";
 import { useMyPosts, useMyStats } from "@/frontend/hooks/useMyProfileData";
 import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
 import { useFollowList } from "@/frontend/hooks/usePublicProfile";
+import { setOwnedPostStatus } from "@/backend/api/posts.functions";
+import { toast } from "sonner";
 
 /** Persistent local preference backed by localStorage. */
 export function useLocalSetting<T>(key: string, initial: T) {
@@ -136,7 +138,7 @@ export function SettingsDetail({ id, userId }: { id: string; userId: string | nu
     case "time-management":
       return <TimeDetail />;
     case "privacy":
-      return <PrivacyDetail />;
+      return <PrivacyDetail userId={userId} />;
     case "close-friends":
       return <CloseFriendsDetail userId={userId} />;
     case "blocked":
@@ -311,32 +313,50 @@ function SavedDetail({ userId }: { userId: string | null }) {
 }
 
 function ArchiveDetail({ userId }: { userId: string | null }) {
+  const queryClient = useQueryClient();
   const { data = [] } = useMyPosts(userId);
-  const [archived, setArchived] = useLocalSetting<string[]>("archived", []);
-  const archivedSet = new Set(archived);
-  const shown = data.filter((p) => archivedSet.has(p.id));
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  // Real archive state lives on posts.status (set through the Manage sheet
+  // and moderation) — Settings reads and writes that same column instead of
+  // a separate device-local list that nothing else ever sees.
+  const archived = data.filter((p) => p.status === "archived");
+  const live = data.filter((p) => p.status !== "archived" && p.status !== "deleted");
+
+  async function setStatus(postId: string, status: "published" | "archived") {
+    setPendingId(postId);
+    try {
+      await setOwnedPostStatus({ data: { postId, status } });
+      void queryClient.invalidateQueries({ queryKey: ["my-posts", userId] });
+    } catch {
+      toast.error("That didn't save — try again.");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   if (!userId)
     return <Empty title="Sign in to use archive" desc="Archived posts are only visible to you." />;
   return (
     <div>
-      {shown.length === 0 && (
+      {archived.length === 0 && (
         <Empty
           title="No archived posts"
           desc="Archive a post from the list below to hide it from your profile."
         />
       )}
-      {shown.length > 0 && (
+      {archived.length > 0 && (
         <ul className="divide-y divide-border">
-          {shown.map((p) => (
+          {archived.map((p) => (
             <li key={p.id} className="flex items-center gap-3 px-2 py-2.5">
               <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                 {p.caption || "Untitled"}
               </span>
               <button
-                onClick={() => setArchived(archived.filter((a) => a !== p.id))}
-                className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold"
+                disabled={pendingId === p.id}
+                onClick={() => void setStatus(p.id, "published")}
+                className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
               >
-                Unarchive
+                {pendingId === p.id ? "Saving…" : "Unarchive"}
               </button>
             </li>
           ))}
@@ -344,20 +364,17 @@ function ArchiveDetail({ userId }: { userId: string | null }) {
       )}
       <p className="px-2 pb-1 pt-3 text-sm font-semibold text-muted-foreground">Your posts</p>
       <ul className="divide-y divide-border">
-        {data.map((p) => (
+        {live.map((p) => (
           <li key={p.id} className="flex items-center gap-3 px-2 py-2.5">
             <span className="min-w-0 flex-1 truncate text-sm text-foreground">
               {p.caption || "Untitled"}
             </span>
             <button
-              onClick={() =>
-                setArchived(
-                  archivedSet.has(p.id) ? archived.filter((a) => a !== p.id) : [...archived, p.id],
-                )
-              }
-              className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold"
+              disabled={pendingId === p.id}
+              onClick={() => void setStatus(p.id, "archived")}
+              className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
             >
-              {archivedSet.has(p.id) ? "Archived" : "Archive"}
+              {pendingId === p.id ? "Saving…" : "Archive"}
             </button>
           </li>
         ))}
@@ -449,14 +466,54 @@ function TimeDetail() {
   );
 }
 
-function PrivacyDetail() {
+function PrivacyDetail({ userId }: { userId: string | null }) {
   const [isPrivate, setPrivate] = useLocalSetting("private-account", false);
+  const [saving, setSaving] = useState(false);
+
+  // profiles.is_private is the real account-level switch (ads, profiles and
+  // follow flows read it); the local copy is optimistic UI on top.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    void supabase
+      .from("profiles")
+      .select("is_private")
+      .eq("id", userId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        setPrivate((data as { is_private?: boolean }).is_private === true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, setPrivate]);
+
+  async function toggle(next: boolean) {
+    const previous = isPrivate;
+    setPrivate(next); // optimistic
+    if (!userId) return; // signed out → device-only preference
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({ is_private: next }).eq("id", userId);
+    setSaving(false);
+    if (error) {
+      setPrivate(previous);
+      toast.error("Couldn't update account privacy — kept on this device.");
+    }
+  }
+
   return (
     <div>
       <Row
         title="Private account"
         desc={isPrivate ? "Only followers can see your posts" : "Anyone can see your posts"}
-        control={<Toggle checked={isPrivate} onChange={setPrivate} label="Private account" />}
+        control={
+          <Toggle
+            checked={isPrivate}
+            onChange={(v) => void toggle(v)}
+            label={saving ? "Saving…" : "Private account"}
+          />
+        }
       />
       <Row
         title="Current visibility"
@@ -530,7 +587,15 @@ function BlockedDetail() {
 
   async function unblock(id: string) {
     if (!user) return;
-    await supabase.from("blocks").delete().eq("blocker_id", user.id).eq("blocked_id", id);
+    const { error } = await supabase
+      .from("blocks")
+      .delete()
+      .eq("blocker_id", user.id)
+      .eq("blocked_id", id);
+    if (error) {
+      toast.error("Couldn't unblock — try again.");
+      return;
+    }
     void queryClient.invalidateQueries({ queryKey: ["my-blocks", user?.id] });
   }
 

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
+import { timeAgoCompact } from "@/frontend/lib/format";
 
 export interface AppNotification {
   id: string;
@@ -13,14 +14,6 @@ export interface AppNotification {
   text: string;
   is_read: boolean;
   created_at: string;
-}
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
 }
 
 /** Real inbox: own notifications + actor names, live INSERT stream. */
@@ -113,7 +106,7 @@ export function useNotifications(userId: string | null) {
     items,
     unread: items.filter((n) => !n.is_read).length,
     isLoading: query.isLoading,
-    timeAgo,
+    timeAgo: timeAgoCompact,
     markAllRead: markAllRead.mutate,
     markOneRead: markOneRead.mutate,
   };

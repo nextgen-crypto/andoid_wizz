@@ -13,20 +13,13 @@ import type { AdminMetrics } from "@/frontend/hooks/useAdminMetrics";
 import { useSession } from "@/frontend/hooks/useSession";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { timeAgo } from "@/frontend/lib/format";
 
 export interface SectionProps {
   m: AdminMetrics | null;
   ops: OpStore;
   act: ActFn;
   email: string;
-}
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.round(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
 }
 
 const tz = (n: number) => `TZS ${n.toLocaleString()}`;

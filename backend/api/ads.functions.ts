@@ -171,22 +171,36 @@ export const updateMyCampaign = createServerFn({ method: "POST" })
   .handler(async ({ context, data }): Promise<{ ok: boolean }> => {
     const me = (context as unknown as { userId: string }).userId;
     if (!isUuid(data.id)) throw new Error("Campaign not found.");
-    const status = data.action === "pause" ? "paused" : data.action === "resume" ? "active" : null;
     const stop = data.action === "stop";
-    if (!status && !stop) throw new Error("Bad action.");
+    if (data.action !== "pause" && data.action !== "resume" && !stop) {
+      throw new Error("Bad action.");
+    }
     const db = await adminDb();
     const { data: row, error: fetchError } = await db
       .from("ad_campaigns")
-      .select("advertiser_id")
+      .select("advertiser_id, status")
       .eq("id", data.id)
       .maybeSingle();
-    if (fetchError || !row || (row as { advertiser_id: string }).advertiser_id !== me) {
+    const campaign = row as { advertiser_id: string; status: string } | null;
+    if (fetchError || !campaign || campaign.advertiser_id !== me) {
       throw new Error("Campaign not found.");
     }
-    const { error } = await db
-      .from("ad_campaigns")
-      .update({ status: stop ? "cancelled" : (status as string) })
-      .eq("id", data.id);
+    // State machine: pause only from active, resume only from paused, stop
+    // from any live-ish state. Advertisers must not be able to revive a
+    // rejected, completed, or unreviewed campaign.
+    const from = campaign.status;
+    const allowedFrom: Record<string, string[]> = {
+      pause: ["active"],
+      resume: ["paused"],
+      stop: ["active", "paused", "pending_review"],
+    };
+    const allowed = allowedFrom[data.action] ?? [];
+    if (!allowed.includes(from)) {
+      throw new Error(`Cannot ${data.action} a ${from} campaign.`);
+    }
+    const next =
+      data.action === "pause" ? "paused" : data.action === "resume" ? "active" : "cancelled";
+    const { error } = await db.from("ad_campaigns").update({ status: next }).eq("id", data.id);
     if (error) throw error;
     return { ok: true as const };
   });

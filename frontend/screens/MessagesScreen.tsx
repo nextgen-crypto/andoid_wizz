@@ -5,16 +5,9 @@ import { AppShell } from "@/frontend/components/AppShell";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useConversations, useMessages } from "@/frontend/hooks/useMessages";
 import { cn } from "@/lib/utils";
+import { timeAgoCompact } from "@/frontend/lib/format";
 
 const routeApi = getRouteApi("/messages");
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
-}
 
 export function MessagesScreen() {
   const { session, loading, user } = useSession();
@@ -131,7 +124,7 @@ export function MessagesScreen() {
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-bold">{c.peer.display_name}</span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
-                      {timeAgo(c.lastAt)}
+                      {timeAgoCompact(c.lastAt)}
                     </span>
                   </span>
                   <span className="mt-0.5 flex items-center justify-between gap-2">

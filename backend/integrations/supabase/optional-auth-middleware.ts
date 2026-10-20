@@ -10,16 +10,24 @@ type OptionalAuthContext = {
 };
 
 function anonymousClient(): SupabaseClient<Database> | null {
+  if (cachedAnonymous !== undefined) return cachedAnonymous;
   const url = process.env["SUPABASE_URL"];
   const key =
     process.env["SUPABASE_PUBLISHABLE_KEY"] ?? process.env["VITE_SUPABASE_PUBLISHABLE_KEY"];
-  if (!url || !key) return null;
-
-  return createClient<Database>(url, key, {
-    global: { fetch: createKeyAwareSupabaseFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  cachedAnonymous =
+    !url || !key
+      ? null
+      : createClient<Database>(url, key, {
+          global: { fetch: createKeyAwareSupabaseFetch(key) },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+  return cachedAnonymous;
 }
+
+/** Process-level memo — env vars are stable per process, so one client is
+ * enough instead of rebuilding (and re-registering fetch wrappers) on every
+ * anonymous request. `undefined` means "not built yet". */
+let cachedAnonymous: SupabaseClient<Database> | null | undefined;
 
 /**
  * Attaches the signed-in Supabase user when a valid bearer token is present.

@@ -1,13 +1,18 @@
-/** Admin allowlist. Set VITE_ADMIN_EMAILS="you@example.com,teammate@example.com" in .env. */
-export function adminEmails(): string[] {
-  const raw = (import.meta.env["VITE_ADMIN_EMAILS"] as string | undefined) ?? "";
-  return raw
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-}
+import { useQuery } from "@tanstack/react-query";
+import { fetchAdminIdentity } from "@/backend/api/admin.functions";
 
-export function isAdminEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  return adminEmails().includes(email.toLowerCase());
+/**
+ * Server-verified admin status. The server (admin_roles table + email
+ * allowlist, see backend/api/admin-auth.ts) is the single source of truth;
+ * the UI just renders its answer, so client and server can never disagree
+ * about who is an admin — and admin emails never ship in the JS bundle.
+ */
+export function useIsAdmin(): { isAdmin: boolean; isLoading: boolean } {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-identity"],
+    queryFn: () => fetchAdminIdentity(),
+    staleTime: 60_000,
+    retry: false,
+  });
+  return { isAdmin: data?.isAdmin === true, isLoading };
 }

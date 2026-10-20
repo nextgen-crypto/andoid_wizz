@@ -4,14 +4,7 @@ import { BadgeCheck, X } from "lucide-react";
 import { Empty, Panel } from "@/frontend/components/admin/ui";
 import { cn } from "@/lib/utils";
 import type { RoleAssign } from "@/frontend/components/admin/opStore";
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.round(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
+import { timeAgo } from "@/frontend/lib/format";
 import { fetchCacheStats } from "@/backend/api/home.functions";
 import { supabase } from "@/integrations/supabase/client";
 import type { ActFn } from "@/frontend/components/admin/opStore";

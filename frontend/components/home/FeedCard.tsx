@@ -30,6 +30,7 @@ import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
 import type { FeedEvent } from "@/frontend/hooks/useEventTracker";
 import { cn } from "@/lib/utils";
 import { visibleHashtags } from "@/frontend/lib/hashtags";
+import { timeAgoCompact } from "@/frontend/lib/format";
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
 const DOUBLE_TAP_MS = 280;
@@ -41,14 +42,6 @@ function isUuid(id: string): boolean {
 
 /** Deterministic clock so SSR markup and hydrated markup agree exactly. */
 const REFERENCE_NOW = Date.parse("2026-08-27T12:00:00.000Z");
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((REFERENCE_NOW - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
-}
 
 export function FeedCard({
   item,
@@ -259,7 +252,7 @@ export function FeedCard({
             {author.verified && <BadgeCheck className="size-4 shrink-0 text-brand" />}
           </div>
           <p className="truncate text-xs text-muted-foreground">
-            @{author.username} · {timeAgo(post.createdAt)}
+            @{author.username} · {timeAgoCompact(post.createdAt, REFERENCE_NOW)}
           </p>
         </div>
         {!isSelf && (

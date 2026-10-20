@@ -2,14 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
 import { loadNewsComments, type NewsComment } from "@/frontend/hooks/useNewsPrefs";
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
-}
+import { timeAgoCompact } from "@/frontend/lib/format";
 
 function isUuid(v: string | null | undefined): boolean {
   return (
@@ -65,7 +58,7 @@ export function useNewsComments(articleId: string | null, userId: string | null)
             user: c.profiles?.username ?? "someone",
             verified: c.profiles?.verified === true,
             text: c.body,
-            time: timeAgo(c.created_at),
+            time: timeAgoCompact(c.created_at),
             likes: 0,
             ...(c.parent_id ? { parentId: c.parent_id } : {}),
           })),

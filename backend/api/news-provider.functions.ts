@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { fetchGNews, isGNewsConfigured, type GNewsOptions } from "../services/gnewsService";
+import { cacheAside, TTL } from "../cache/redisCache";
 
 const NEWS_CATEGORIES = [
   "general",
@@ -48,7 +49,17 @@ export const fetchExternalNews = createServerFn({
 })
   .validator((data: NewsRequest | undefined) => validateNewsRequest(data))
   .handler(async ({ data }) => {
-    const articles = await fetchGNews(data);
+    // This endpoint is public and quota-bound (GNews): serve repeat requests
+    // from cache so a hot category or a hammering client can't burn the key.
+    const cacheKey = [
+      "gnews",
+      data.category ?? "general",
+      data.country ?? "tz",
+      data.lang ?? "en",
+      data.page ?? 1,
+      data.query ?? "",
+    ].join(":");
+    const articles = await cacheAside(cacheKey, TTL.news, () => fetchGNews(data));
 
     return {
       articles,

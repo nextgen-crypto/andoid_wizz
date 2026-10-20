@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
+import { timeAgoCompact } from "@/frontend/lib/format";
 
 export interface RemoteComment {
   id: string;
@@ -13,14 +14,6 @@ export interface RemoteComment {
   authorId: string;
   parentId: string | null;
   replyCount: number;
-}
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
 }
 
 function extractTags(text: string): { mentions: string[]; hashtags: string[] } {
@@ -105,7 +98,7 @@ export function usePostComments(postId: string | null, userId: string | null) {
         id: c.id,
         user: c.profiles?.username ?? "someone",
         text: c.body,
-        time: timeAgo(c.created_at),
+        time: timeAgoCompact(c.created_at),
         likes: likeCount.get(c.id) ?? 0,
         isLiked: likedByMe.has(c.id),
         isMine: userId !== null && c.author_id === userId,
@@ -295,7 +288,7 @@ export function useCommentReplies(
         id: r.id,
         user: r.profiles?.username ?? "someone",
         text: r.body,
-        time: timeAgo(r.created_at),
+        time: timeAgoCompact(r.created_at),
         likes: likeCount.get(r.id) ?? 0,
         isLiked: likedByMe.has(r.id),
         isMine: userId !== null && r.author_id === userId,

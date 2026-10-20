@@ -84,10 +84,16 @@ export function ProfileScreen() {
   }
 
   async function signOut() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    void navigate({ to: "/welcome", replace: true });
+    try {
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      await supabase.auth.signOut();
+    } finally {
+      // Navigate even if the network call fails — the cache is already
+      // cleared, and a stranded half-signed-in screen is worse than a
+      // locally-stale session token.
+      void navigate({ to: "/welcome", replace: true });
+    }
   }
 
   if (loading) {

@@ -70,7 +70,10 @@ function cleanProfile(data: HomeInput | undefined): {
   };
 }
 
-export const fetchHome = createServerFn({ method: "GET" })
+// POST, not GET: the InterestProfile payload (up to ~200 ids × 6 arrays plus
+// watch history) would exceed proxy request-line limits as a query string for
+// heavy accounts — a silent 431 dead-feed for the most engaged users.
+export const fetchHome = createServerFn({ method: "POST" })
   .middleware([optionalSupabaseAuth])
   .validator((data: HomeInput | undefined) =>
     data?.profile !== undefined
@@ -86,7 +89,7 @@ export const fetchHome = createServerFn({ method: "GET" })
     return getHomeFeed(data.cursor, data.profile, viewer.userId, viewer.supabase);
   });
 
-export const fetchFeedPage = createServerFn({ method: "GET" })
+export const fetchFeedPage = createServerFn({ method: "POST" })
   .middleware([optionalSupabaseAuth])
   .validator((data: HomeInput | undefined) =>
     data?.profile !== undefined
@@ -104,22 +107,32 @@ export const fetchFeedPage = createServerFn({ method: "GET" })
     );
   });
 
+/** Minimum gap between cache busts per process — a signed-in user hammering
+ * this endpoint must not turn into a constant feed-recompute lever. */
+const BUST_MIN_INTERVAL_MS = 10_000;
+let lastBustAt = 0;
+
 /**
  * Bust home caches after a publish so new content appears instantly
- * instead of waiting out the 60s TTL. Best-effort — failures resolve true
- * anyway because TTLs still expire stale rows.
+ * instead of waiting out the 60s TTL. Any signed-in user may bust (the
+ * publish/delete flows run as ordinary users, not admins); a per-process
+ * throttle keeps it cheap. Best-effort — failures resolve true anyway
+ * because TTLs still expire stale rows.
  */
 export const invalidateHomeCache = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
     preventSharedCaching();
-    await requireAdmin(context);
-    await Promise.all([
-      invalidate.feedAll(),
-      invalidate.candidates(),
-      invalidate.stories(),
-      invalidate.trending("global"),
-    ]).catch(() => undefined);
+    const now = Date.now();
+    if (now - lastBustAt >= BUST_MIN_INTERVAL_MS) {
+      lastBustAt = now;
+      await Promise.all([
+        invalidate.feedAll(),
+        invalidate.candidates(),
+        invalidate.stories(),
+        invalidate.trending("global"),
+      ]).catch(() => undefined);
+    }
     return { ok: true as const };
   });
 

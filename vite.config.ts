@@ -15,9 +15,10 @@ import tsConfigPaths from "vite-tsconfig-paths";
 // build emits none (nitro's Build Output API writes static assets plus a
 // server function). TanStack Start's SPA mode fills that gap: it renders a
 // client-only shell and masks every route onto it. Dropping SSR on native
-// loses nothing, because every route already fetches from Supabase in the
-// browser and no route uses a server function. The vercel preset still builds
-// a server function nobody runs; its static assets are what the WebView loads.
+// loses nothing user-visible, because every route re-fetches its data in the
+// browser (server functions are bridged to the deployed backend by
+// frontend/lib/native.ts). The vercel preset still builds a server function
+// for the web deploy; its static assets are what the WebView loads.
 const isNativeApp = process.env["WIZZ_TARGET"] === "app";
 
 export default defineConfig({

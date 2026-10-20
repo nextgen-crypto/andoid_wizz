@@ -119,6 +119,19 @@ const REAL_POST_LIMIT = 120;
 const MAX_CREATOR_PER_PAGE = 2;
 
 const byId = new Map(creators.map((c) => [c.id, c]));
+/** Demo identity for display chrome; see sections.functions.ts. */
+const SYNTHETIC_DEMO_USER: Creator = {
+  id: CURRENT_USER_ID,
+  username: "you",
+  displayName: "WIZZ",
+  avatarKey: "avatar/alex-rivera",
+  verified: true,
+  bio: "",
+  followers: 0,
+  following: 0,
+  posts: 0,
+};
+const demoUser = byId.get(CURRENT_USER_ID) ?? creators[0] ?? SYNTHETIC_DEMO_USER;
 
 /**
  * Server reader supplied by optional auth middleware. The process-local fallback
@@ -1006,6 +1019,6 @@ export async function getHomeFeed(
   ]);
   // Creator-shaped display chrome still uses the bundled demo identity. The
   // viewer's real UUID is only the RLS/cache identity above.
-  const currentUser = byId.get(CURRENT_USER_ID)!;
+  const currentUser = demoUser;
   return { currentUser, stories: storyRail, trending: topics, feed };
 }

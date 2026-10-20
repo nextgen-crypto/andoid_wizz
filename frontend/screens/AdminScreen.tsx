@@ -29,7 +29,8 @@ import {
   YAxis,
 } from "recharts";
 import { BottomNav } from "@/frontend/components/home/BottomNav";
-import { isAdminEmail } from "@/frontend/components/admin/admin";
+import { useIsAdmin } from "@/frontend/components/admin/admin";
+import { timeAgo } from "@/frontend/lib/format";
 import { useOpStore, type ActFn, type RoleAssign } from "@/frontend/components/admin/opStore";
 import { AdManager } from "@/frontend/components/admin/AdManager";
 import { CampaignConsole } from "@/frontend/components/admin/CampaignConsole";
@@ -79,17 +80,9 @@ const NAV = [
 
 type SectionId = (typeof NAV)[number]["id"];
 
-function timeAgo(iso: string): string {
-  const mins = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.round(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
 export function AdminScreen() {
   const { session, loading: sessionLoading, email, user } = useSession();
-  const admin = isAdminEmail(email);
+  const { isAdmin: admin, isLoading: adminLoading } = useIsAdmin();
   const { data, loading, error } = useAdminMetrics(admin);
   const { events, connected } = useLiveActivity(admin);
   const { store: ops, act } = useOpStore(email ?? "admin");
@@ -97,10 +90,10 @@ export function AdminScreen() {
   const [section, setSection] = useState<SectionId>("overview");
   const [userQuery, setUserQuery] = useState("");
   const [managing, setManaging] = useState<AdminUser | null>(null);
-  const [adsTick, setAdsTick] = useState(0);
-  void adsTick;
+  // Force-refresh lever for AdManager after its internal mutations.
+  const [, setAdsTick] = useState(0);
 
-  if (sessionLoading) {
+  if (sessionLoading || adminLoading) {
     return (
       <div className="mx-auto max-w-3xl px-6 pt-16">
         <div className="h-24 w-full animate-pulse rounded-2xl bg-secondary" />
@@ -118,7 +111,7 @@ export function AdminScreen() {
         <p className="mt-2 text-sm text-muted-foreground">
           {!session
             ? "Sign in with an admin account."
-            : "Your account is not on the admin list. Set VITE_ADMIN_EMAILS in .env."}
+            : "This account is not an admin yet. Grant it from Admin → Roles, or add its email to ADMIN_EMAILS."}
         </p>
         {!session && (
           <Link
@@ -237,12 +230,12 @@ export function AdminScreen() {
                     <Stat
                       label="Revenue tracked"
                       value={`$${compact.format(revenue)}`}
-                      sub="ads + platform fees"
+                      sub="demo figures — billing lands with the payments service"
                     />
                     <Stat
                       label="Failed txns"
                       value={`${failedTxns}`}
-                      sub={failedTxns > 0 ? "needs attention" : "all clear"}
+                      sub={failedTxns > 0 ? "needs attention (demo)" : "all clear (demo)"}
                     />
                     <Stat
                       label="Live events"

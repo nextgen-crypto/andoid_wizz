@@ -126,10 +126,11 @@ export function useEventTracker(userId: string | null) {
   }, [recordEvents]);
 
   /**
-   * Synchronous flush for page teardown. sendBeacon is fire-and-forget and
-   * cannot carry headers, so the authenticated path uses a keepalive fetch
-   * with the cached access token; sendBeacon is the fallback when fetch is
-   * unavailable (events are best-effort by design).
+   * Synchronous flush for page teardown. sendBeacon cannot carry the
+   * Authorization header or the server-fn envelope this endpoint requires,
+   * so a "successful" beacon silently 401s and drops the final chunk of every
+   * session. The keepalive fetch carries both and is equally teardown-safe;
+   * raw fetch is the last resort when keepalive is unavailable.
    */
   const flushSync = useCallback(() => {
     const queued = queue.current.splice(0, queue.current.length);
@@ -148,12 +149,6 @@ export function useEventTracker(userId: string | null) {
     const url = (recordEvents as unknown as { url?: string }).url;
     if (!url) return;
     const token = tokenRef.current;
-    try {
-      const blob = new Blob([payload], { type: "application/json" });
-      if (typeof navigator !== "undefined" && navigator.sendBeacon?.(url, blob)) return;
-    } catch {
-      // fall through to keepalive fetch
-    }
     void fetch(url, {
       method: "POST",
       headers: {
