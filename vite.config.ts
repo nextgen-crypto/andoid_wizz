@@ -1,4 +1,6 @@
-import { defineConfig } from "vite";
+import { existsSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
+import { defineConfig, type Plugin } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -21,6 +23,41 @@ import tsConfigPaths from "vite-tsconfig-paths";
 // for the web deploy; its static assets are what the WebView loads.
 const isNativeApp = process.env["WIZZ_TARGET"] === "app";
 
+// The SPA-shell build writes every artifact (index.html + assets) and logs
+// "[prerender] Prerendered 1 pages", but the process can then sit forever on
+// a lingering handle from the prerender pipeline and never exit — which
+// hangs `npm run build:app` and everything chained after it. The prerendered
+// shell is the pipeline's final artifact, so: clear any stale shell up
+// front, wait for a fresh one to land, then exit. App target only — the web
+// build exits on its own.
+function exitAppBuild(): Plugin {
+  const shell = resolve(process.cwd(), ".vercel/output/static/index.html");
+  let enabled = false;
+  let exiting = false;
+  return {
+    name: "wizz-exit-app-build",
+    apply: "build",
+    buildStart() {
+      if (!isNativeApp) return;
+      enabled = true;
+      // Make "shell exists" a reliable completion signal for this run.
+      rmSync(shell, { force: true });
+    },
+    closeBundle() {
+      if (!enabled || exiting) return;
+      exiting = true;
+      const deadline = Date.now() + 120_000;
+      const timer = setInterval(() => {
+        if (existsSync(shell) || Date.now() > deadline) {
+          clearInterval(timer);
+          // A beat for any trailing asset writes after the shell lands.
+          setTimeout(() => process.exit(0), 3000);
+        }
+      }, 400);
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     tsConfigPaths(),
@@ -37,5 +74,6 @@ export default defineConfig({
     }),
     nitro({ preset: "vercel" }),
     viteReact(),
+    exitAppBuild(),
   ],
 });
