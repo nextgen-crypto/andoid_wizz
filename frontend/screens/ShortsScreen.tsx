@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { publicUrl } from "@/frontend/lib/native";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   Bookmark,
@@ -13,9 +13,11 @@ import {
   PhoneOff,
   Play,
   Plus,
+  RefreshCcw,
   RotateCcw,
   Send,
   Share2,
+  UserPlus,
   Users,
   Volume2,
   VolumeX,
@@ -43,10 +45,31 @@ const LONG_PRESS_MS = 500;
 const FOLLOWS_KEY = "wizz:short-follows";
 const MUTE_KEY = "wizz:muted";
 const VIEW_COUNT_KEY = "wizz:short-views";
+const TAB_KEY = "wizz:shorts-tab";
+const SCROLL_KEY = "wizz:shorts-scroll";
 const PRELOAD_AHEAD = 1;
 const UNLOAD_THRESHOLD = 2;
 const VIEW_COUNT_DELAY = 2500;
 const WHEEL_DEBOUNCE_MS = 300;
+
+/** TikTok-style feed tabs: the default "For You" plus followed creators. */
+type ShortsTab = "foryou" | "following";
+
+function loadTab(): ShortsTab {
+  try {
+    return localStorage.getItem(TAB_KEY) === "following" ? "following" : "foryou";
+  } catch {
+    return "foryou";
+  }
+}
+
+function saveTab(tab: ShortsTab) {
+  try {
+    localStorage.setItem(TAB_KEY, tab);
+  } catch {
+    // ignore
+  }
+}
 
 function loadFollows(): string[] {
   try {
@@ -98,36 +121,35 @@ function formatDuration(seconds: number): string {
 
 function ShortCard({
   item,
-  index,
+  distance,
   isActive,
   viewerId,
   muted,
   onToggleMute,
   onOpenComments,
   onOpenProfile,
-  onOpenShare,
   onOpenMusic,
   onBlend,
   onCountView,
   registerVideo,
 }: {
   item: ShortItem;
-  index: number;
+  /** How many slots away from the active card (0 = on screen playing). */
+  distance: number;
   isActive: boolean;
   viewerId: string | null;
   muted: boolean;
   onToggleMute: () => void;
   onOpenComments: (id: string) => void;
   onOpenProfile: (authorId: string, username: string) => void;
-  onOpenShare: (url: string, message: string) => void;
   onOpenMusic: (soundtrack: string) => void;
   onBlend: () => void;
   onCountView: (id: string) => void;
   registerVideo: (id: string, video: HTMLVideoElement | null) => void;
 }) {
   const [burst, setBurst] = useState(0);
+  const [burstAt, setBurstAt] = useState({ x: 0, y: 0 });
   const [sharing, setSharing] = useState(false);
-  const [musicOpen, setMusicOpen] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [error, setError] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -164,6 +186,11 @@ function ShortCard({
     if (!v) return;
     if (abr.quality === lastQualityRef.current) return;
     lastQualityRef.current = abr.quality;
+    // Signed single-file videos resolve every quality to the same URL —
+    // reassigning an identical `src` would hard-reload the element and stall
+    // playback mid-play for no visual gain, so only swap when it differs.
+    const absolute = new URL(qualitySrc, window.location.href).href;
+    if (v.src === absolute) return;
     const wasPlaying = !v.paused;
     const pos = v.currentTime;
     v.src = qualitySrc;
@@ -224,7 +251,7 @@ function ShortCard({
     return () => registerVideo(item.short.id, null);
   }, [item.short.id, registerVideo]);
 
-  // Play/pause based on active state
+  // Play/pause based on active state (the parent resets far-away videos)
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -234,12 +261,8 @@ function ShortCard({
     } else {
       v.pause();
       setPaused(true);
-      // Reset to start if far from active
-      if (Math.abs(index - 0) > UNLOAD_THRESHOLD) {
-        v.currentTime = 0;
-      }
     }
-  }, [isActive, index]);
+  }, [isActive]);
 
   // Global mute
   useEffect(() => {
@@ -297,12 +320,18 @@ function ShortCard({
 
   const shareUrl = typeof window !== "undefined" ? publicUrl(`/shorts`) : "";
 
-  function handleTap() {
+  function handleTap(e: React.MouseEvent<HTMLVideoElement>) {
     if (tapTimer.current) {
       window.clearTimeout(tapTimer.current);
       tapTimer.current = null;
       if (!requireAuth()) return;
       if (!liked) toggleLike();
+      // TikTok-style: heart pops where you tapped, with a light haptic tick.
+      const rect = e.currentTarget.getBoundingClientRect();
+      setBurstAt({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate(14);
+      }
       setBurst((n) => n + 1);
       return;
     }
@@ -346,14 +375,19 @@ function ShortCard({
     }
   }
 
-  function handleScrub(e: React.MouseEvent<HTMLDivElement>) {
+  /** Seek to a viewport X coordinate along the progress bar. */
+  function scrubTo(clientX: number) {
     const v = videoRef.current;
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
     const rect = progressRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     v.currentTime = frac * v.duration;
     setProgress(frac * 100);
+  }
+
+  function handleScrub(e: React.MouseEvent<HTMLDivElement>) {
+    scrubTo(e.clientX);
   }
 
   function handleScrubStart(e: React.MouseEvent<HTMLDivElement>) {
@@ -366,6 +400,20 @@ function ShortCard({
   }
 
   function handleScrubEnd() {
+    scrubbing.current = false;
+  }
+
+  // Touch scrubbing — TikTok lets you drag the seek bar with a thumb.
+  function handleTouchScrubStart(e: React.TouchEvent<HTMLDivElement>) {
+    scrubbing.current = true;
+    scrubTo(e.touches[0]?.clientX ?? 0);
+  }
+
+  function handleTouchScrubMove(e: React.TouchEvent<HTMLDivElement>) {
+    if (scrubbing.current) scrubTo(e.touches[0]?.clientX ?? 0);
+  }
+
+  function handleTouchScrubEnd() {
     scrubbing.current = false;
   }
 
@@ -383,20 +431,18 @@ function ShortCard({
   const displayCaption = expanded || !isLongCaption ? caption : caption.slice(0, 60) + "…";
 
   return (
-    <section
-      data-index={index}
-      className="relative h-[100dvh] w-full snap-start snap-always overflow-hidden bg-media"
-    >
-      {/* Video */}
+    <section className="relative h-[100dvh] w-full snap-start snap-always overflow-hidden bg-media">
+      {/* Video — source + poster stay wired for every preloaded neighbour so a
+          swipe never lands on a black frame while the next clip boots. */}
       <video
         ref={videoRef}
-        src={isActive ? qualitySrc : ""}
-        poster={isActive ? imageUrl(item.short.video.posterKey, "medium", 0.5625) : undefined}
+        src={qualitySrc}
+        poster={imageUrl(item.short.video.posterKey, "medium", 0.5625)}
         className="absolute inset-0 h-full w-full object-cover"
         playsInline
         loop
         muted={muted}
-        preload={isActive ? "auto" : "metadata"}
+        preload={distance <= PRELOAD_AHEAD ? "auto" : "metadata"}
         onClick={handleTap}
         onMouseDown={handleLongPressStart}
         onMouseUp={handleLongPressEnd}
@@ -444,9 +490,13 @@ function ShortCard({
         </div>
       )}
 
-      {/* Double-tap heart burst */}
+      {/* Double-tap heart burst — spawns at the tap point */}
       {burst > 0 && (
-        <span key={burst} className="pointer-events-none absolute inset-0 grid place-items-center">
+        <span
+          key={burst}
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: burstAt.x, top: burstAt.y }}
+        >
           <Heart className="animate-heart-burst size-24 fill-white text-white drop-shadow-lg" />
         </span>
       )}
@@ -567,7 +617,12 @@ function ShortCard({
 
       {/* Bottom-left info */}
       <div className="absolute bottom-20 left-0 right-16 z-10 px-4 sm:bottom-24 sm:px-6">
-        <p className="text-base font-bold text-white">@{item.authorUsername}</p>
+        <button
+          onClick={() => onOpenProfile(authorId, item.authorUsername)}
+          className="block text-base font-bold text-white"
+        >
+          @{item.authorUsername}
+        </button>
         <p className={cn("mt-1.5 text-sm text-white/95", !expanded && "line-clamp-2")}>
           {displayCaption}
         </p>
@@ -602,10 +657,15 @@ function ShortCard({
         <div
           ref={progressRef}
           className="group relative h-full cursor-pointer"
+          style={{ touchAction: "none" }}
           onMouseDown={handleScrubStart}
           onMouseMove={handleScrubMove}
           onMouseUp={handleScrubEnd}
           onMouseLeave={handleScrubEnd}
+          onTouchStart={handleTouchScrubStart}
+          onTouchMove={handleTouchScrubMove}
+          onTouchEnd={handleTouchScrubEnd}
+          onTouchCancel={handleTouchScrubEnd}
         >
           <div className="absolute inset-x-0 bottom-0 h-0.5 bg-white/20 transition-all group-hover:h-1">
             <div
@@ -622,7 +682,6 @@ function ShortCard({
         url={shareUrl}
         message={`${item.authorName} on WIZZ: ${item.short.caption}`}
       />
-      <MusicSheet open={musicOpen} onClose={() => setMusicOpen(false)} />
     </section>
   );
 }
@@ -654,8 +713,9 @@ function ShortsSkeleton() {
 /* ------------------------------------------------------------------ */
 
 export function ShortsScreen() {
-  const { data, isLoading } = useSuspenseQuery(shortsQueryOptions);
+  const { data: allItems, isLoading, refetch } = useSuspenseQuery(shortsQueryOptions);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [tab, setTab] = useState<ShortsTab>(loadTab);
   const [muted, setMuted] = useState(loadMuted);
   const [blendOpen, setBlendOpen] = useState(false);
   const [musicOpen, setMusicOpen] = useState<string | null>(null);
@@ -663,12 +723,22 @@ export function ShortsScreen() {
   const { user, displayName } = useSession();
   const requireAuth = useAuthGate();
   const userId = user?.id ?? null;
+  const navigate = useNavigate();
   const { data: myProfile } = useMyProfile(userId);
+  const { data: followingList = [] } = useFollowList(myProfile?.id ?? null, "following", userId);
   const { data: followers = [], isLoading: loadingFollowers } = useFollowList(
     myProfile?.id ?? null,
     "followers",
     userId,
   );
+
+  // TikTok-style tabs: "For You" is the full feed; "Following" narrows it to
+  // creators this account follows (DB follows + the local shorts-follow set).
+  const data = useMemo(() => {
+    if (tab === "foryou") return allItems;
+    const ids = new Set<string>([...loadFollows(), ...followingList.map((p) => p.id)]);
+    return allItems.filter((item) => ids.has(item.short.authorId));
+  }, [allItems, tab, followingList]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoEls = useRef(new Map<string, HTMLVideoElement>());
@@ -797,22 +867,35 @@ export function ShortsScreen() {
     };
   }, [data]);
 
-  // Remember scroll position on unmount
+  // Remember scroll position per tab across remounts (a stale index from the
+  // other tab must never scroll a freshly swapped feed somewhere random).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const saved = sessionStorage.getItem("wizz:shorts-scroll");
-    if (saved) {
-      const idx = Number(saved);
-      if (idx > 0 && idx < data.length) {
-        const section = sectionEls.current.get(data[idx]?.short.id ?? "");
-        section?.scrollIntoView({ block: "start" });
-      }
+    let saved: { t?: string; i?: number } | null = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(SCROLL_KEY) ?? "null");
+    } catch {
+      saved = null;
+    }
+    if (
+      saved &&
+      saved.t === tab &&
+      typeof saved.i === "number" &&
+      saved.i > 0 &&
+      saved.i < data.length
+    ) {
+      const section = sectionEls.current.get(data[saved.i]?.short.id ?? "");
+      section?.scrollIntoView({ block: "start" });
     }
     return () => {
-      sessionStorage.setItem("wizz:shorts-scroll", String(activeIndexRef.current));
+      try {
+        sessionStorage.setItem(SCROLL_KEY, JSON.stringify({ t: tab, i: activeIndexRef.current }));
+      } catch {
+        // ignore
+      }
     };
-  }, [data]);
+  }, [data, tab]);
 
   // Blend (watch together)
   const applyRemote = useCallback(
@@ -876,18 +959,39 @@ export function ShortsScreen() {
     [openComments],
   );
 
-  // Open creator profile
-  const handleOpenProfile = useCallback((authorId: string, username: string) => {
-    if (isUuid(authorId)) {
-      window.location.href = `/u/${username}`;
-    }
-  }, []);
+  /** Swap between the For You / Following feeds; always restart at the top. */
+  const switchTab = useCallback(
+    (next: ShortsTab) => {
+      if (next === tab) return;
+      if (next === "following" && !user) {
+        requireAuth();
+        return;
+      }
+      setTab(next);
+      saveTab(next);
+      setActiveIndex(0);
+      containerRef.current?.scrollTo({ top: 0 });
+    },
+    [tab, user, requireAuth],
+  );
 
-  // Open share
-  const [shareData, setShareData] = useState<{ url: string; message: string } | null>(null);
-  const handleOpenShare = useCallback((url: string, message: string) => {
-    setShareData({ url, message });
-  }, []);
+  // Refresh feed from the end-of-feed catch-up card.
+  const refreshFeed = useCallback(() => {
+    void refetch().then(() => {
+      setActiveIndex(0);
+      containerRef.current?.scrollTo({ top: 0 });
+    });
+  }, [refetch]);
+
+  // Open creator profile
+  const handleOpenProfile = useCallback(
+    (authorId: string, username: string) => {
+      // SPA navigation: a full `location.href` reload would flash a white
+      // screen inside the Capacitor WebView and drop all player state.
+      if (isUuid(authorId)) void navigate({ to: "/u/$username", params: { username } });
+    },
+    [navigate],
+  );
 
   // Open music
   const handleOpenMusic = useCallback((soundtrack: string) => {
@@ -905,6 +1009,27 @@ export function ShortsScreen() {
 
   // Empty state
   if (data.length === 0) {
+    if (tab === "following") {
+      return (
+        <div className="grid h-[100dvh] place-items-center bg-media px-6">
+          <div className="text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full bg-white/10">
+              <UserPlus className="size-7 text-white/80" />
+            </span>
+            <p className="mt-4 text-lg font-bold text-foreground">Follow creators you love</p>
+            <p className="mx-auto mt-1 max-w-72 text-sm text-muted-foreground">
+              Shorts from people you follow land here. Discover someone new in For You.
+            </p>
+            <button
+              onClick={() => switchTab("foryou")}
+              className="press mt-4 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-brand-foreground"
+            >
+              Go to For You
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="grid h-[100dvh] place-items-center bg-media">
         <div className="text-center">
@@ -921,9 +1046,12 @@ export function ShortsScreen() {
     <div className="relative mx-auto h-[100dvh] w-full max-w-3xl overflow-hidden bg-media md:border-x md:border-border">
       <h1 className="sr-only">Shorts</h1>
 
-      {/* Blend session indicator */}
+      {/* Blend session indicator — sits under the tab pills */}
       {session && (
-        <div className="absolute inset-x-0 top-0 z-40 flex items-center gap-2 px-3 pt-safe">
+        <div
+          className="absolute inset-x-0 z-40 flex items-center gap-2 px-3"
+          style={{ top: "calc(env(safe-area-inset-top, 0px) + 46px)" }}
+        >
           <div className="mx-auto mt-2 flex items-center gap-2 rounded-full bg-black/55 py-1.5 pl-3 pr-1.5 backdrop-blur">
             <span
               className={cn(
@@ -963,6 +1091,25 @@ export function ShortsScreen() {
         </div>
       )}
 
+      {/* TikTok-style feed tabs */}
+      <div className="absolute inset-x-0 top-0 z-40 flex justify-center pt-safe">
+        <div className="mt-2 flex w-fit items-center gap-1 rounded-full bg-black/35 px-1.5 py-1 backdrop-blur">
+          {(["following", "foryou"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => switchTab(t)}
+              aria-pressed={tab === t}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-[13px] font-bold transition-colors",
+                tab === t ? "bg-white text-black" : "text-white/75",
+              )}
+            >
+              {t === "foryou" ? "For You" : "Following"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Scroll container — CSS snap handles everything natively */}
       <div
         ref={containerRef}
@@ -978,6 +1125,7 @@ export function ShortsScreen() {
           return (
             <div
               key={item.short.id}
+              data-index={index}
               ref={(el) => {
                 if (el) sectionEls.current.set(item.short.id, el);
                 else sectionEls.current.delete(item.short.id);
@@ -987,14 +1135,13 @@ export function ShortsScreen() {
               {shouldRender ? (
                 <ShortCard
                   item={item}
-                  index={index}
+                  distance={Math.abs(index - activeIndex)}
                   isActive={isActive}
                   viewerId={userId}
                   muted={muted}
                   onToggleMute={() => setMuted((m) => !m)}
                   onOpenComments={handleOpenComments}
                   onOpenProfile={handleOpenProfile}
-                  onOpenShare={handleOpenShare}
                   onOpenMusic={handleOpenMusic}
                   onBlend={() => {
                     if (!requireAuth()) return;
@@ -1009,6 +1156,26 @@ export function ShortsScreen() {
             </div>
           );
         })}
+
+        {/* End-of-feed catch-up card with a refresh */}
+        <div
+          data-index={data.length}
+          className="grid h-[100dvh] snap-start snap-always place-items-center px-6"
+        >
+          <div className="text-center">
+            <p className="text-lg font-bold text-foreground">You're all caught up</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Fresh shorts land here as people post.
+            </p>
+            <button
+              onClick={refreshFeed}
+              className="press mt-4 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-brand-foreground"
+            >
+              <RefreshCcw className="size-4" />
+              Refresh
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Bottom nav overlay */}
@@ -1037,6 +1204,9 @@ export function ShortsScreen() {
           setBlendOpen(false);
         }}
       />
+
+      {/* Sound browser — opened from the spinning disc / caption pill */}
+      <MusicSheet open={musicOpen !== null} onClose={() => setMusicOpen(null)} />
 
       {/* Sign-in prompt */}
       {!session && !user && (

@@ -96,6 +96,10 @@ function Player({
     if (!v) return;
     if (abr.quality === lastQualityRef.current) return;
     lastQualityRef.current = abr.quality;
+    // Signed single-file videos resolve every quality to one URL — assigning
+    // an identical `src` restarts the element, so only swap on a real change.
+    const absolute = new URL(qualitySrc, window.location.href).href;
+    if (v.src === absolute) return;
     const wasPlaying = !v.paused;
     const pos = v.currentTime;
     v.src = qualitySrc;
