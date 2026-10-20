@@ -1024,7 +1024,10 @@ export type Database = {
           display_name: string;
           id: string;
           is_private: boolean;
+          premium_cancel_at_period_end: boolean;
           premium_until: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
           updated_at: string;
           username: string;
           verified: boolean;
@@ -1036,7 +1039,10 @@ export type Database = {
           display_name: string;
           id: string;
           is_private?: boolean;
+          premium_cancel_at_period_end?: boolean;
           premium_until?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
           updated_at?: string;
           username: string;
           verified?: boolean;
@@ -1048,7 +1054,10 @@ export type Database = {
           display_name?: string;
           id?: string;
           is_private?: boolean;
+          premium_cancel_at_period_end?: boolean;
           premium_until?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
           updated_at?: string;
           username?: string;
           verified?: boolean;

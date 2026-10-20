@@ -315,7 +315,9 @@ describe("cancelPremium", () => {
       error: null,
     };
     const res = (await invoke(subs.cancelPremium)) as StateResult;
-    expect(callsTo("profiles", "update")).toEqual([{ premium_until: null, verified: false }]);
+    expect(callsTo("profiles", "update")).toEqual([
+      { premium_until: null, verified: false, premium_cancel_at_period_end: false },
+    ]);
     expect(res).toMatchObject({
       premiumUntil: null,
       premiumActive: false,

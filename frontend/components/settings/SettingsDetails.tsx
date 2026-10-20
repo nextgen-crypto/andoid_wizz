@@ -10,7 +10,12 @@ import { useMyPosts, useMyStats } from "@/frontend/hooks/useMyProfileData";
 import { useSavedPosts, useToggleSave } from "@/frontend/hooks/useSavedPosts";
 import { useFollowList } from "@/frontend/hooks/usePublicProfile";
 import { setOwnedPostStatus } from "@/backend/api/posts.functions";
-import { useSubscription, useSubscriptionActions } from "@/frontend/hooks/useSubscription";
+import {
+  useSubscription,
+  useSubscriptionActions,
+  useCheckoutAwait,
+} from "@/frontend/hooks/useSubscription";
+import { openExternalUrl } from "@/frontend/lib/native";
 import { toast } from "sonner";
 
 /** Persistent local preference backed by localStorage. */
@@ -1009,11 +1014,16 @@ function PremiumDetail({ userId }: { userId: string | null }) {
   const [localSub, setLocalSub] = useLocalSetting("premium-sub", false);
   const { data } = useSubscription(userId);
   const actions = useSubscriptionActions();
+  const pay = useCheckoutAwait(userId, () =>
+    toast.success("You're on Premium — verified badge active."),
+  );
   // Backend reachable → database state is authoritative; otherwise keep the
   // old device-local toggle so the screen never dead-ends.
   const live = data?.live === true;
   const active = live ? data.premiumActive : localSub;
-  const busy = actions.activate.isPending || actions.cancel.isPending;
+  const stripe = live && data?.billing === "stripe";
+  const ending = active && data?.cancelAtPeriodEnd === true;
+  const busy = actions.startCheckout.isPending || actions.cancel.isPending || pay.awaiting;
   const expiresLabel = (() => {
     const at = data?.live === true ? data.premiumUntil : null;
     if (!at) return null;
@@ -1031,15 +1041,44 @@ function PremiumDetail({ userId }: { userId: string | null }) {
       setLocalSub(!localSub);
       return;
     }
-    if (active) {
+    if (active && !ending) {
       actions.cancel.mutate(undefined, {
         onError: () => toast("Couldn't cancel the subscription. Try again."),
+        onSuccess: (state) => {
+          // Stripe cancellation stops the renewal — access runs to the paid
+          // period, so say that instead of pretending the badge vanished.
+          if (state?.cancelAtPeriodEnd && state.premiumActive && state.premiumUntil) {
+            const ends = new Date(state.premiumUntil).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            });
+            toast(`Subscription ending — you keep Premium until ${ends}.`);
+          }
+        },
       });
-    } else {
-      actions.activate.mutate(undefined, {
-        onError: () => toast("Couldn't activate Premium. Try again."),
-      });
+      return;
     }
+    // Subscribe fresh, or renew a subscription that was set to end.
+    actions.startCheckout.mutate(undefined, {
+      onError: () =>
+        toast(
+          stripe ? "Couldn't open checkout. Try again." : "Couldn't activate Premium. Try again.",
+        ),
+      onSuccess: ({ checkoutUrl, mode }) => {
+        if (checkoutUrl) {
+          void openExternalUrl(checkoutUrl);
+          pay.setAwaiting(true);
+          return;
+        }
+        toast(
+          mode === "preview"
+            ? "You're on Premium — free preview."
+            : ending
+              ? "Subscription renewed."
+              : "You're already subscribed.",
+        );
+      },
+    });
   }
 
   return (
@@ -1050,9 +1089,13 @@ function PremiumDetail({ userId }: { userId: string | null }) {
       <p className="mt-0.5 text-xs text-muted-foreground">
         {active
           ? expiresLabel
-            ? `Verified badge active · renews ${expiresLabel}`
+            ? ending
+              ? `Verified badge active · ends ${expiresLabel}`
+              : `Verified badge active · renews ${expiresLabel}`
             : "Verified badge active across WIZZ."
-          : "The verified checkmark on your profile and posts, plus early access to new features."}
+          : stripe
+            ? "The verified checkmark on your profile and posts — checkout runs in your browser through Stripe."
+            : "The verified checkmark on your profile and posts, plus early access to new features."}
         {!live && " Offline — stored on this device only."}
       </p>
       <button
@@ -1060,11 +1103,26 @@ function PremiumDetail({ userId }: { userId: string | null }) {
         disabled={busy}
         className="mt-3 w-full rounded-full bg-brand py-2.5 text-sm font-bold text-brand-foreground disabled:opacity-60"
       >
-        {busy ? "Saving…" : active ? "Cancel subscription" : "Subscribe"}
+        {pay.awaiting
+          ? "Waiting for payment…"
+          : busy
+            ? "Saving…"
+            : active
+              ? ending
+                ? "Renew subscription"
+                : "Cancel subscription"
+              : "Subscribe"}
       </button>
-      {live && !active && (
+      {pay.awaiting && (
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Free preview — billing starts automatically once a payment provider is connected.
+          Finish in the browser tab — your badge turns on automatically once the payment lands.
+        </p>
+      )}
+      {live && !active && !pay.awaiting && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {stripe
+            ? "Checkout opens in your browser — WIZZ never sees your card."
+            : "Free preview — billing starts automatically once a payment provider is connected."}
         </p>
       )}
     </div>
@@ -1077,9 +1135,13 @@ function VerifiedDetail({ userId }: { userId: string | null }) {
   const [localSub, setLocalSub] = useLocalSetting("premium-sub", false);
   const { data } = useSubscription(userId);
   const actions = useSubscriptionActions();
+  const pay = useCheckoutAwait(userId, () =>
+    toast.success("You're verified — welcome to WIZZ Premium."),
+  );
   const live = data?.live === true;
   const verified = live ? data.verified || data.premiumActive : localSub;
-  const busy = actions.activate.isPending;
+  const stripe = live && data?.billing === "stripe";
+  const busy = actions.startCheckout.isPending || pay.awaiting;
 
   if (verified) {
     return (
@@ -1103,9 +1165,20 @@ function VerifiedDetail({ userId }: { userId: string | null }) {
       setLocalSub(true);
       return;
     }
-    actions.activate.mutate(undefined, {
-      onError: () => toast("Couldn't activate Premium. Try again."),
-      onSuccess: () => toast("You're verified — welcome to WIZZ Premium."),
+    actions.startCheckout.mutate(undefined, {
+      onError: () =>
+        toast(
+          stripe ? "Couldn't open checkout. Try again." : "Couldn't activate Premium. Try again.",
+        ),
+      onSuccess: ({ checkoutUrl, mode }) => {
+        if (checkoutUrl) {
+          void openExternalUrl(checkoutUrl);
+          pay.setAwaiting(true);
+          return;
+        }
+        if (mode === "preview") toast("You're verified — welcome to WIZZ Premium.");
+        else toast("You're already subscribed.");
+      },
     });
   }
 
@@ -1120,15 +1193,21 @@ function VerifiedDetail({ userId }: { userId: string | null }) {
         disabled={busy}
         className="mt-3 w-full rounded-full bg-brand py-2.5 text-sm font-bold text-brand-foreground disabled:opacity-60"
       >
-        {busy ? "Activating…" : "Subscribe to get verified"}
+        {pay.awaiting ? "Waiting for payment…" : busy ? "Opening…" : "Subscribe to get verified"}
       </button>
-      {live ? (
+      {pay.awaiting ? (
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Free preview — billing starts automatically once a payment provider is connected.
+          Finish in the browser tab — your badge turns on automatically once the payment lands.
+        </p>
+      ) : stripe ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Secure checkout in your browser — the badge appears the moment payment completes.
         </p>
       ) : (
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Offline — stored on this device only.
+          {live
+            ? "Free preview — billing starts automatically once a payment provider is connected."
+            : "Offline — stored on this device only."}
         </p>
       )}
     </div>

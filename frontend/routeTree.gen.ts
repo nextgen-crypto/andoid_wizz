@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BookmarksRouteImport } from './routes/bookmarks'
+import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as NewsRouteImport } from './routes/news'
@@ -48,6 +49,11 @@ const AuthRoute = AuthRouteImport.update({
 const BookmarksRoute = BookmarksRouteImport.update({
   id: '/bookmarks',
   path: '/bookmarks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutRoute = CheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExploreRoute = ExploreRouteImport.update({
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/bookmarks': typeof BookmarksRoute
+  '/checkout': typeof CheckoutRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
   '/news': typeof NewsRouteWithChildren
@@ -158,6 +165,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/bookmarks': typeof BookmarksRoute
+  '/checkout': typeof CheckoutRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
   '/profile': typeof ProfileRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/bookmarks': typeof BookmarksRoute
+  '/checkout': typeof CheckoutRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
   '/news': typeof NewsRouteWithChildren
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/bookmarks'
+    | '/checkout'
     | '/explore'
     | '/messages'
     | '/news'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/bookmarks'
+    | '/checkout'
     | '/explore'
     | '/messages'
     | '/profile'
@@ -247,6 +258,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/bookmarks'
+    | '/checkout'
     | '/explore'
     | '/messages'
     | '/news'
@@ -270,6 +282,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
   BookmarksRoute: typeof BookmarksRoute
+  CheckoutRoute: typeof CheckoutRoute
   ExploreRoute: typeof ExploreRoute
   MessagesRoute: typeof MessagesRoute
   NewsRoute: typeof NewsRouteWithChildren
@@ -313,6 +326,13 @@ declare module '@tanstack/react-router' {
       path: '/bookmarks'
       fullPath: '/bookmarks'
       preLoaderRoute: typeof BookmarksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout': {
+      id: '/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof CheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/explore': {
@@ -458,6 +478,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
   BookmarksRoute: BookmarksRoute,
+  CheckoutRoute: CheckoutRoute,
   ExploreRoute: ExploreRoute,
   MessagesRoute: MessagesRoute,
   NewsRoute: NewsRouteWithChildren,
