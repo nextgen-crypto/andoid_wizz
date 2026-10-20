@@ -10,7 +10,7 @@ export type PostMediaFields = {
   thumbnail_path?: string | null;
 };
 
-/** Replace canonical paths with viewer-authorized, five-minute media URLs. */
+/** Replace canonical paths with viewer-authorized, day-long media URLs. */
 export async function hydratePostMediaList<T extends PostMediaFields>(posts: T[]): Promise<T[]> {
   const paths = [
     ...new Set(

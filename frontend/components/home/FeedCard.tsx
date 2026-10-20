@@ -31,6 +31,7 @@ import type { FeedEvent } from "@/frontend/hooks/useEventTracker";
 import { cn } from "@/lib/utils";
 import { visibleHashtags } from "@/frontend/lib/hashtags";
 import { timeAgoCompact } from "@/frontend/lib/format";
+import { neutralizeBrokenImage } from "@/frontend/lib/mediaFormat";
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
 const DOUBLE_TAP_MS = 280;
@@ -244,6 +245,7 @@ export function FeedCard({
           src={imageUrl(author.avatarKey, "thumbnail")}
           alt={author.displayName}
           loading="lazy"
+          onError={neutralizeBrokenImage}
           className="size-9 shrink-0 rounded-full object-cover"
         />
         <div className="min-w-0 flex-1">
@@ -411,6 +413,7 @@ export function FeedCard({
             height={image.height}
             loading="lazy"
             decoding="async"
+            onError={neutralizeBrokenImage}
             style={{
               backgroundImage: `url(${placeholderUrl(image.objectKey)})`,
               backgroundSize: "cover",

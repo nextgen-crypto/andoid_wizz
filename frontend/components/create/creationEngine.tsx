@@ -72,6 +72,42 @@ function draftKey(userId: string | null): string {
 }
 const CATEGORIES = ["For You", "Trending", "Sports", "Music", "Tech", "Style", "Food", "Travel"];
 const AUDIENCES = ["Public", "Followers", "Private"] as const;
+
+/** Extension fallbacks for picks whose MIME type is missing or generic. */
+const MEDIA_EXTS: Record<"image" | "video", Set<string>> = {
+  image: new Set(["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp", "svg"]),
+  video: new Set([
+    "mp4",
+    "m4v",
+    "mov",
+    "webm",
+    "ogv",
+    "3gp",
+    "3g2",
+    "mkv",
+    "avi",
+    "flv",
+    "ts",
+    "mts",
+    "m2ts",
+  ]),
+};
+
+/**
+ * Android `content://` picks often arrive with an empty MIME type or
+ * `application/octet-stream`, which the old `startsWith("video/")` check
+ * rejected outright ("That file is not a video") before any preview could
+ * render. Only reject when the file *positively* declares the other kind —
+ * otherwise the extension decides, and the decode/metadata probe remains the
+ * authoritative format check.
+ */
+function mimeMismatch(file: File, kind: "image" | "video"): boolean {
+  if (file.type && file.type !== "application/octet-stream") {
+    return !file.type.startsWith(`${kind}/`);
+  }
+  const ext = extOf(file);
+  return Boolean(ext) && !MEDIA_EXTS[kind].has(ext);
+}
 const TEXT_BACKGROUNDS = ["#7c3aed", "#0f766e", "#1d4ed8", "#b45309", "#be123c", "#111827"];
 const STORY_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -327,7 +363,7 @@ export function CreationEngine({
       setError(sizeError("image"));
       return;
     }
-    if (!file.type.startsWith("image/")) {
+    if (mimeMismatch(file, "image")) {
       setError("That file is not an image.");
       return;
     }
@@ -353,7 +389,7 @@ export function CreationEngine({
       setError(sizeError("video"));
       return;
     }
-    if (!file.type.startsWith("video/")) {
+    if (mimeMismatch(file, "video")) {
       setError("That file is not a video.");
       return;
     }
@@ -1287,7 +1323,11 @@ export function CreationEngine({
         mode={camera === "short" ? "short" : "photo"}
         onClose={() => setCamera(null)}
         onCapture={(f) => {
-          if (f.type.startsWith("video")) attachVideo(f);
+          // Empty MIME (some camera builds) → decide by extension instead of
+          // silently misfiling the capture as a photo.
+          const looksVideo =
+            f.type.startsWith("video") || (!f.type && MEDIA_EXTS.video.has(extOf(f)));
+          if (looksVideo) attachVideo(f);
           else attachPhoto(f);
           setCamera(null);
         }}

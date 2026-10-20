@@ -35,14 +35,33 @@ export async function bakeOrOriginal(file: File, bake: (f: File) => Promise<Blob
   }
 }
 
+/**
+ * Signed media URLs can still expire while cached feed data is on screen
+ * (storage then answers 400 `InvalidJWT`). Android WebView renders that as a
+ * broken-image glyph on every card — swap the element to a transparent pixel
+ * so the card degrades to its neutral surface, and drop `srcset` so the
+ * browser stops retrying dead candidates.
+ */
+export function neutralizeBrokenImage(e: { currentTarget: HTMLImageElement }): void {
+  const img = e.currentTarget;
+  if (img.dataset["mediaFallback"] === "1") return;
+  img.dataset["mediaFallback"] = "1";
+  img.removeAttribute("srcset");
+  img.style.backgroundImage = "none";
+  img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+}
+
 /** Whether this device can preview the video before posting. */
 export function videoPreviewable(file: File): boolean {
   if (typeof document === "undefined") return true;
   const v = document.createElement("video");
-  const mime = file.type || `video/${extOf(file)}`;
-  if (!mime.startsWith("video/")) return false;
-  const verdict = v.canPlayType(mime);
-  if (verdict === "probably" || verdict === "maybe") return true;
+  // Android content picks may report a generic MIME — probe the real container
+  // via the extension instead of hard-failing before canPlayType ever runs.
+  const mime = file.type.startsWith("video/") ? file.type : `video/${extOf(file)}`;
+  if (mime.length > "video/".length) {
+    const verdict = v.canPlayType(mime);
+    if (verdict === "probably" || verdict === "maybe") return true;
+  }
   // Extension allowlist for containers browsers sniff despite empty canPlayType.
   return ["mp4", "m4v", "mov", "webm", "ogv", "3gp", "3g2"].includes(extOf(file));
 }

@@ -1,7 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 
 const TEN_YEARS = 60 * 60 * 24 * 365 * 10;
-export const MEDIA_URL_TTL_SECONDS = 5 * 60;
+/**
+ * Client-minted media URLs must outlive the query caches that hold them
+ * (React Query keeps data for 10 minutes after unmount). Five minutes was
+ * shorter than the cache, so hydrated lists rendered expired links that
+ * storage rejected with `InvalidJWT`.
+ */
+export const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
 type UploadOptions = { contentType?: string; width?: number; upsert?: boolean };
 

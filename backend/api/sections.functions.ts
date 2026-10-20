@@ -36,7 +36,10 @@ const SYNTHETIC_DEMO_USER: Creator = {
 };
 const demoUser = byId.get(CURRENT_USER_ID) ?? creators[0] ?? SYNTHETIC_DEMO_USER;
 
-const REAL_MEDIA_TTL = 5 * 60;
+// Explore/profile responses are cached up to 300s; a 5-minute signature was
+// already dead by the time the cache served its tail. Keep URLs valid for a
+// full day so no cache layer can ever surface an expired link.
+const REAL_MEDIA_TTL = 24 * 60 * 60;
 
 /** Real user uploads filed as Shorts by the orientation classifier. */
 async function realShortItems(): Promise<ShortItem[]> {

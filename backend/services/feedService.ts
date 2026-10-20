@@ -154,7 +154,14 @@ export function serverSupabase(viewerClient?: SupabaseClient | null): SupabaseCl
   return anonClient;
 }
 
-const MEDIA_URL_TTL_SECONDS = 5 * 60;
+/**
+ * Signed URLs must outlive every cache that can hold a feed response:
+ * server-side profile cache runs 300s, the client keeps query data for
+ * 10 minutes (gcTime), and an open feed re-renders for as long as the app
+ * stays up. The old 5-minute lifetime expired *inside* those windows, so
+ * cached cards re-rendered dead URLs and storage answered `InvalidJWT`.
+ */
+const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
 async function signStoredMedia(
   supabase: SupabaseClient,

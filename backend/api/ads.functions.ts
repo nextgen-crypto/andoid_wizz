@@ -16,7 +16,9 @@ const OBJECTIVES = [
 ] as const;
 
 const PACKAGES = ["starter", "growth", "business", "custom"] as const;
-const MEDIA_URL_TTL_SECONDS = 5 * 60;
+// Ad creatives ride the same cached responses as feeds — match the feed
+// signed-URL lifetime so cached cards never render expired media.
+const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
 /** Default budgets (cents) + durations mirror ad_packages seed rows. */
 const PACKAGE_DEFAULTS: Record<string, { budget: number; days: number }> = {
