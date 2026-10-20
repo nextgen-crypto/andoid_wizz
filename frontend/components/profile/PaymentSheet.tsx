@@ -15,7 +15,7 @@ const reasons = [
   {
     Icon: Crown,
     title: "Unlock WIZZ Premium",
-    body: "Go ad-free, get a premium badge, and post longer videos and clips.",
+    body: "Subscribers get the verified checkmark, plus early access to new features.",
   },
   {
     Icon: Zap,

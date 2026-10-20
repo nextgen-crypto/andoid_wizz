@@ -3,10 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { creators, news, shorts, videos } from "@/backend/database/seed";
 import {
   fetchAdminReports,
-  fetchVerificationRequests,
   resolveAdminReport,
-  setUserVerified,
-  type AdminVerificationRequest,
   type ResolveAction,
 } from "@/backend/api/admin.functions";
 import { TRACKS } from "@/frontend/components/create/creationEngine";
@@ -933,136 +930,11 @@ export function PaymentsSection({ ops, act }: SectionProps) {
 
 /* ---------------------------------------------------------- CREATORS */
 
-/** Pending verification queue — the review surface for `requestVerification`. */
-function VerificationQueue({
-  requests,
-  loading,
-  offline,
-  onApprove,
-  onReject,
-  busyId,
-}: {
-  requests: AdminVerificationRequest[];
-  loading: boolean;
-  offline: boolean;
-  onApprove: (userId: string) => void;
-  onReject: (userId: string) => void;
-  busyId: string | null;
-}) {
-  if (loading) {
-    return (
-      <Panel title="Verification requests" hint="Review badge requests from members">
-        <Empty text="Loading requests…" />
-      </Panel>
-    );
-  }
-  return (
-    <Panel
-      title="Verification requests"
-      hint="Members request the badge in Settings › Verified — approve or reject here"
-    >
-      {offline ? (
-        <Empty text="Queue unavailable — the verification service is offline." />
-      ) : requests.length === 0 ? (
-        <Empty text="No verification requests yet." />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-[13px]">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                <th className="pb-2 pr-3">Member</th>
-                <th className="pb-2 pr-3">Requested</th>
-                <th className="pb-2 pr-3">Note</th>
-                <th className="pb-2 pr-3">Status</th>
-                <th className="pb-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {requests.map((r) => (
-                <tr key={r.id}>
-                  <td className="py-2 pr-3">
-                    <p className="font-semibold">{r.display_name}</p>
-                    <p className="text-[11px] text-muted-foreground">@{r.username}</p>
-                  </td>
-                  <td className="py-2 pr-3 text-muted-foreground">{timeAgo(r.created_at)}</td>
-                  <td className="max-w-[220px] truncate py-2 pr-3 text-muted-foreground">
-                    {r.note || "—"}
-                  </td>
-                  <td className="py-2 pr-3">
-                    <Badge
-                      tone={
-                        r.status === "approved" ? "brand" : r.status === "rejected" ? "red" : "gray"
-                      }
-                    >
-                      {r.status}
-                    </Badge>
-                  </td>
-                  <td className="py-2">
-                    {r.status === "pending" ? (
-                      <div className="flex gap-2">
-                        <ModBtn
-                          label={busyId === r.user_id ? "Saving…" : "Approve"}
-                          disabled={busyId === r.user_id}
-                          onClick={() => onApprove(r.user_id)}
-                        />
-                        <ModBtn
-                          label="Reject"
-                          danger
-                          disabled={busyId === r.user_id}
-                          onClick={() => onReject(r.user_id)}
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Reviewed</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
 export function CreatorsSection({ m, ops, act }: SectionProps) {
   const leaders = m?.leaders ?? [];
-  const queryClient = useQueryClient();
-  // The metrics hook isn't query-cached, so mirror approvals locally until
-  // the next full load reflects the badge in the leaders table.
-  const [verifiedOverride, setVerifiedOverride] = useState<Record<string, boolean>>({});
-  const queueQuery = useQuery({
-    queryKey: ["admin-verification-queue"],
-    staleTime: 30_000,
-    queryFn: () => fetchVerificationRequests(),
-  });
-  const review = useMutation({
-    mutationFn: (input: { userId: string; verified: boolean }) => setUserVerified({ data: input }),
-    onSuccess: (_result, input) => {
-      setVerifiedOverride((prev) => ({ ...prev, [input.userId]: input.verified }));
-      toast(input.verified ? "Verification granted." : "Verification request rejected.");
-      void queryClient.invalidateQueries({ queryKey: ["admin-verification-queue"] });
-      // Badge-visible state lives in the subscription/profile caches.
-      void queryClient.invalidateQueries({ queryKey: ["subscription"] });
-      void queryClient.invalidateQueries({ queryKey: ["my-profile"] });
-      void queryClient.invalidateQueries({ queryKey: ["profile-by-username"] });
-    },
-    onError: () => toast.error("Couldn't update verification. Try again."),
-  });
-  const requests = queueQuery.data?.requests ?? [];
-  const busyId = review.isPending ? (review.variables?.userId ?? null) : null;
 
   return (
     <div className="flex flex-col gap-4">
-      <VerificationQueue
-        requests={requests}
-        loading={queueQuery.isLoading}
-        offline={queueQuery.data != null && !queueQuery.data.live}
-        busyId={busyId}
-        onApprove={(userId) => review.mutate({ userId, verified: true })}
-        onReject={(userId) => review.mutate({ userId, verified: false })}
-      />
       <Panel
         title="Creator management"
         hint="Earnings estimated from audience · payouts tracked locally"
@@ -1078,20 +950,18 @@ export function CreatorsSection({ m, ops, act }: SectionProps) {
                   <th className="pb-2 pr-3">Followers</th>
                   <th className="pb-2 pr-3">Posts</th>
                   <th className="pb-2 pr-3">Est. earnings</th>
-                  <th className="pb-2 pr-3">Payout</th>
-                  <th className="pb-2">Actions</th>
+                  <th className="pb-2">Payout</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {leaders.map((l) => {
                   const payout = ops.payouts[l.id] ?? "unpaid";
-                  const isVerified = verifiedOverride[l.id] ?? l.verified;
                   return (
                     <tr key={l.id}>
                       <td className="py-2 pr-3">
                         <p className="flex items-center gap-1 font-semibold">
                           {l.display_name}
-                          {isVerified && <Badge tone="brand">verified</Badge>}
+                          {l.verified && <Badge tone="brand">verified</Badge>}
                         </p>
                         <p className="text-[11px] text-muted-foreground">@{l.username}</p>
                       </td>
@@ -1117,13 +987,6 @@ export function CreatorsSection({ m, ops, act }: SectionProps) {
                           <option value="pending">pending</option>
                           <option value="paid">paid</option>
                         </Select>
-                      </td>
-                      <td className="py-2">
-                        <ModBtn
-                          label={isVerified ? "Verified" : "Approve verification"}
-                          disabled={isVerified || busyId !== null}
-                          onClick={() => review.mutate({ userId: l.id, verified: true })}
-                        />
                       </td>
                     </tr>
                   );

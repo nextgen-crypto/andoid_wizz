@@ -1,18 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   activatePremium,
   cancelPremium,
   fetchMySubscription,
   OFFLINE_SUBSCRIPTION,
-  requestVerification,
   type SubscriptionState,
 } from "@/backend/api/subscriptions.functions";
+import { invalidateHomeCache } from "@/backend/api/home.functions";
 
 /**
- * The signed-in account's Premium + verification state, straight from the
- * database. When the backend schema is missing the query resolves to
- * OFFLINE_SUBSCRIPTION (`live: false`) so the settings screens can fall back
- * to their local-only toggles instead of going blank.
+ * The signed-in account's Premium state — which is also its verified-badge
+ * state, since the badge is a subscriber-only perk. When the backend schema
+ * is missing the query resolves to OFFLINE_SUBSCRIPTION (`live: false`) so
+ * the settings screens can fall back to their local-only toggles instead of
+ * going blank.
  */
 export function useSubscription(userId: string | null) {
   return useQuery({
@@ -29,10 +31,18 @@ export function useSubscription(userId: string | null) {
   });
 }
 
-/** Premium activation/cancellation and the verified-badge request flow. */
+/** Premium activation/cancellation — activating also grants the verified badge. */
 export function useSubscriptionActions() {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["subscription"] });
+  const bustFeedCache = useServerFn(invalidateHomeCache);
+  const invalidate = () => {
+    // The badge renders from several caches — subscription row, profile
+    // headers, feed author lines — so refresh them together.
+    void queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    void queryClient.invalidateQueries({ queryKey: ["my-profile"] });
+    void queryClient.invalidateQueries({ queryKey: ["profile-by-username"] });
+    void bustFeedCache().catch(() => undefined);
+  };
 
   const activate = useMutation({
     mutationFn: () => activatePremium(),
@@ -42,10 +52,6 @@ export function useSubscriptionActions() {
     mutationFn: () => cancelPremium(),
     onSuccess: invalidate,
   });
-  const request = useMutation({
-    mutationFn: (note?: string) => requestVerification({ data: { note: note ?? "" } }),
-    onSuccess: invalidate,
-  });
 
-  return { activate, cancel, request };
+  return { activate, cancel };
 }

@@ -146,7 +146,13 @@ const settingsGroups: { title: string; rows: SettingsRow[] }[] = [
     title: "Subscriptions",
     rows: [
       { id: "premium", label: "WIZZ Premium", value: "Not subscribed", Icon: Gem },
-      { id: "verified", label: "Verified", value: "Not subscribed", Icon: BadgeCheck },
+      {
+        id: "verified",
+        label: "Verified",
+        hint: "Premium members only",
+        value: "Not subscribed",
+        Icon: BadgeCheck,
+      },
     ],
   },
   {
@@ -567,11 +573,9 @@ export function TopBar() {
                         ? "Active"
                         : "Not subscribed"
                       : id === "verified" && sub?.live
-                        ? sub.verified
+                        ? sub.verified || sub.premiumActive
                           ? "Verified"
-                          : sub.verificationStatus === "pending"
-                            ? "In review"
-                            : "Not subscribed"
+                          : "Not subscribed"
                         : value;
                   return (
                     <button

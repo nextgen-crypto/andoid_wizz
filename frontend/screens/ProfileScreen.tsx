@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck,
   Bookmark,
-  Gem,
   Grid3X3,
   ImagePlus,
   LogOut,
@@ -223,9 +222,8 @@ export function ProfileScreen() {
           <h2 className="min-w-0 break-words text-xl font-bold tracking-tight text-foreground">
             {shownName}
           </h2>
-          {myProfile?.verified && <BadgeCheck className="size-4.5 text-brand" />}
-          {isPremiumActive(myProfile?.premium_until) && (
-            <Gem className="size-4.5 text-amber-500" aria-label="WIZZ Premium" />
+          {(myProfile?.verified || isPremiumActive(myProfile?.premium_until)) && (
+            <BadgeCheck className="size-4.5 text-brand" aria-label="Verified" />
           )}
         </div>
         <p className="text-sm text-muted-foreground">

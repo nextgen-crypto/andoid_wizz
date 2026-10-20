@@ -1050,9 +1050,9 @@ function PremiumDetail({ userId }: { userId: string | null }) {
       <p className="mt-0.5 text-xs text-muted-foreground">
         {active
           ? expiresLabel
-            ? `Premium badge active · renews ${expiresLabel}`
-            : "Premium badge active across WIZZ."
-          : "Supporter badge on your profile and posts, plus early access to new features."}
+            ? `Verified badge active · renews ${expiresLabel}`
+            : "Verified badge active across WIZZ."
+          : "The verified checkmark on your profile and posts, plus early access to new features."}
         {!live && " Offline — stored on this device only."}
       </p>
       <button
@@ -1072,37 +1072,40 @@ function PremiumDetail({ userId }: { userId: string | null }) {
 }
 
 function VerifiedDetail({ userId }: { userId: string | null }) {
-  const [localReq, setLocalReq] = useLocalSetting("verified-req", false);
+  // The badge and the subscription are the same state now, so the offline
+  // fallback mirrors the Premium toggle (same device-local key).
+  const [localSub, setLocalSub] = useLocalSetting("premium-sub", false);
   const { data } = useSubscription(userId);
   const actions = useSubscriptionActions();
   const live = data?.live === true;
-  const status: "none" | "pending" | "verified" = live
-    ? data.verificationStatus
-    : localReq
-      ? "pending"
-      : "none";
-  const busy = actions.request.isPending;
+  const verified = live ? data.verified || data.premiumActive : localSub;
+  const busy = actions.activate.isPending;
 
-  if (live && status === "verified") {
+  if (verified) {
     return (
       <div className="px-2 py-2">
         <p className="text-[15px] font-semibold text-foreground">You're verified</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Your badge is visible everywhere your posts appear.
+          Included with your WIZZ Premium subscription — your badge shows everywhere your posts
+          appear.
         </p>
+        {!live && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Offline — stored on this device only.
+          </p>
+        )}
       </div>
     );
   }
 
-  function request() {
+  function subscribe() {
     if (!live) {
-      setLocalReq(!localReq);
+      setLocalSub(true);
       return;
     }
-    if (status === "pending") return;
-    actions.request.mutate(undefined, {
-      onError: () => toast("Couldn't send the request. Try again."),
-      onSuccess: () => toast("Verification request sent — we'll review it soon."),
+    actions.activate.mutate(undefined, {
+      onError: () => toast("Couldn't activate Premium. Try again."),
+      onSuccess: () => toast("You're verified — welcome to WIZZ Premium."),
     });
   }
 
@@ -1110,22 +1113,22 @@ function VerifiedDetail({ userId }: { userId: string | null }) {
     <div className="px-2 py-2">
       <p className="text-[15px] font-semibold text-foreground">Get verified</p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Prove you're a notable creator or brand. A WIZZ admin reviews every request.
+        The verified checkmark is a WIZZ Premium perk — subscribers get it instantly.
       </p>
       <button
-        onClick={request}
-        disabled={busy || status === "pending"}
-        className="mt-3 w-full rounded-full bg-secondary py-2.5 text-sm font-semibold text-foreground disabled:opacity-60"
+        onClick={subscribe}
+        disabled={busy}
+        className="mt-3 w-full rounded-full bg-brand py-2.5 text-sm font-bold text-brand-foreground disabled:opacity-60"
       >
-        {busy
-          ? "Sending…"
-          : status === "pending"
-            ? "Request pending — in review"
-            : "Request verification"}
+        {busy ? "Activating…" : "Subscribe to get verified"}
       </button>
-      {!live && (
+      {live ? (
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Offline — request stored on this device only.
+          Free preview — billing starts automatically once a payment provider is connected.
+        </p>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Offline — stored on this device only.
         </p>
       )}
     </div>

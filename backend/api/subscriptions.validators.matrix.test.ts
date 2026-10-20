@@ -4,13 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Table-driven matrix for backend/api/subscriptions.functions.ts.
  *
  * Two layers:
- *  1. Pure helpers — premiumActiveAt / deriveVerificationStatus /
- *     nextPremiumUntil are clock-injected and pinned directly across the
- *     expiry/status/renewal matrix.
+ *  1. Pure helpers — premiumActiveAt / nextPremiumUntil are clock-injected
+ *     and pinned directly across the expiry/renewal matrix.
  *  2. Handlers — the Supabase service-role client is replaced by a scripted
- *     recorder (including state-mutating update/insert/delete chains) so the
- *     activate/cancel/request flows are driven end to end: write shapes,
- *     already-verified guards, and the `live: false` offline degradation.
+ *     recorder (including state-mutating update chains) so the
+ *     activate/cancel flows are driven end to end: write shapes (the
+ *     subscription period *and* the paid-only verified badge), the read-path
+ *     self-heal that keeps the badge in step with the period, and the
+ *     `live: false` offline degradation.
  */
 
 // ---------------------------------------------------------------------------
@@ -82,19 +83,13 @@ type DbCall = { table: string; op: string; payload?: unknown };
 const db = {
   calls: [] as DbCall[],
   profiles: { data: null as Record<string, unknown> | null, error: null as unknown },
-  requests: { data: null as Record<string, unknown> | null, error: null as unknown },
   updateError: null as unknown,
-  deleteError: null as unknown,
-  insertError: null as unknown,
 };
 
 function resetDb(): void {
   db.calls = [];
   db.profiles = { data: null, error: null };
-  db.requests = { data: null, error: null };
   db.updateError = null;
-  db.deleteError = null;
-  db.insertError = null;
 }
 
 function callsTo(table: string, op: string): unknown[] {
@@ -106,7 +101,7 @@ function eqChain(op: string, apply: () => void) {
   const chain = {
     eq: () => chain,
     then: (onF?: (v: { error: unknown }) => unknown, onR?: (e: unknown) => unknown) =>
-      Promise.resolve({ error: op === "update" ? db.updateError : db.deleteError })
+      Promise.resolve({ error: op === "update" ? db.updateError : null })
         .then((res) => {
           if (res.error == null) apply();
           return res;
@@ -123,7 +118,7 @@ const supabaseAdmin = {
       // Chainable filters — handlers stack multiple `.eq()` calls.
       const chain = {
         eq: () => chain,
-        maybeSingle: async () => (table === "profiles" ? db.profiles : db.requests),
+        maybeSingle: async () => db.profiles,
       };
       return chain;
     },
@@ -135,23 +130,11 @@ const supabaseAdmin = {
     },
     delete: () => {
       db.calls.push({ table, op: "delete" });
-      return eqChain("delete", () => {
-        if (table === "verification_requests") db.requests.data = null;
-      });
+      return eqChain("delete", () => undefined);
     },
     insert: (payload: unknown) => {
       db.calls.push({ table, op: "insert", payload });
-      return {
-        then: (onF?: (v: { error: unknown }) => unknown, onR?: (e: unknown) => unknown) =>
-          Promise.resolve({ error: db.insertError })
-            .then((res) => {
-              if (res.error == null && table === "verification_requests") {
-                db.requests.data = { id: "req-1" };
-              }
-              return res;
-            })
-            .then(onF, onR),
-      };
+      return Promise.resolve({ error: null });
     },
   }),
 };
@@ -163,10 +146,6 @@ const subs = await import("./subscriptions.functions");
 type Callable = ((opts?: { data?: unknown }) => Promise<unknown>) & {
   _validator?: (data: unknown) => unknown;
 };
-
-function validatorOf(fn: unknown): (data: unknown) => Record<string, unknown> {
-  return (fn as Callable)._validator as unknown as (data: unknown) => Record<string, unknown>;
-}
 
 function invoke(fn: unknown, data?: unknown): Promise<unknown> {
   return (fn as Callable)({ data });
@@ -197,19 +176,6 @@ describe("premiumActiveAt", () => {
   });
 });
 
-describe("deriveVerificationStatus", () => {
-  const rows: Array<[label: string, verified: boolean, pending: boolean, expected: string]> = [
-    ["verified, no request", true, false, "verified"],
-    ["verified, request still queued", true, true, "verified"],
-    ["not verified, queued", false, true, "pending"],
-    ["not verified, nothing queued", false, false, "none"],
-  ];
-
-  it.each(rows)("%s", (_label, verified, pending, expected) => {
-    expect(subs.deriveVerificationStatus(verified, pending)).toBe(expected);
-  });
-});
-
 describe("nextPremiumUntil", () => {
   const now = new Date("2026-10-20T12:00:00.000Z");
   const DAY = 86_400_000;
@@ -235,33 +201,6 @@ describe("nextPremiumUntil", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Validators
-// ---------------------------------------------------------------------------
-
-describe("requestVerification validator", () => {
-  const validate = validatorOf(subs.requestVerification);
-
-  it("defaults a missing note to empty", () => {
-    expect(validate(undefined)["note"]).toBe("");
-    expect(validate({})["note"]).toBe("");
-    expect(validate({ note: null })["note"]).toBe("");
-  });
-
-  it("passes a short note through", () => {
-    expect(validate({ note: "I'm a news outlet" })["note"]).toBe("I'm a news outlet");
-  });
-
-  it("caps long notes at 300 characters", () => {
-    const note = validate({ note: "x".repeat(400) })["note"] as string;
-    expect(note).toHaveLength(300);
-  });
-
-  it("does not coerce non-string notes", () => {
-    expect(validate({ note: 42 })["note"]).toBe("");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
@@ -269,131 +208,119 @@ type StateResult = {
   premiumUntil: string | null;
   premiumActive: boolean;
   verified: boolean;
-  verificationStatus: string;
   live: boolean;
 };
 
 describe("fetchMySubscription", () => {
-  it("reports active premium + verified with a queued request", async () => {
+  it("returns a live, verified member whose subscription is active", async () => {
     db.profiles = {
       data: { verified: true, premium_until: "2026-11-19T12:00:00.000Z" },
       error: null,
     };
-    db.requests = { data: { id: "req-1" }, error: null };
     const res = (await invoke(subs.fetchMySubscription)) as StateResult;
-    expect(res).toMatchObject({
-      premiumActive: true,
-      verified: true,
-      verificationStatus: "verified",
-      live: true,
-    });
+    expect(res).toMatchObject({ premiumActive: true, verified: true, live: true });
     expect(Date.parse(res.premiumUntil!)).toBeGreaterThan(Date.parse("2026-11-01"));
+    // Badge and period already agree — nothing to reconcile.
+    expect(callsTo("profiles", "update")).toHaveLength(0);
   });
 
-  it("reports expired premium as inactive while staying live", async () => {
+  it("leaves a plain free account untouched", async () => {
+    db.profiles = { data: { verified: false, premium_until: null }, error: null };
+    const res = (await invoke(subs.fetchMySubscription)) as StateResult;
+    expect(res).toMatchObject({ premiumActive: false, verified: false, live: true });
+    expect(callsTo("profiles", "update")).toHaveLength(0);
+  });
+
+  it("strips a stale badge whose subscription expired without a cancel", async () => {
     db.profiles = {
-      data: { verified: false, premium_until: "2026-10-01T00:00:00.000Z" },
+      data: { verified: true, premium_until: "2026-10-01T00:00:00.000Z" },
       error: null,
     };
-    db.requests = { data: null, error: null };
     const res = (await invoke(subs.fetchMySubscription)) as StateResult;
-    expect(res).toMatchObject({ premiumActive: false, live: true });
+    expect(callsTo("profiles", "update")).toEqual([{ verified: false }]);
+    expect(res).toMatchObject({ premiumActive: false, verified: false, live: true });
   });
 
-  it("reports a pending verification queue for an unverified member", async () => {
-    db.profiles = { data: { verified: false, premium_until: null }, error: null };
-    db.requests = { data: { id: "req-9" }, error: null };
+  it("grants the badge when the subscription is active but the flag lagged", async () => {
+    db.profiles = {
+      data: { verified: false, premium_until: "2026-11-19T12:00:00.000Z" },
+      error: null,
+    };
     const res = (await invoke(subs.fetchMySubscription)) as StateResult;
-    expect(res).toMatchObject({ verificationStatus: "pending", live: true });
+    expect(callsTo("profiles", "update")).toEqual([{ verified: true }]);
+    expect(res).toMatchObject({ premiumActive: true, verified: true, live: true });
+  });
+
+  it("keeps reporting the stored state when the reconcile write fails", async () => {
+    db.profiles = {
+      data: { verified: true, premium_until: "2026-10-01T00:00:00.000Z" },
+      error: null,
+    };
+    db.updateError = new Error("permission denied for table profiles");
+    const res = (await invoke(subs.fetchMySubscription)) as StateResult;
+    // Honest read: badge stays as stored, the period still reports expired.
+    expect(res).toMatchObject({ premiumActive: false, verified: true, live: true });
   });
 
   it("degrades to live:false when the schema is missing", async () => {
     db.profiles = { data: null, error: new Error("column profiles.premium_until does not exist") };
-    db.requests = { data: null, error: null };
     const res = (await invoke(subs.fetchMySubscription)) as StateResult;
-    expect(res.live).toBe(false);
-    expect(res.premiumActive).toBe(false);
-    expect(res.verificationStatus).toBe("none");
+    expect(res).toMatchObject({ live: false, premiumActive: false, verified: false });
   });
 });
 
 describe("activatePremium", () => {
-  it("writes a 30-day expiry and returns the activated state", async () => {
+  it("writes a 30-day expiry + the verified badge and returns the activated state", async () => {
     db.profiles = { data: { verified: false, premium_until: null }, error: null };
-    db.requests = { data: null, error: null };
     const res = (await invoke(subs.activatePremium)) as StateResult;
-    const writes = callsTo("profiles", "update") as { premium_until: string }[];
+    const writes = callsTo("profiles", "update") as { premium_until: string; verified: boolean }[];
     expect(writes).toHaveLength(1);
     const premiumUntil = writes[0]?.premium_until ?? "";
     expect(premiumUntil).not.toBe("");
     const delta = Date.parse(premiumUntil) - Date.now();
     expect(delta).toBeGreaterThan(30 * 86_400_000 - 5_000);
     expect(delta).toBeLessThan(30 * 86_400_000 + 5_000);
-    expect(res).toMatchObject({ premiumActive: true, live: true });
+    // The paid-only rule on write: subscribers get the badge immediately.
+    expect(writes[0]?.verified).toBe(true);
+    expect(res).toMatchObject({ premiumActive: true, verified: true, live: true });
   });
 
   it("extends an active period from its current expiry", async () => {
     db.profiles = {
-      data: { verified: false, premium_until: "2026-11-19T12:00:00.000Z" },
+      data: { verified: true, premium_until: "2026-11-19T12:00:00.000Z" },
       error: null,
     };
-    db.requests = { data: null, error: null };
     await invoke(subs.activatePremium);
-    const writes = callsTo("profiles", "update") as { premium_until: string }[];
+    const writes = callsTo("profiles", "update") as { premium_until: string; verified: boolean }[];
     expect(writes[0]?.premium_until).toBe("2026-12-19T12:00:00.000Z");
+    expect(writes[0]?.verified).toBe(true);
   });
 
   it("does not pretend to subscribe when the write fails", async () => {
     db.profiles = { data: { verified: false, premium_until: null }, error: null };
-    db.requests = { data: null, error: null };
     db.updateError = new Error("relation does not exist");
     const res = (await invoke(subs.activatePremium)) as StateResult;
     // The write was rejected, so the state read still reports the truth:
-    // no premium — even though the read path itself is healthy.
+    // no premium, no badge — even though the read path itself is healthy.
     expect(res.premiumActive).toBe(false);
     expect(res.premiumUntil).toBeNull();
+    expect(res.verified).toBe(false);
   });
 });
 
 describe("cancelPremium", () => {
-  it("clears premium_until and returns the inactive state", async () => {
+  it("clears the period and the badge together", async () => {
     db.profiles = {
-      data: { verified: false, premium_until: "2026-11-19T12:00:00.000Z" },
+      data: { verified: true, premium_until: "2026-11-19T12:00:00.000Z" },
       error: null,
     };
-    db.requests = { data: null, error: null };
     const res = (await invoke(subs.cancelPremium)) as StateResult;
-    expect(callsTo("profiles", "update")).toEqual([{ premium_until: null }]);
-    expect(res).toMatchObject({ premiumUntil: null, premiumActive: false, live: true });
-  });
-});
-
-describe("requestVerification", () => {
-  it("files a pending request (clears any stale one first)", async () => {
-    db.profiles = { data: { verified: false, premium_until: null }, error: null };
-    db.requests = { data: null, error: null };
-    const res = (await invoke(subs.requestVerification, { note: "News org" })) as StateResult;
-    expect(callsTo("verification_requests", "delete")).toHaveLength(1);
-    expect(callsTo("verification_requests", "insert")).toEqual([
-      { user_id: "uid-TEST", status: "pending", reviewer_note: "News org" },
-    ]);
-    expect(res).toMatchObject({ verificationStatus: "pending", live: true });
-  });
-
-  it("never files a request for an already-verified account", async () => {
-    db.profiles = { data: { verified: true, premium_until: null }, error: null };
-    db.requests = { data: null, error: null };
-    const res = (await invoke(subs.requestVerification)) as StateResult;
-    expect(callsTo("verification_requests", "insert")).toHaveLength(0);
-    expect(callsTo("verification_requests", "delete")).toHaveLength(0);
-    expect(res).toMatchObject({ verified: true, verificationStatus: "verified" });
-  });
-
-  it("still returns state when the queue table is missing", async () => {
-    db.profiles = { data: { verified: false, premium_until: null }, error: null };
-    db.requests = { data: null, error: null };
-    db.insertError = new Error("relation verification_requests does not exist");
-    const res = (await invoke(subs.requestVerification)) as StateResult;
-    expect(res).toMatchObject({ verificationStatus: "none", live: true });
+    expect(callsTo("profiles", "update")).toEqual([{ premium_until: null, verified: false }]);
+    expect(res).toMatchObject({
+      premiumUntil: null,
+      premiumActive: false,
+      verified: false,
+      live: true,
+    });
   });
 });

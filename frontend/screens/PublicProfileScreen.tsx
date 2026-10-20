@@ -5,7 +5,6 @@ import {
   BadgeCheck,
   Ban,
   Check,
-  Gem,
   HeartHandshake,
   ImagePlus,
   Link2,
@@ -329,9 +328,8 @@ export function PublicProfileScreen({ username }: { username: string }) {
           <h2 className="min-w-0 break-words text-xl font-bold tracking-tight text-foreground">
             {profile.display_name}
           </h2>
-          {profile.verified && <BadgeCheck className="size-4.5 text-brand" />}
-          {isPremiumActive(profile.premium_until) && (
-            <Gem className="size-4.5 text-amber-500" aria-label="WIZZ Premium" />
+          {(profile.verified || isPremiumActive(profile.premium_until)) && (
+            <BadgeCheck className="size-4.5 text-brand" aria-label="Verified" />
           )}
           {isPrivate && (
             <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
