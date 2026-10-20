@@ -9,7 +9,6 @@ import type {
   NewsArticle,
   Post,
   ShortVideo,
-  Story,
   TrendingTopic,
 } from "../domain/types";
 
@@ -99,28 +98,6 @@ export const creators: Creator[] = [
 
 const now = Date.UTC(2026, 7, 27, 12, 0, 0);
 const minutesAgo = (m: number) => new Date(now - m * 60_000).toISOString();
-
-export const stories: Story[] = [
-  ["u-maya", "story/maya-golden", 12, false],
-  ["u-leo", "story/leo-ridge", 48, false],
-  ["u-nina", "story/nina-studio", 96, true],
-  ["u-sam", "story/sam-set", 140, false],
-  ["u-riko", "story/riko-booth", 220, true],
-  ["u-june", "story/june-market", 300, true],
-].map(([authorId, key, mins, viewed]) => ({
-  id: `st-${key as string}`,
-  authorId: authorId as string,
-  media: {
-    kind: "image" as const,
-    objectKey: key as string,
-    width: 1080,
-    height: 1920,
-    blurColor: "oklch(0.7 0.05 295)",
-    alt: "Story",
-  },
-  createdAt: minutesAgo(mins as number),
-  viewed: viewed as boolean,
-}));
 
 export const trending: TrendingTopic[] = [
   {

@@ -121,8 +121,12 @@ export const newsStoriesQueryOptions = queryOptions({
         })),
       };
     } catch (e) {
-      if (!isMissingTable(e)) throw e;
-      return { live: false, stories: await hashtagStories() };
+      if (!isMissingTable(e)) {
+        // Network error, auth failure, or other transient issue — degrade to
+        // an empty feed instead of crashing the route into the error boundary.
+        return { live: false, stories: [] };
+      }
+      return { live: false, stories: await hashtagStories().catch(() => []) };
     }
   },
 });

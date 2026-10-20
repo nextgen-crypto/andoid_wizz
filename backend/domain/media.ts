@@ -64,3 +64,50 @@ export function videoUrl(objectKey: string): string {
   const base = process.env["MEDIA_BASE_URL"]?.replace(/\/$/, "");
   return base ? `${base}/${objectKey}` : `https://cdn.buzz.app/${objectKey}`;
 }
+
+/** Quality ladder for adaptive bitrate streaming. */
+export interface VideoQuality {
+  /** Human-readable label shown in the quality selector. */
+  label: string;
+  /** Vertical resolution (e.g. 1080 for 1080p). */
+  height: number;
+  /** Target bitrate in bits per second. */
+  bitrate: number;
+  /** Suffix appended to the base object key (e.g. "_1080p"). */
+  suffix: string;
+}
+
+export const VIDEO_QUALITIES: VideoQuality[] = [
+  { label: "1080p", height: 1080, bitrate: 5_000_000, suffix: "_1080p" },
+  { label: "720p", height: 720, bitrate: 2_500_000, suffix: "_720p" },
+  { label: "480p", height: 480, bitrate: 1_000_000, suffix: "_480p" },
+  { label: "360p", height: 360, bitrate: 500_000, suffix: "_360p" },
+  { label: "240p", height: 240, bitrate: 250_000, suffix: "_240p" },
+];
+
+/**
+ * Resolve the URL for a specific quality rendition. Falls back to the
+ * original object key when no rendition suffix matches (single-file videos).
+ */
+export function videoQualityUrl(objectKey: string, quality: VideoQuality): string {
+  if (objectKey.startsWith("http")) return objectKey;
+  const dotIndex = objectKey.lastIndexOf(".");
+  const base = dotIndex > 0 ? objectKey.slice(0, dotIndex) : objectKey;
+  const ext = dotIndex > 0 ? objectKey.slice(dotIndex) : ".mp4";
+  return videoUrl(`${base}${quality.suffix}${ext}`);
+}
+
+/**
+ * Pick the highest quality whose bitrate fits within the given bandwidth.
+ * Returns the lowest quality when bandwidth is insufficient for all.
+ */
+export function pickQualityForBandwidth(
+  bandwidthBps: number,
+  qualities: VideoQuality[] = VIDEO_QUALITIES,
+): VideoQuality {
+  const sorted = [...qualities].sort((a, b) => b.bitrate - a.bitrate);
+  for (const q of sorted) {
+    if (bandwidthBps >= q.bitrate * 1.2) return q;
+  }
+  return sorted[sorted.length - 1] ?? VIDEO_QUALITIES[VIDEO_QUALITIES.length - 1]!;
+}

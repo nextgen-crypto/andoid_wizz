@@ -20,7 +20,6 @@ import {
   externalPosts,
   posts,
   shorts,
-  stories,
   trending,
 } from "../database/seed";
 import type { CursorPage, Creator, Post, TrendingTopic } from "../domain/types";
@@ -480,15 +479,22 @@ async function getCandidates(
       Promise.resolve(rankedSeedPosts()),
       fetchPostStats(viewerClient).catch(() => new Map<string, number>()),
     ]);
-    const seed: FeedItem[] = seedPosts.map((post, i) => {
-      const clip = shorts[i % shorts.length];
-      const attachVideo = post.media.length === 0 || i % 3 === 2;
-      return {
-        post,
-        author: toAuthor(post.authorId),
-        ...(attachVideo && clip ? { clipObjectKey: clip.video.objectKey } : {}),
-      };
-    });
+    // Seed posts are a graceful-degradation fallback only: when the database
+    // has no published posts (fresh project, missing tables), show the demo
+    // catalogue instead of a blank screen. Once real content exists, the feed
+    // is real-only — no hardcoded mock posts mixed in.
+    const seed: FeedItem[] =
+      real.length === 0
+        ? seedPosts.map((post, i) => {
+            const clip = shorts[i % shorts.length];
+            const attachVideo = post.media.length === 0 || i % 3 === 2;
+            return {
+              post,
+              author: toAuthor(post.authorId),
+              ...(attachVideo && clip ? { clipObjectKey: clip.video.objectKey } : {}),
+            };
+          })
+        : [];
     return { real, seed, stats };
   };
 
@@ -920,22 +926,7 @@ export async function getStoryRail(
 ): Promise<StoryItem[]> {
   const load = async (): Promise<StoryItem[]> => {
     const real = await fetchRealStories(viewerClient).catch(() => []);
-    const seed = [...stories]
-      .sort((a, b) => Number(a.viewed) - Number(b.viewed) || b.createdAt.localeCompare(a.createdAt))
-      .map((story): StoryItem => ({
-        id: story.id,
-        author: toAuthor(story.authorId),
-        mediaUrl: imageUrl(story.media.objectKey, "thumbnail"),
-        mediaType: "image",
-        caption: "",
-        background: "#111827",
-        overlays: [],
-        createdAt: story.createdAt,
-        expiresAt: null,
-        viewed: story.viewed,
-        real: false,
-      }));
-    return [...real, ...seed];
+    return real;
   };
 
   return userId === CURRENT_USER_ID

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { creators, news, shorts, stories, videos } from "@/backend/database/seed";
+import { creators, news, shorts, videos } from "@/backend/database/seed";
 import {
   fetchAdminReports,
   resolveAdminReport,
@@ -27,7 +27,7 @@ const tz = (n: number) => `TZS ${n.toLocaleString()}`;
 /* ---------------------------------------------------------- CONTENT */
 export function ContentSection({ m, ops, act }: SectionProps) {
   const [tab, setTab] = useState<
-    "posts" | "videos" | "shorts" | "stories" | "news" | "comments" | "tags" | "audio" | "live"
+    "posts" | "videos" | "shorts" | "news" | "comments" | "tags" | "audio" | "live"
   >("posts");
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["admin-posts"],
@@ -69,32 +69,22 @@ export function ContentSection({ m, ops, act }: SectionProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
-        {(
-          [
-            "posts",
-            "videos",
-            "shorts",
-            "stories",
-            "news",
-            "comments",
-            "tags",
-            "audio",
-            "live",
-          ] as const
-        ).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn(
-              "rounded-full px-4 py-2 text-xs font-bold capitalize",
-              tab === t
-                ? "bg-foreground text-background"
-                : "bg-card text-muted-foreground border border-border",
-            )}
-          >
-            {t}
-          </button>
-        ))}
+        {(["posts", "videos", "shorts", "news", "comments", "tags", "audio", "live"] as const).map(
+          (t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "rounded-full px-4 py-2 text-xs font-bold capitalize",
+                tab === t
+                  ? "bg-foreground text-background"
+                  : "bg-card text-muted-foreground border border-border",
+              )}
+            >
+              {t}
+            </button>
+          ),
+        )}
       </div>
 
       {tab === "posts" && (
@@ -199,46 +189,6 @@ export function ContentSection({ m, ops, act }: SectionProps) {
                           hidden: [
                             ...st.hidden,
                             { kind: "short", refId: s.id, reason: "admin hide" },
-                          ],
-                        }))
-                      }
-                      className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold"
-                    >
-                      Hide
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-      )}
-
-      {tab === "stories" && (
-        <Panel title={`Stories (${stories.length})`} hint="Seed story rail">
-          <ul className="divide-y divide-border">
-            {stories.map((s) => {
-              const a = creators.find((c) => c.id === s.authorId);
-              return (
-                <li key={s.id} className="flex items-center gap-3 py-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold">
-                      {a?.displayName}&apos;s story
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      @{a?.username} · {s.viewed ? "viewed" : "unviewed"}
-                    </span>
-                  </span>
-                  {isHidden("story", s.id) ? (
-                    <Badge tone="red">hidden</Badge>
-                  ) : (
-                    <button
-                      onClick={() =>
-                        act("Hide story", s.id, (st) => ({
-                          ...st,
-                          hidden: [
-                            ...st.hidden,
-                            { kind: "story", refId: s.id, reason: "admin hide" },
                           ],
                         }))
                       }

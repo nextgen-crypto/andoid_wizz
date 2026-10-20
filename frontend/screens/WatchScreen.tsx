@@ -12,13 +12,14 @@ import {
   Pause,
   PictureInPicture2,
   Play,
+  Settings,
   Share2,
   ThumbsDown,
   ThumbsUp,
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { imageUrl, videoUrl } from "@/backend/domain/media";
+import { imageUrl, videoQualityUrl, videoUrl } from "@/backend/domain/media";
 import { relatedQueryOptions, videoQueryOptions } from "@/frontend/queries/sections";
 import { getWatchProgress, saveWatchProgress } from "@/frontend/lib/watchProgress";
 import { AppShell } from "@/frontend/components/AppShell";
@@ -29,6 +30,7 @@ import { useSession } from "@/frontend/hooks/useSession";
 import { fetchFollowCounts } from "@/frontend/hooks/followData";
 import { useFollowState } from "@/frontend/hooks/usePublicProfile";
 import { useQuery } from "@tanstack/react-query";
+import { useAdaptiveQuality } from "@/frontend/hooks/useAdaptiveQuality";
 import { cn } from "@/lib/utils";
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
@@ -48,6 +50,7 @@ function formatDuration(seconds: number): string {
 
 function Player({
   src,
+  objectKey,
   poster,
   title,
   onDoubleLike,
@@ -55,6 +58,7 @@ function Player({
   startAtSeconds,
 }: {
   src: string;
+  objectKey: string;
   poster: string;
   title: string;
   onDoubleLike: () => void;
@@ -78,7 +82,26 @@ function Player({
   const [fullscreen, setFullscreen] = useState(false);
   const [controls, setControls] = useState(true);
   const [speedOpen, setSpeedOpen] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
+
+  // Adaptive bitrate: auto-switches quality based on measured bandwidth.
+  const abr = useAdaptiveQuality(objectKey, true);
+  const qualitySrc = videoQualityUrl(objectKey, abr.quality);
+  const lastQualityRef = useRef(abr.quality);
+
+  // Swap video source when ABR picks a different quality, preserving position.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (abr.quality === lastQualityRef.current) return;
+    lastQualityRef.current = abr.quality;
+    const wasPlaying = !v.paused;
+    const pos = v.currentTime;
+    v.src = qualitySrc;
+    v.currentTime = pos;
+    if (wasPlaying) void v.play().catch(() => undefined);
+  }, [abr.quality, qualitySrc]);
 
   useEffect(() => {
     setPipSupported(
@@ -172,7 +195,7 @@ function Player({
     >
       <video
         ref={videoRef}
-        src={src}
+        src={qualitySrc}
         poster={poster}
         playsInline
         preload="metadata"
@@ -325,7 +348,52 @@ function Player({
               </div>
             )}
           </div>
-          <span className="rounded-md px-2 py-1.5 text-xs font-bold text-white/80">Auto</span>
+          <div className="relative">
+            <button
+              aria-label="Video quality"
+              onClick={() => setQualityOpen((v) => !v)}
+              className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-bold text-white/80 hover:bg-white/15"
+            >
+              <Settings className="size-3.5" />
+              {abr.mode === "auto" ? `Auto (${abr.quality.label})` : abr.quality.label}
+            </button>
+            {qualityOpen && (
+              <div className="absolute bottom-9 right-0 overflow-hidden rounded-xl bg-black/90 py-1">
+                <button
+                  onClick={() => {
+                    abr.setAuto();
+                    setQualityOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs font-semibold hover:bg-white/15",
+                    abr.mode === "auto" ? "text-brand" : "text-white",
+                  )}
+                >
+                  Auto {abr.mode === "auto" && `(${abr.quality.label})`}
+                </button>
+                {abr.available.map((q) => (
+                  <button
+                    key={q.label}
+                    onClick={() => {
+                      abr.setQuality(q);
+                      setQualityOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs font-semibold hover:bg-white/15",
+                      abr.mode === "manual" && abr.quality.label === q.label
+                        ? "text-brand"
+                        : "text-white",
+                    )}
+                  >
+                    {q.label}
+                    <span className="ml-auto text-[10px] text-white/50">
+                      {(q.bitrate / 1_000_000).toFixed(1)} Mbps
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {pipSupported && (
             <button
               aria-label="Picture in picture"
@@ -434,6 +502,7 @@ export function WatchScreen() {
             <Player
               key={item.video.id}
               src={videoUrl(item.video.video.objectKey)}
+              objectKey={item.video.video.objectKey}
               poster={imageUrl(item.video.video.posterKey, "large", 16 / 9)}
               title={item.video.title}
               startAtSeconds={resumeFromSeconds}
