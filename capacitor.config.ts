@@ -6,8 +6,10 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // shell (WIZZ_TARGET=app) and scripts/copy-app-bundle.mjs stages it into
 // webDir, which keeps the SSR production build from clobbering it.
 const config: CapacitorConfig = {
-  appId: "buzz.com", // badilisha - lazima iwe unique, reverse-domain style
-  appName: "wizz.app", // jina la app yako halisi
+  // Play Store package id — must be unique, reverse-domain style. Changing it
+  // later forces every installed build to uninstall/reinstall (no updates).
+  appId: "com.wizz.app",
+  appName: "WIZZ",
   webDir: "app-dist",
   server: {
     // Capacitor's default scheme for Android; kept explicit so the WebView

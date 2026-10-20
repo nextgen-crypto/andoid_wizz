@@ -15,6 +15,7 @@ build/
 local.properties
 .DS_Store
 *.apk
+*.aab
 .vercel
 android/
 www/
