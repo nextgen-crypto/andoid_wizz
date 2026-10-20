@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/frontend/hooks/useSession";
 import { PasswordReset } from "@/frontend/components/auth/PasswordReset";
+import { EmailCodeLogin } from "@/frontend/components/auth/EmailCodeLogin";
 import { formatWait, useLoginThrottle } from "@/frontend/hooks/useLoginThrottle";
 import { authRedirectOrigin } from "@/frontend/lib/native";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ export function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [codeMode, setCodeMode] = useState(false);
   const throttle = useLoginThrottle(email);
 
   useEffect(() => {
@@ -182,68 +184,95 @@ export function AuthScreen() {
         ))}
       </div>
 
-      <form onSubmit={submit} className="mt-5 flex flex-col gap-3">
-        {mode === "signup" && (
+      {codeMode ? (
+        <EmailCodeLogin
+          mode={mode}
+          name={name}
+          onBack={() => {
+            setCodeMode(false);
+            setError(null);
+            setNotice(null);
+          }}
+        />
+      ) : (
+        <form onSubmit={submit} className="mt-5 flex flex-col gap-3">
+          {mode === "signup" && (
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Display name"
+              autoComplete="name"
+              className="w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-brand"
+            />
+          )}
           <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Display name"
-            autoComplete="name"
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            autoComplete="email"
             className="w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-brand"
           />
-        )}
-        <input
-          required
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-          autoComplete="email"
-          className="w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-brand"
-        />
-        <input
-          required
-          type="password"
-          minLength={6}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          className="w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-brand"
-        />
+          <input
+            required
+            type="password"
+            minLength={6}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            className="w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-brand"
+          />
 
-        {error && <p className="text-sm font-medium text-live">{error}</p>}
-        {notice && <p className="text-sm font-medium text-brand">{notice}</p>}
+          {error && <p className="text-sm font-medium text-live">{error}</p>}
+          {notice && <p className="text-sm font-medium text-brand">{notice}</p>}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="mt-1 inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-bold text-brand-foreground disabled:opacity-60"
-        >
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          {mode === "signup" ? "Create account" : "Sign in"}
-        </button>
-        {mode === "signin" && (
           <button
-            type="button"
-            onClick={() => {
-              setResetting(true);
-              setError(null);
-              setNotice(null);
-            }}
+            type="submit"
             disabled={busy}
-            className="self-center text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline"
+            className="mt-1 inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-bold text-brand-foreground disabled:opacity-60"
           >
-            Forgot password?
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {mode === "signup" ? "Create account" : "Sign in"}
           </button>
-        )}
-      </form>
+          {mode === "signin" && (
+            <button
+              type="button"
+              onClick={() => {
+                setResetting(true);
+                setError(null);
+                setNotice(null);
+              }}
+              disabled={busy}
+              className="self-center text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Forgot password?
+            </button>
+          )}
+        </form>
+      )}
 
       <div className="my-5 flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
         <span className="text-xs text-muted-foreground">or</span>
         <span className="h-px flex-1 bg-border" />
       </div>
+
+      {!codeMode && (
+        <button
+          type="button"
+          onClick={() => {
+            setCodeMode(true);
+            setError(null);
+            setNotice(null);
+          }}
+          disabled={busy}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-bold text-brand-foreground disabled:opacity-60"
+        >
+          Email me a sign-in code
+        </button>
+      )}
 
       <button
         type="button"
