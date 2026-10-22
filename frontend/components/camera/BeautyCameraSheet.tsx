@@ -41,6 +41,10 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Set when the sheet closes or the stream restarts, so a pending countdown
+  // or a recorder stop fired by our own cleanup never captures a photo/clip
+  // the user already cancelled.
+  const cancelledRef = useRef(false);
 
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [preset, setPreset] = useState<FilterPreset>(filterPresets[1] ?? filterPresets[0]!);
@@ -68,6 +72,7 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
   const css = filterCss(settings, useCustom ? undefined : preset.extra, strength);
 
   const stop = useCallback(() => {
+    cancelledRef.current = true;
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -82,9 +87,14 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
       return;
     }
     let cancelled = false;
+    cancelledRef.current = false;
     setError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("The camera is not available in this app context.");
+      return;
+    }
     navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: facing }, audio: mode !== "photo" })
+      .getUserMedia({ video: { facingMode: facing }, audio: mode !== "photo" })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -97,7 +107,13 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
         }
         setReady(true);
       })
-      .catch(() => setError("Camera access was blocked. Allow the camera to use face filters."));
+      .catch(() =>
+        setError(
+          mode === "photo"
+            ? "Camera access was blocked. Allow the camera to use face filters."
+            : "Camera or microphone access was blocked. Allow both to record.",
+        ),
+      );
     return () => {
       cancelled = true;
       stop();
@@ -124,17 +140,27 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
       }
       setCountdown(null);
     }
+    // The sheet was closed or the stream restarted during the countdown:
+    // don't capture a photo the user already cancelled.
+    if (cancelledRef.current) return;
     if (flash !== "off") {
       setFlashFire(true);
       window.setTimeout(() => setFlashFire(false), 220);
     }
     setBusy(true);
     try {
+      if (!video.videoWidth || !video.videoHeight) {
+        setError("The camera is still starting — try again in a moment.");
+        return;
+      }
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) {
+        setError("Could not capture on this device — try again.");
+        return;
+      }
       ctx.filter = css;
       if (facing === "user") {
         ctx.translate(canvas.width, 0);
@@ -154,7 +180,11 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
         ctx.fillText(overlayText.trim(), canvas.width / 2, canvas.height / 2, canvas.width * 0.9);
       }
       const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.92));
-      if (!blob) return;
+      if (cancelledRef.current) return;
+      if (!blob) {
+        setError("Could not capture that photo — try again.");
+        return;
+      }
       onCapture?.(new File([blob], `wizz-${Date.now()}.jpg`, { type: "image/jpeg" }));
       onClose();
     } finally {
@@ -165,11 +195,28 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
   function startRecording() {
     const stream = streamRef.current;
     if (!stream) return;
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream);
+    } catch {
+      setError("Video recording is not supported on this device.");
+      return;
+    }
     chunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
     recorder.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
+    recorder.onerror = () => setError("Recording failed — try again.");
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
+      const chunks = chunksRef.current;
+      chunksRef.current = [];
+      // Cleanup-triggered stop (sheet closed or flip restarted the stream):
+      // never attach a clip the user already cancelled.
+      if (cancelledRef.current) return;
+      const blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+      if (!blob.size) {
+        setError("That recording came out empty — try again.");
+        setRecording(false);
+        return;
+      }
       onCapture?.(new File([blob], `wizz-short-${Date.now()}.webm`, { type: blob.type }));
       onClose();
     };
@@ -235,8 +282,11 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
         <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 flex-col items-center gap-4">
           <button
             aria-label="Flip camera"
+            // Flipping restarts the stream; blocked mid-countdown/mid-record so
+            // it can't silently cancel the pending take.
+            disabled={recording || countdown !== null}
             onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
-            className="press flex flex-col items-center gap-1"
+            className={`press flex flex-col items-center gap-1 ${recording || countdown !== null ? "opacity-40" : ""}`}
           >
             <RefreshCw
               className="size-6 text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]"

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Camera, Loader2 } from "lucide-react";
 import { Sheet } from "@/frontend/components/overlays/Sheet";
 import { uploadAndSign } from "@/frontend/lib/storageUpload";
+import { friendlyPublishError } from "@/frontend/lib/mediaFormat";
 import type { MyProfile } from "@/frontend/hooks/useMyProfile";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -55,7 +56,7 @@ export function EditProfileSheet({
         }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not upload that picture.");
+      setError(friendlyPublishError(e, "Could not upload that picture."));
     } finally {
       setUploading(false);
     }
@@ -89,8 +90,14 @@ export function EditProfileSheet({
       setNotice("Profile updated.");
       setTimeout(onClose, 500);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not save your profile.";
-      setError(message.includes("duplicate") ? "That username is already taken." : message);
+      // The duplicate check must see the raw database prose — friendlyPublishError
+      // maps "duplicate" away to a generic sentence before this test could run.
+      const raw = e instanceof Error ? e.message : "";
+      setError(
+        raw.includes("duplicate")
+          ? "That username is already taken."
+          : friendlyPublishError(e, "Could not save your profile."),
+      );
     } finally {
       setSaving(false);
     }

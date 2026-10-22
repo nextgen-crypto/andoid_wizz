@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { resolveStoredMime } from "@/frontend/lib/mediaFormat";
 
 const TEN_YEARS = 60 * 60 * 24 * 365 * 10;
 /**
@@ -17,11 +18,15 @@ async function uploadObject(
   file: File | Blob,
   opts?: UploadOptions,
 ): Promise<void> {
+  // Resolve the type once here instead of trusting each call site: most pick
+  // flows never pass one, and an empty/application/* label is what storage
+  // MIME allowlists reject with a 415.
+  const contentType = resolveStoredMime(path, file, opts?.contentType);
   const uploadOptions =
-    opts?.contentType || opts?.upsert !== undefined
+    contentType || opts?.upsert !== undefined
       ? {
-          ...(opts.contentType ? { contentType: opts.contentType } : {}),
-          ...(opts.upsert !== undefined ? { upsert: opts.upsert } : {}),
+          ...(contentType ? { contentType } : {}),
+          ...(opts?.upsert !== undefined ? { upsert: opts.upsert } : {}),
         }
       : undefined;
   const { error } = await supabase.storage.from(bucket).upload(path, file, uploadOptions);

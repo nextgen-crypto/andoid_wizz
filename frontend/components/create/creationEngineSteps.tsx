@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   Check,
@@ -19,7 +19,6 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { probeVideoMetadata, videoPreviewable } from "@/frontend/lib/mediaFormat";
 import {
   filterCss,
   filterPresets,
@@ -295,11 +294,15 @@ export function VideoStep({
   onContinue: () => void;
   error: string | null;
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [tab, setTab] = useState<"trim" | "sound" | "style">("trim");
   // canPlayType is only a guess — some codecs report "maybe" and still fail to
   // decode. Track the element's own error so a black box never masquerades as
   // a broken upload: it degrades to the same "still posts fine" reassurance.
   const [decodeFailed, setDecodeFailed] = useState(false);
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+  }, [speed]);
   if (!videoUrl) {
     return (
       <div className="grid grid-cols-2 gap-3 px-1 py-1">
@@ -325,7 +328,7 @@ export function VideoStep({
   return (
     <div className="space-y-3">
       <video
-        key={`${speed}-${muted}`}
+        ref={videoRef}
         src={videoUrl}
         controls
         playsInline

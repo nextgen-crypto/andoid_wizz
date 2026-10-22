@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { ImagePlus, Loader2, Pause, Play, Trash2 } from "lucide-react";
 import { getAds, notifyAdsChanged, saveAds, type Ad } from "@/frontend/components/ads/ads";
 import { uploadAndSign } from "@/frontend/lib/storageUpload";
+import { friendlyPublishError } from "@/frontend/lib/mediaFormat";
 
 const PLANS = [
   { price: 10, label: "$10 · Starter", reach: "±1k views" },
@@ -43,7 +44,7 @@ export function AdManager({
         }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed.");
+      setError(friendlyPublishError(e, "Upload failed."));
     } finally {
       setUploading(false);
     }

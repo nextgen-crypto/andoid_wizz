@@ -4,6 +4,7 @@ import { Panel, Field, Toggle, Empty, inputCls } from "@/frontend/components/adm
 import { getSlides, saveSlides, type ShowcaseSlide } from "@/frontend/components/showcase/showcase";
 import { ShowcaseCarousel } from "@/frontend/components/showcase/ShowcaseCarousel";
 import { uploadAndSign } from "@/frontend/lib/storageUpload";
+import { friendlyPublishError } from "@/frontend/lib/mediaFormat";
 import { cn } from "@/lib/utils";
 
 const EMPTY_FORM = {
@@ -47,7 +48,7 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
       });
       setForm((f) => ({ ...f, imageUrl: url }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed.");
+      setError(friendlyPublishError(e, "Upload failed."));
     } finally {
       setUploading(false);
     }

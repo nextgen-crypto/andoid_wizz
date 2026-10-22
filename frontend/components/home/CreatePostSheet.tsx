@@ -6,7 +6,15 @@ import { Camera, Crop, ImagePlus, Loader2, MapPin, X } from "lucide-react";
 import { Sheet } from "@/frontend/components/overlays/Sheet";
 import { CropSheet } from "@/frontend/components/create/CropSheet";
 import { uploadAndSign, uploadStoredObject } from "@/frontend/lib/storageUpload";
-import { IMAGE_MAX_BYTES, bakeOrOriginal, sizeError } from "@/frontend/lib/mediaFormat";
+import {
+  IMAGE_MAX_BYTES,
+  bakeOrOriginal,
+  extOf,
+  friendlyPublishError,
+  mimeMismatch,
+  resolveUploadMime,
+  sizeError,
+} from "@/frontend/lib/mediaFormat";
 import { BeautyCameraSheet } from "@/frontend/components/camera/BeautyCameraSheet";
 import {
   applyFilterToFile,
@@ -56,6 +64,12 @@ export function CreatePostSheet({ open, onClose }: { open: boolean; onClose: () 
       setError(sizeError("image"));
       return;
     }
+    // Same gate as the creation engine: only a MIME that positively names
+    // another kind rejects — empty/application/* Android picks preview fine.
+    if (mimeMismatch(file, "image")) {
+      setError("That file is not an image.");
+      return;
+    }
     setError(null);
     setPhoto(file);
     setPreview(URL.createObjectURL(file));
@@ -70,7 +84,12 @@ export function CreatePostSheet({ open, onClose }: { open: boolean; onClose: () 
         preset.id === "none"
           ? photo
           : await bakeOrOriginal(photo, (f) => applyFilterToFile(f, preset.settings, preset.extra));
-      const path = `${user.id}/post-${Date.now()}.jpg`;
+      // Name the object after what actually gets uploaded: a bake hands back
+      // canvas JPEG bytes, an untouched fallback keeps the original extension.
+      const bakedFile = baked instanceof File ? baked : photo;
+      const photoMime = resolveUploadMime(baked, "image", extOf(photo));
+      const extension = photoMime === "image/jpeg" ? "jpg" : extOf(bakedFile) || "bin";
+      const path = `${user.id}/post-${Date.now()}.${extension}`;
       const capabilities = await inspectPostingSchema();
       if (capabilities.media) {
         await uploadStoredObject("post-images", path, baked);
@@ -117,7 +136,7 @@ export function CreatePostSheet({ open, onClose }: { open: boolean; onClose: () 
       ]);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not publish your post.");
+      setError(friendlyPublishError(e, "Could not publish your post."));
     } finally {
       setPosting(false);
     }

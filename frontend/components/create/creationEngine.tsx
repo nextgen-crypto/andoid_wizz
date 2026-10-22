@@ -34,15 +34,14 @@ import {
 } from "@/frontend/lib/storageUpload";
 import {
   IMAGE_MAX_BYTES,
-  MEDIA_EXTS,
   VIDEO_MAX_BYTES,
   bakeOrOriginal,
   extOf,
   friendlyPublishError,
   mimeMismatch,
   probeVideoMetadata,
+  resolveUploadMime,
   sizeError,
-  videoPreviewable,
   type VideoMetadata,
 } from "@/frontend/lib/mediaFormat";
 import { extractHashtags } from "@/frontend/lib/hashtags";
@@ -196,6 +195,9 @@ export function CreationEngine({
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
+  // False while the metadata probe runs: the preview stays optimistic until the
+  // probe *settles* — only a settled failure flips `playable` off.
+  const [videoProbeDone, setVideoProbeDone] = useState(false);
   const [trim, setTrim] = useState<[number, number]>([0, 100]);
   const [speed, setSpeed] = useState<number>(1);
   const [muted, setMuted] = useState(false);
@@ -294,12 +296,21 @@ export function CreationEngine({
     };
   }, [step]);
 
-  useEffect(() => {
-    return () => {
+  // Revoke only the URL that actually changed. The old combined cleanup fired
+  // whenever *either* URL changed and revoked both — updating the photo killed
+  // a healthy video preview (revoked blob → broken-image icon before publish).
+  useEffect(
+    () => () => {
       if (photoUrl) URL.revokeObjectURL(photoUrl);
+    },
+    [photoUrl],
+  );
+  useEffect(
+    () => () => {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
-    };
-  }, [photoUrl, videoUrl]);
+    },
+    [videoUrl],
+  );
 
   function mapKind(k: CreateKind): Step {
     if (k === "photo" || k === "video" || k === "story" || k === "text") return k;
@@ -327,6 +338,8 @@ export function CreationEngine({
   }
 
   function attachPhoto(file: File) {
+    // Attach-time diagnosis: untyped Android picks are the recurring failure.
+    console.log("[attach] photo", file.name, file.type, file.size);
     if (file.size > IMAGE_MAX_BYTES) {
       setError(sizeError("image"));
       return;
@@ -335,24 +348,57 @@ export function CreationEngine({
       setError("That file is not an image.");
       return;
     }
-    // Verify the browser can actually decode this image (catches HEIC, etc.)
-    const testImg = new Image();
-    const testUrl = URL.createObjectURL(file);
-    testImg.onload = () => {
-      URL.revokeObjectURL(testUrl);
+    // Decode test (catches formats this WebView can't render) with a deadline:
+    // some Android builds fire neither onload nor onerror — that used to leave
+    // the picker silently doing nothing. On timeout, attach optimistically:
+    // every format is postable, worst case the local preview renders blank.
+    let settled = false;
+    let timer = 0;
+    const attach = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      let nextUrl: string;
+      try {
+        nextUrl = URL.createObjectURL(file);
+      } catch (e) {
+        // Never leave the picker silent: say so instead of doing nothing.
+        console.error("[attach] photo blob url failed", e);
+        setError("Couldn't open that photo on this device. Try a JPEG or PNG.");
+        return;
+      }
       setError(null);
-      if (photoUrl) URL.revokeObjectURL(photoUrl);
       setPhoto(file);
-      setPhotoUrl(URL.createObjectURL(file));
+      setPhotoUrl(nextUrl);
     };
-    testImg.onerror = () => {
-      URL.revokeObjectURL(testUrl);
-      setError("This image format isn't supported by your browser. Try a JPEG or PNG.");
-    };
-    testImg.src = testUrl;
+    try {
+      const testUrl = URL.createObjectURL(file);
+      const testImg = new Image();
+      timer = window.setTimeout(() => {
+        URL.revokeObjectURL(testUrl);
+        attach();
+      }, 8000);
+      testImg.onload = () => {
+        URL.revokeObjectURL(testUrl);
+        attach();
+      };
+      testImg.onerror = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        URL.revokeObjectURL(testUrl);
+        setError("This image format isn't supported by your browser. Try a JPEG or PNG.");
+      };
+      testImg.src = testUrl;
+    } catch (e) {
+      console.error("[attach] photo probe failed", e);
+      attach();
+    }
   }
 
   function attachVideo(file: File) {
+    // Attach-time diagnosis: name/type/size show exactly what the picker gave.
+    console.log("[attach] video", file.name, file.type, file.size);
     if (file.size > VIDEO_MAX_BYTES) {
       setError(sizeError("video"));
       return;
@@ -362,18 +408,18 @@ export function CreationEngine({
       return;
     }
     setError(null);
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
     setVideoMeta(null);
+    setVideoProbeDone(false);
     setTrim([0, 100]);
     void probeVideoMetadata(file).then((meta) => {
       setVideoMeta(meta);
+      setVideoProbeDone(true);
     });
   }
 
   function clearPhoto() {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
     setPhoto(null);
     setPhotoUrl(null);
     setPresetId("none");
@@ -382,10 +428,10 @@ export function CreationEngine({
   }
 
   function clearVideo() {
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoFile(null);
     setVideoUrl(null);
     setVideoMeta(null);
+    setVideoProbeDone(false);
     setTrim([0, 100]);
     setSpeed(1);
     setMuted(false);
@@ -517,7 +563,8 @@ export function CreationEngine({
       let imagePath: string | null = null;
       let videoPath: string | null = null;
       let imageUrl: string | null = null;
-      let videoUrl: string | null = null;
+      let legacyVideoUrl: string | null = null;
+      let probedMeta: VideoMetadata | null = null;
 
       if (photo && (kind === "photo" || kind === "story")) {
         const baked = await bakeOrOriginal(photo, (file) =>
@@ -529,17 +576,19 @@ export function CreationEngine({
           ),
         );
         const bakedFile = baked instanceof File ? baked : photo;
-        const imageExtension = extOf(bakedFile) || (baked.type === "image/jpeg" ? "jpg" : "bin");
+        // Never forward an empty or application/* type: canvas output and
+        // Android picks both arrive untyped, and a failed bake hands the
+        // original file straight back with whatever type it had.
+        const photoMime = resolveUploadMime(baked, "image", extOf(photo));
+        const imageExtension = photoMime === "image/jpeg" ? "jpg" : extOf(bakedFile) || "bin";
         imagePath = `${user.id}/post-${stamp}.${imageExtension}`;
         uploadedPaths.push(imagePath);
         setProgress(35);
         if (capabilities.media) {
-          await uploadStoredObject("post-images", imagePath, baked, {
-            contentType: baked.type || photo.type || "image/jpeg",
-          });
+          await uploadStoredObject("post-images", imagePath, baked, { contentType: photoMime });
         } else {
           imageUrl = await uploadAndSign("post-images", imagePath, baked, {
-            contentType: baked.type || photo.type || "image/jpeg",
+            contentType: photoMime,
             width: 1280,
           });
         }
@@ -549,22 +598,29 @@ export function CreationEngine({
       if (videoFile && (kind === "video" || kind === "story")) {
         setProgress(35);
         const extension = extOf(videoFile) || "mp4";
+        // The probe is the authority: tapping Publish before it settles used to
+        // store a row with no content_type/dimensions, so re-probe instead of
+        // trusting whatever state happens to be there.
+        probedMeta = videoMeta ?? (await probeVideoMetadata(videoFile));
+        if (!videoMeta) setVideoMeta(probedMeta);
+        // `video/mov` is not a real MIME type — resolve from type/extension.
+        const videoMime = resolveUploadMime(videoFile, "video", extension);
         videoPath = `${user.id}/video-${stamp}.${extension}`;
         uploadedPaths.push(videoPath);
         if (capabilities.media) {
           await uploadStoredObject("post-images", videoPath, videoFile, {
-            contentType: videoFile.type || `video/${extension}`,
+            contentType: videoMime,
           });
         } else {
           const upload = await supabase.storage.from("post-images").upload(videoPath, videoFile, {
-            contentType: videoFile.type || `video/${extension}`,
+            contentType: videoMime,
           });
           if (upload.error) throw upload.error;
           const signed = await supabase.storage
             .from("post-images")
             .createSignedUrl(videoPath, TEN_YEARS);
           if (signed.error) throw signed.error;
-          videoUrl = signed.data.signedUrl;
+          legacyVideoUrl = signed.data.signedUrl;
         }
         setProgress(65);
       }
@@ -580,11 +636,14 @@ export function CreationEngine({
         category: kind === "story" ? "For You" : category,
         ...(capabilities.media
           ? {
+              // All media columns are NOT NULL DEFAULT '' and their CHECKs
+              // explicitly sanction "" — null would violate NOT NULL, so ""
+              // is the schema's marker for "this post has no image/video".
               image_path: imagePath ?? "",
               ...(videoPath ? { video_path: videoPath, video_url: "" } : {}),
             }
-          : videoUrl
-            ? { video_url: videoUrl }
+          : legacyVideoUrl
+            ? { video_url: legacyVideoUrl }
             : {}),
         ...(capabilities.settings
           ? {
@@ -592,12 +651,11 @@ export function CreationEngine({
               comments_enabled: allowComments,
             }
           : {}),
-        ...(videoUrl ? { video_url: videoUrl } : {}),
-        ...(capabilities.types && videoMeta
+        ...(capabilities.types && probedMeta
           ? {
-              content_type: videoMeta.contentType,
-              video_width: videoMeta.width,
-              video_height: videoMeta.height,
+              content_type: probedMeta.contentType,
+              video_width: probedMeta.width,
+              video_height: probedMeta.height,
             }
           : {}),
       };
@@ -617,7 +675,7 @@ export function CreationEngine({
 
       const { error: insertError } = await supabase.from("posts").insert(post);
       if (insertError) {
-        if ((videoUrl || videoPath) && /video_(?:url|path)/.test(insertError.message)) {
+        if ((legacyVideoUrl || videoPath) && /video_(?:url|path)/.test(insertError.message)) {
           throw new Error("Video posts need the latest media migration in Supabase.");
         }
         if (insertError.message.includes("column") || insertError.code === "PGRST204") {
@@ -647,6 +705,9 @@ export function CreationEngine({
       ]);
       setStep("success");
     } catch (e) {
+      // On-device debugging: the UI shows friendlyPublishError below, the
+      // console keeps the raw cause.
+      console.error("[publish]", e);
       if (!postCommitted) {
         await removeStoredObjects("post-images", uploadedPaths).catch(() => undefined);
       }
@@ -745,7 +806,7 @@ export function CreationEngine({
         {step === "video" && (
           <VideoStep
             videoUrl={videoUrl}
-            playable={videoFile ? videoPreviewable(videoFile) : true}
+            playable={videoFile ? videoMeta !== null || !videoProbeDone : true}
             detectedType={videoMeta?.contentType ?? null}
             trim={trim}
             setTrim={setTrim}
@@ -1124,7 +1185,7 @@ export function CreationEngine({
                 ? "Stream ended"
                 : schedule && kind !== "story"
                   ? "Your post is scheduled"
-                  : "You're live on WIZZ"}
+                  : "Your post is live"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {kind === "story"
@@ -1291,10 +1352,9 @@ export function CreationEngine({
         mode={camera === "short" ? "short" : "photo"}
         onClose={() => setCamera(null)}
         onCapture={(f) => {
-          // Empty MIME (some camera builds) → decide by extension instead of
-          // silently misfiling the capture as a photo.
-          const looksVideo =
-            f.type.startsWith("video") || (!f.type && MEDIA_EXTS.video.has(extOf(f)));
+          // Empty MIME (some camera builds) and application/* labels both
+          // defer to the extension; only a MIME naming the other kind decides.
+          const looksVideo = mimeMismatch(f, "image") && !mimeMismatch(f, "video");
           if (looksVideo) attachVideo(f);
           else attachPhoto(f);
           setCamera(null);

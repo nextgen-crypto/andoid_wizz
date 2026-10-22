@@ -48,9 +48,34 @@ export function CropSheet({
     setNatural(null);
     setError(null);
     const img = new Image();
-    img.onload = () => setNatural({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => setError("Could not load that image.");
+    let settled = false;
+    const finish = (naturalSize: { w: number; h: number } | null, message?: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      if (naturalSize) setNatural(naturalSize);
+      else setError(message ?? "Could not load that image.");
+    };
+    // Same Android quirk as the pickers: some builds fire neither onload nor
+    // onerror. Fail with a visible message instead of an eternal "Loading…",
+    // but first give a silently-decoded image the benefit of the doubt.
+    const timer = window.setTimeout(() => {
+      finish(
+        img.naturalWidth > 0 && img.naturalHeight > 0
+          ? { w: img.naturalWidth, h: img.naturalHeight }
+          : null,
+      );
+    }, 8000);
+    img.onload = () => finish({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => finish(null);
     img.src = imageSrc;
+    return () => {
+      // Deps changed or closed: the orphaned load must not touch the new one.
+      settled = true;
+      window.clearTimeout(timer);
+      img.onload = null;
+      img.onerror = null;
+    };
   }, [open, imageSrc]);
 
   useEffect(() => {
@@ -120,8 +145,27 @@ export function CropSheet({
       if (sw < 8 || sh < 8) throw new Error("Zoom out a little first.");
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
         const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error("Could not load that image."));
+        let settled = false;
+        const finishOk = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(el);
+        };
+        const finishErr = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          reject(new Error("Could not load that image."));
+        };
+        // Deadline: a WebView that fires neither event used to hang "Cropping…"
+        // forever with no error.
+        const timer = window.setTimeout(() => {
+          if (el.naturalWidth > 0) finishOk();
+          else finishErr();
+        }, 8000);
+        el.onload = finishOk;
+        el.onerror = finishErr;
         el.src = imageSrc;
       });
       const canvas = document.createElement("canvas");

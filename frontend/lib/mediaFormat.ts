@@ -31,11 +31,21 @@ export function keepOriginal(file: File): boolean {
   return ext === "gif" || ext === "svg";
 }
 
-/** Run the canvas bake; on any decode failure return the original file. */
+/**
+ * Run the canvas bake; on any decode failure return the original file.
+ *
+ * A deadline guards the whole chain: canvas `toBlob`/`createImageBitmap` on a
+ * few Android builds simply never call back, and inside `publish()` that would
+ * freeze the progress bar forever with no error. A stuck bake now degrades to
+ * the unfiltered original instead.
+ */
 export async function bakeOrOriginal(file: File, bake: (f: File) => Promise<Blob>): Promise<Blob> {
   if (keepOriginal(file)) return file;
+  const deadline = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error("bake deadline")), 20_000);
+  });
   try {
-    return await bake(file);
+    return await Promise.race([bake(file), deadline]);
   } catch {
     return file;
   }
@@ -92,6 +102,75 @@ export const MEDIA_EXTS: Record<"image" | "video", Set<string>> = {
   ]),
 };
 
+/** Canonical MIME per extension — `video/mov` and friends are not real types. */
+const MIME_BY_EXT: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  ogv: "video/ogg",
+  "3gp": "video/3gpp",
+  "3g2": "video/3gpp2",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
+  flv: "video/x-flv",
+  ts: "video/mp2t",
+  mts: "video/mp2t",
+  m2ts: "video/mp2t",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  svg: "image/svg+xml",
+};
+
+/** Which media kind an object-path extension stands for; null if neither. */
+export function mediaKindForExt(ext: string): "image" | "video" | null {
+  const mime = MIME_BY_EXT[ext.toLowerCase()];
+  if (!mime) return null;
+  return mime.startsWith("image/") ? "image" : "video";
+}
+
+/**
+ * Content type for an object about to be uploaded, resolved once for every
+ * call site (posts, thumbnails, avatars, ads). An explicit caller value wins;
+ * otherwise the object path's extension — the most reliable label when the
+ * File itself arrived untyped from an Android picker — picks the kind, then
+ * the file's own type. Unknown combinations fall through unchanged so
+ * non-media uploads keep whatever Storage would have guessed.
+ */
+export function resolveStoredMime(path: string, file: Blob, explicit?: string): string | undefined {
+  if (explicit) return explicit;
+  const dot = path.lastIndexOf(".");
+  const pathExt = dot > 0 && dot < path.length - 1 ? path.slice(dot + 1).toLowerCase() : "";
+  const nameExt = typeof File !== "undefined" && file instanceof File ? extOf(file) : "";
+  const ext = pathExt || nameExt;
+  const kind =
+    mediaKindForExt(ext) ??
+    (file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : null);
+  if (!kind) return file.type || undefined;
+  return resolveUploadMime(file, kind, ext);
+}
+
+/**
+ * Never forward an empty or `application/*` type to Storage. Providers hand
+ * out real containers as `application/mp4`/`application/octet-stream`, and
+ * `video/${ext}` invents types like `video/mov` that MIME allowlists reject —
+ * the probe result and the extension map decide instead, with kind-safe
+ * defaults for everything else.
+ */
+export function resolveUploadMime(file: Blob, kind: "image" | "video", ext: string): string {
+  if (file.type.startsWith(`${kind}/`)) return file.type;
+  const byExt = MIME_BY_EXT[ext];
+  if (byExt?.startsWith(`${kind}/`)) return byExt;
+  return kind === "video" ? "video/mp4" : "image/jpeg";
+}
+
 /**
  * Android `content://` picks often arrive with an empty MIME type or
  * `application/octet-stream`, which the old `startsWith("video/")` check
@@ -122,7 +201,10 @@ export function mimeMismatch(file: File, kind: "image" | "video"): boolean {
  * was invalid. Map the known families to actionable text, pass short human
  * sentences through, and keep one calm fallback for everything else.
  */
-export function friendlyPublishError(e: unknown): string {
+export function friendlyPublishError(
+  e: unknown,
+  fallback = "Could not publish. Try again.",
+): string {
   const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
   const lower = msg.toLowerCase();
   if (lower.includes("row-level security") || lower.includes("permission")) {
@@ -136,10 +218,18 @@ export function friendlyPublishError(e: unknown): string {
   ) {
     return "No internet connection. Check your network and retry.";
   }
-  if (lower.includes("payload too large") || lower.includes("exceeded")) {
-    return sizeError("video");
+  // Bare "exceeded" used to map here — that sent photo failures to the video
+  // size message. Match the size language itself, and keep "415" word-bounded:
+  // hex identifiers contain "415" often enough to misclassify raw UUID errors.
+  if (lower.includes("mime type") || lower.includes("unsupported media") || /\b415\b/.test(lower)) {
+    return "This file type isn't accepted for upload. Try an MP4 or JPEG.";
   }
-  if (lower.includes("jwt") || lower.includes("401") || lower.includes("unauthorized")) {
+  if (lower.includes("payload too large") || lower.includes("maximum allowed size")) {
+    return "That file is too large to upload.";
+  }
+  // Word-bound 401 the same way as 415: hex identifiers embed "401" often
+  // enough to fake a session-expiry error out of a storage/database message.
+  if (lower.includes("jwt") || /\b401\b/.test(lower) || lower.includes("unauthorized")) {
     return "Your session expired. Sign in again and retry.";
   }
   if (lower.includes("column") && (lower.includes("does not exist") || lower.includes("schema"))) {
@@ -152,7 +242,7 @@ export function friendlyPublishError(e: unknown): string {
     msg.length > 80 ||
     /invalid|error|exception|syntax|duplicate|constraint|token|postgres|pgrst/i.test(msg)
   ) {
-    return "Could not publish. Try again.";
+    return fallback;
   }
   return msg;
 }
@@ -179,10 +269,17 @@ export function probeVideoMetadata(file: File): Promise<VideoMetadata | null> {
     if (typeof document === "undefined") return resolve(null);
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
+    let settled = false;
     const done = (meta: VideoMetadata | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
       URL.revokeObjectURL(url);
       resolve(meta);
     };
+    // Some Android builds fire neither `onloadedmetadata` nor `onerror`; without
+    // a deadline the promise — and the preview state derived from it — hangs.
+    const timer = window.setTimeout(() => done(null), 8000);
     video.preload = "metadata";
     video.muted = true;
     video.onloadedmetadata = () => {

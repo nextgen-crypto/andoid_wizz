@@ -24,6 +24,7 @@ import {
   uploadAndSign,
   uploadStoredObject,
 } from "@/frontend/lib/storageUpload";
+import { friendlyPublishError } from "@/frontend/lib/mediaFormat";
 import { extractHashtags } from "@/frontend/lib/hashtags";
 import { invalidateHomeCache } from "@/backend/api/home.functions";
 import {
@@ -157,7 +158,7 @@ export function PostManageSheet({
       await refresh();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
+      setError(friendlyPublishError(e, "Could not save."));
     } finally {
       setBusy(false);
       setCaption(null);
@@ -179,7 +180,7 @@ export function PostManageSheet({
       setConfirm(null);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed.");
+      setError(friendlyPublishError(e, "Action failed."));
     } finally {
       setBusy(false);
     }
@@ -199,7 +200,7 @@ export function PostManageSheet({
       await refresh();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not update pin.");
+      setError(friendlyPublishError(e, "Could not update pin."));
     } finally {
       setBusy(false);
     }
@@ -236,7 +237,7 @@ export function PostManageSheet({
       toast("Thumbnail updated.");
     } catch (e) {
       if (!committed) await removeStoredObjects("post-images", [path]).catch(() => undefined);
-      setError(e instanceof Error ? e.message : "Thumbnail upload failed.");
+      setError(friendlyPublishError(e, "Thumbnail upload failed."));
     } finally {
       setThumbBusy(false);
     }
@@ -268,7 +269,7 @@ export function PostManageSheet({
       await refresh();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reset thumbnail.");
+      setError(friendlyPublishError(e, "Could not reset thumbnail."));
     } finally {
       setThumbBusy(false);
     }
@@ -301,7 +302,7 @@ export function PostManageSheet({
       setConfirm(null);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      setError(friendlyPublishError(e, "Delete failed."));
     } finally {
       setBusy(false);
     }

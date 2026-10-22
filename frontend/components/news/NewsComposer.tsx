@@ -7,6 +7,7 @@ import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { useServerFn } from "@tanstack/react-start";
 import { fetchPostingCapabilities } from "@/backend/api/posts.functions";
 import { uploadStoredObject, uploadAndSign } from "@/frontend/lib/storageUpload";
+import { extOf, friendlyPublishError, MEDIA_EXTS, mimeMismatch } from "@/frontend/lib/mediaFormat";
 import { cn } from "@/lib/utils";
 
 /** Extract #hashtags from the draft, lowercased and de-duplicated. */
@@ -33,7 +34,10 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
 
   async function uploadPhoto(): Promise<{ path: string; url: string | null } | null> {
     if (!photo || !user) return null;
-    const path = `${user.id}/news-${Date.now()}.jpg`;
+    // Label the object with the file's own (known) extension — an unfiltered
+    // GIF/SVG/HEIC pick must not be filed as `.jpg`. Storage resolves the type.
+    const ext = extOf(photo);
+    const path = `${user.id}/news-${Date.now()}.${MEDIA_EXTS.image.has(ext) ? ext : "jpg"}`;
     const capabilities = await inspectPostingSchema();
     if (capabilities.media) {
       await uploadStoredObject("post-images", path, photo);
@@ -69,7 +73,7 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
       toast("Posted to News.");
       onPosted?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not post. Try again.");
+      toast.error(friendlyPublishError(e, "Could not post. Try again."));
     } finally {
       setPosting(false);
     }
@@ -78,7 +82,9 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    // Android providers hand real images out as application/* or with no type
+    // at all — only a MIME that positively names another kind rejects.
+    if (mimeMismatch(file, "image")) {
       toast.error("Please choose an image file.");
       return;
     }
