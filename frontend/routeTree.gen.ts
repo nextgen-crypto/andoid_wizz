@@ -17,6 +17,7 @@ import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as NewsRouteImport } from './routes/news'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ShortsRouteImport } from './routes/shorts'
 import { Route as VideosRouteImport } from './routes/videos'
@@ -69,6 +70,11 @@ const MessagesRoute = MessagesRouteImport.update({
 const NewsRoute = NewsRouteImport.update({
   id: '/news',
   path: '/news',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfileRoute = ProfileRouteImport.update({
@@ -146,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
   '/news': typeof NewsRouteWithChildren
+  '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/shorts': typeof ShortsRoute
   '/videos': typeof VideosRouteWithChildren
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
+  '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/shorts': typeof ShortsRoute
   '/videos': typeof VideosRouteWithChildren
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
   '/news': typeof NewsRouteWithChildren
+  '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/shorts': typeof ShortsRoute
   '/videos': typeof VideosRouteWithChildren
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/explore'
     | '/messages'
     | '/news'
+    | '/privacy'
     | '/profile'
     | '/shorts'
     | '/videos'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/explore'
     | '/messages'
+    | '/privacy'
     | '/profile'
     | '/shorts'
     | '/videos'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/explore'
     | '/messages'
     | '/news'
+    | '/privacy'
     | '/profile'
     | '/shorts'
     | '/videos'
@@ -286,6 +298,7 @@ export interface RootRouteChildren {
   ExploreRoute: typeof ExploreRoute
   MessagesRoute: typeof MessagesRoute
   NewsRoute: typeof NewsRouteWithChildren
+  PrivacyRoute: typeof PrivacyRoute
   ProfileRoute: typeof ProfileRoute
   ShortsRoute: typeof ShortsRoute
   VideosRoute: typeof VideosRouteWithChildren
@@ -354,6 +367,13 @@ declare module '@tanstack/react-router' {
       path: '/news'
       fullPath: '/news'
       preLoaderRoute: typeof NewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile': {
@@ -482,6 +502,7 @@ const rootRouteChildren: RootRouteChildren = {
   ExploreRoute: ExploreRoute,
   MessagesRoute: MessagesRoute,
   NewsRoute: NewsRouteWithChildren,
+  PrivacyRoute: PrivacyRoute,
   ProfileRoute: ProfileRoute,
   ShortsRoute: ShortsRoute,
   VideosRoute: VideosRouteWithChildren,
