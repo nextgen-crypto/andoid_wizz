@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/frontend/hooks/useSession";
 import { PasswordReset } from "@/frontend/components/auth/PasswordReset";
 import { formatWait, useLoginThrottle } from "@/frontend/hooks/useLoginThrottle";
-import { authRedirectOrigin } from "@/frontend/lib/native";
+import { authRedirectOrigin, oauthRedirectTo, openExternalUrl } from "@/frontend/lib/native";
 import { cn } from "@/lib/utils";
 
 type Mode = "signin" | "signup";
@@ -116,12 +116,21 @@ export function AuthScreen() {
     setNotice(null);
     setBusy(true);
     try {
-      const { error: err } = await supabase.auth.signInWithOAuth({
+      const { data, error: err } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: authRedirectOrigin() },
+        options: {
+          redirectTo: oauthRedirectTo(),
+          // Google refuses OAuth inside an in-app WebView, and auth-js's
+          // default auto-redirect would strand the native shell off-origin.
+          // Take the flow to the system browser instead; the manifest's
+          // login-callback intent filter brings it back with the PKCE code,
+          // which installOAuthReturnHandler() exchanges for the session.
+          skipBrowserRedirect: true,
+        },
       });
       if (err) throw err;
-      // OAuth redirects away — no session here yet. The app picks it up on return.
+      if (!data.url) throw new Error("Google sign-in is unavailable right now.");
+      await openExternalUrl(data.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed.");
     } finally {

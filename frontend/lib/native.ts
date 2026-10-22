@@ -1,5 +1,7 @@
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
+import { supabase } from "@/integrations/supabase/client";
 
 // Public origin of the production web deployment (Vercel project `wizz`).
 // On native this is the only origin an outside app — a mail client, a chat
@@ -26,6 +28,22 @@ export function isNativePlatform(): boolean {
 export function authRedirectOrigin(): string {
   if (typeof window === "undefined") return WEB_ORIGIN;
   return Capacitor.isNativePlatform() ? WEB_ORIGIN : window.location.origin;
+}
+
+/**
+ * Where Supabase OAuth (Google) should send the user back after consent.
+ *
+ * On native the return leg has to land back inside the app, so it points at
+ * the custom-scheme deep link the manifest's intent filter claims
+ * (`app.wizz.mobile://login-callback`). The client runs PKCE, so the one-time
+ * code rides in the query string — which survives the browser → app hand-off,
+ * unlike a fragment. Must also be allow-listed in Supabase Auth → URL
+ * Configuration. On web the plain origin is the correct target (auth-js then
+ * auto-exchanges the code via `detectSessionInUrl`).
+ */
+export function oauthRedirectTo(): string {
+  if (typeof window === "undefined") return WEB_ORIGIN;
+  return Capacitor.isNativePlatform() ? "app.wizz.mobile://login-callback" : window.location.origin;
 }
 
 /**
@@ -200,3 +218,44 @@ export async function openExternalUrl(url: string): Promise<void> {
   }
   window.location.href = url;
 }
+
+/**
+ * Turn the OAuth `?code=` deep link into a session.
+ *
+ * Google hands the flow to the system browser, Supabase redirects back to
+ * `app.wizz.mobile://login-callback?code=…`, and Android delivers that intent
+ * to this running shell instead of the WebView ever navigating itself.
+ * exchangeCodeForSession consumes the single-use code and persists the
+ * session exactly like the web leg does.
+ */
+async function completeOAuthReturn(url?: string): Promise<void> {
+  if (!url) return;
+  try {
+    const code = new URL(url).searchParams.get("code");
+    if (code) await supabase.auth.exchangeCodeForSession(code);
+  } catch {
+    // Malformed URL or already-consumed code: the session watcher simply
+    // stays signed out, which is the safe default for an auth return leg.
+  }
+}
+
+let oauthReturnInstalled = false;
+
+/**
+ * Listen for the OAuth return deep link. Two entry points cover both process
+ * states: `getLaunchUrl` when Android recreated the activity straight from the
+ * VIEW intent (user finished in Chrome after the app was backgrounded/killed),
+ * and `appUrlOpen` when the singleTask activity was still alive. Idempotent,
+ * and a no-op outside the native shell.
+ */
+export function installOAuthReturnHandler(): void {
+  if (oauthReturnInstalled || typeof window === "undefined") return;
+  if (!Capacitor.isNativePlatform()) return;
+  oauthReturnInstalled = true;
+  void App.getLaunchUrl().then((result) => completeOAuthReturn(result?.url));
+  void App.addListener("appUrlOpen", ({ url }) => completeOAuthReturn(url));
+}
+
+// Load-time install too, but deliberately below the `let` it closes over —
+// the intent can arrive before React ever mounts, same as the RPC bridge.
+installOAuthReturnHandler();
