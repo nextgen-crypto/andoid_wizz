@@ -296,6 +296,10 @@ export function VideoStep({
   error: string | null;
 }) {
   const [tab, setTab] = useState<"trim" | "sound" | "style">("trim");
+  // canPlayType is only a guess — some codecs report "maybe" and still fail to
+  // decode. Track the element's own error so a black box never masquerades as
+  // a broken upload: it degrades to the same "still posts fine" reassurance.
+  const [decodeFailed, setDecodeFailed] = useState(false);
   if (!videoUrl) {
     return (
       <div className="grid grid-cols-2 gap-3 px-1 py-1">
@@ -326,9 +330,11 @@ export function VideoStep({
         controls
         playsInline
         muted={muted}
+        onError={() => setDecodeFailed(true)}
+        onLoadedMetadata={() => setDecodeFailed(false)}
         className="max-h-72 w-full rounded-2xl border border-border bg-media object-cover"
       />
-      {!playable && (
+      {(!playable || decodeFailed) && (
         <p className="rounded-xl bg-secondary px-3 py-2 text-xs text-muted-foreground">
           This device can&apos;t preview this format, but it will still post — most phones play it
           fine.
