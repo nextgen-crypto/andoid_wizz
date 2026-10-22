@@ -24,8 +24,11 @@ export function AuthScreen() {
   const throttle = useLoginThrottle(email);
 
   useEffect(() => {
-    if (!sessionLoading && session) void navigate({ to: "/", replace: true });
-  }, [session, sessionLoading, navigate]);
+    // Recovery opens the moment verifyOtp hands back a session — that session
+    // is fuel for setting the new password, so the redirect must wait until
+    // the reset panel is closed.
+    if (!sessionLoading && session && !resetting) void navigate({ to: "/", replace: true });
+  }, [session, sessionLoading, resetting, navigate]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -155,7 +158,7 @@ export function AuthScreen() {
           Reset your password
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Recover access with your email, or the phone number on your account.
+          We'll email you a code and a link — use either to choose a new password.
         </p>
 
         <PasswordReset

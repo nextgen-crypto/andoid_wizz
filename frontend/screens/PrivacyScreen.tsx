@@ -3,9 +3,9 @@
  * Kept as a route so the deployed web build serves it at /privacy and the
  * Play listing can point reviewers and users at a stable URL.
  *
- * Every claim below maps to something the app actually does: email/phone
- * one-time-code auth, Google Sign-In (name, email, avatar), Supabase as the
- * data store, Vercel as the host, camera/mic/photo access only when posting.
+ * Every claim below maps to something the app actually does: email sign-in
+ * (password, one-time link, or Google), Supabase as the data store, Vercel as
+ * the host, camera/mic/photo access only when posting.
  * Update it alongside the code when data practices change.
  */
 
@@ -34,9 +34,9 @@ export function PrivacyScreen() {
       <Section title="Information we collect">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <span className="font-medium text-foreground">Account data:</span> your email address or
-            phone number (used to sign you in with a one-time code), plus the name, username, and
-            profile details you choose to add.
+            <span className="font-medium text-foreground">Account data:</span> your email address
+            (used to create your account, sign you in, and recover access), plus the name, username,
+            and profile details you choose to add.
           </li>
           <li>
             <span className="font-medium text-foreground">Content you create:</span> posts, photos,
@@ -80,8 +80,16 @@ export function PrivacyScreen() {
         <p>
           We keep your information while your account is active so your feed works. Ask us to delete
           your account and its data at any time using the support email listed on our Google Play
-          listing, or through the in-app messages screen — deletion removes your profile, posts, and
-          messages from the live service.
+          listing, or through the in-app messages screen — deletion completes within 30 days: your
+          profile, posts, and messages are removed, leaving only security logs (up to 90 days) and
+          any transaction records the law requires. The full steps are on the{" "}
+          <a
+            href="/delete-account"
+            className="font-medium text-foreground underline underline-offset-2"
+          >
+            account deletion page
+          </a>
+          .
         </p>
       </Section>
 
