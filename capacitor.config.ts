@@ -8,7 +8,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   // Play Store package id — must be unique, reverse-domain style. Changing it
   // later forces every installed build to uninstall/reinstall (no updates).
-  appId: "app.wizz.mobile",
+  appId: "com.wizz.mobile",
   appName: "WIZZ",
   webDir: "app-dist",
   server: {

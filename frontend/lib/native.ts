@@ -35,7 +35,7 @@ export function authRedirectOrigin(): string {
  *
  * On native the return leg has to land back inside the app, so it points at
  * the custom-scheme deep link the manifest's intent filter claims
- * (`app.wizz.mobile://login-callback`). The client runs PKCE, so the one-time
+ * (`com.wizz.mobile://login-callback`). The client runs PKCE, so the one-time
  * code rides in the query string — which survives the browser → app hand-off,
  * unlike a fragment. Must also be allow-listed in Supabase Auth → URL
  * Configuration. On web the plain origin is the correct target (auth-js then
@@ -43,7 +43,7 @@ export function authRedirectOrigin(): string {
  */
 export function oauthRedirectTo(): string {
   if (typeof window === "undefined") return WEB_ORIGIN;
-  return Capacitor.isNativePlatform() ? "app.wizz.mobile://login-callback" : window.location.origin;
+  return Capacitor.isNativePlatform() ? "com.wizz.mobile://login-callback" : window.location.origin;
 }
 
 /**
@@ -223,7 +223,7 @@ export async function openExternalUrl(url: string): Promise<void> {
  * Turn the OAuth `?code=` deep link into a session.
  *
  * Google hands the flow to the system browser, Supabase redirects back to
- * `app.wizz.mobile://login-callback?code=…`, and Android delivers that intent
+ * `com.wizz.mobile://login-callback?code=…`, and Android delivers that intent
  * to this running shell instead of the WebView ever navigating itself.
  * exchangeCodeForSession consumes the single-use code and persists the
  * session exactly like the web leg does.

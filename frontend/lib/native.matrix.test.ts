@@ -60,6 +60,11 @@ describe("SSR (no window)", () => {
     expect(native.authRedirectOrigin()).toBe(WEB_ORIGIN);
   });
 
+  it("oauthRedirectTo() falls back to the public web origin during SSR", () => {
+    expect(typeof window).toBe("undefined");
+    expect(native.oauthRedirectTo()).toBe(WEB_ORIGIN);
+  });
+
   const ssrPaths: string[] = [
     "",
     "/",
@@ -128,6 +133,16 @@ describe("web browser (window present, not native)", () => {
     vi.stubGlobal("window", { location: { origin, href: "" }, fetch: vi.fn() });
     nativeFlag.current = true;
     expect(native.authRedirectOrigin()).toBe(WEB_ORIGIN);
+  });
+
+  it.each(origins)("oauthRedirectTo() returns the page origin %j", (origin) => {
+    vi.stubGlobal("window", { location: { origin, href: "" }, fetch: vi.fn() });
+    expect(native.oauthRedirectTo()).toBe(origin);
+  });
+
+  it("oauthRedirectTo() prefers the deep link over the origin when native", () => {
+    nativeFlag.current = true;
+    expect(native.oauthRedirectTo()).toBe("com.wizz.mobile://login-callback");
   });
 
   const joinRows: Array<[string, string, string]> = [
@@ -209,6 +224,11 @@ describe("native shell (window + RPC bridge)", () => {
     native.installNativeRpcBridge();
     expect(window.fetch).toBe(snapshot);
     expect(window.fetch).toBe(wrapped);
+  });
+
+  it("oauthRedirectTo() targets the package deep link on the native shell", () => {
+    nativeFlag.current = true;
+    expect(native.oauthRedirectTo()).toBe("com.wizz.mobile://login-callback");
   });
 
   // --- passthrough of non-server-function requests -------------------------
