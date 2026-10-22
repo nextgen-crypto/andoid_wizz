@@ -1,4 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#7c3aed"/>
-  <text x="32" y="44" font-family="system-ui, sans-serif" font-size="36" font-weight="900" fill="#ffffff" text-anchor="middle">W</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Same mark as assets/icons/wizz-icon.svg, corners rounded for the tab. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#210D3C"/>
+      <stop offset="0.55" stop-color="#130A22"/>
+      <stop offset="1" stop-color="#0A0A0D"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#7C3AED" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="clip">
+      <rect width="512" height="512" rx="112"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <ellipse cx="256" cy="252" rx="220" ry="190" fill="url(#glow)"/>
+    <polyline points="112,153 186,343 256,187 326,343 396,153" transform="translate(-7,7)"
+      fill="none" stroke="#8B5CF6" stroke-width="74" stroke-linejoin="miter"
+      stroke-miterlimit="12" stroke-linecap="butt" opacity="0.9"/>
+    <polyline points="112,153 186,343 256,187 326,343 396,153" transform="translate(7,-7)"
+      fill="none" stroke="#22D3EE" stroke-width="74" stroke-linejoin="miter"
+      stroke-miterlimit="12" stroke-linecap="butt" opacity="0.9"/>
+    <polyline points="112,153 186,343 256,187 326,343 396,153"
+      fill="none" stroke="#FFFFFF" stroke-width="74" stroke-linejoin="miter"
+      stroke-miterlimit="12" stroke-linecap="butt"/>
+  </g>
 </svg>

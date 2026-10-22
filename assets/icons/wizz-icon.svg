@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!--
+    WIZZ launcher mark — full-bleed square (legacy launchers apply their own
+    mask). A hand-built geometric W: mitred joints spike into a crown
+    silhouette, butt-cut terminals stay angled, and the violet/cyan chromatic
+    split reads as electric energy in the app's own colors.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#210D3C"/>
+      <stop offset="0.55" stop-color="#130A22"/>
+      <stop offset="1" stop-color="#0A0A0D"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#7C3AED" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <ellipse cx="256" cy="252" rx="220" ry="190" fill="url(#glow)"/>
+
+  <!-- chromatic split: violet trails low-left, cyan leads high-right -->
+  <polyline points="112,153 186,343 256,187 326,343 396,153" transform="translate(-7,7)"
+    fill="none" stroke="#8B5CF6" stroke-width="74" stroke-linejoin="miter"
+    stroke-miterlimit="12" stroke-linecap="butt" opacity="0.9"/>
+  <polyline points="112,153 186,343 256,187 326,343 396,153" transform="translate(7,-7)"
+    fill="none" stroke="#22D3EE" stroke-width="74" stroke-linejoin="miter"
+    stroke-miterlimit="12" stroke-linecap="butt" opacity="0.9"/>
+  <!-- white core -->
+  <polyline points="112,153 186,343 256,187 326,343 396,153"
+    fill="none" stroke="#FFFFFF" stroke-width="74" stroke-linejoin="miter"
+    stroke-miterlimit="12" stroke-linecap="butt"/>
+</svg>
