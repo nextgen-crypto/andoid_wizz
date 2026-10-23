@@ -10,7 +10,7 @@ import type { RlsAction, RlsContext, RlsRole, RlsTestCase, RlsVerdict } from "./
  * The RLS matrix is a documentation artifact whose expectations are hardcoded
  * from the migration SQL. Two layers of protection live here:
  *
- *  1. Per-case checks (475 rows): every case is validated against INDEPENDENTLY
+ *  1. Per-case checks (476 rows): every case is validated against INDEPENDENTLY
  *     hardcoded vocabularies (table names, roles, actions, verdicts, context
  *     keys, status vocabulary) — none of which are read back from the module.
  *  2. Aggregate invariants: exact counts, exact per-table/per-role/per-action
@@ -154,7 +154,7 @@ const TABLE_COUNTS: Record<string, number> = {
   feed_events: 13,
   follow_requests: 16,
   follows: 18,
-  messages: 17,
+  messages: 18,
   news_comments: 16,
   news_stories: 12,
   notifications: 15,
@@ -462,11 +462,11 @@ const USERB_ROWS: Array<{
 ];
 
 /** Aggregate counts, pinned. */
-const TOTAL_CASES = 475;
-const VERDICT_COUNTS: Record<RlsVerdict, number> = { allow: 235, deny: 240 };
+const TOTAL_CASES = 476;
+const VERDICT_COUNTS: Record<RlsVerdict, number> = { allow: 235, deny: 241 };
 const ROLE_COUNTS: Record<RlsRole, number> = {
   anon: 136,
-  userA: 195,
+  userA: 196,
   userB: 2,
   admin: 18,
   service_role: 124,
@@ -474,7 +474,7 @@ const ROLE_COUNTS: Record<RlsRole, number> = {
 const ACTION_COUNTS: Record<RlsAction, number> = {
   SELECT: 157,
   INSERT: 123,
-  UPDATE: 105,
+  UPDATE: 106,
   DELETE: 90,
 };
 
@@ -694,8 +694,8 @@ describe("case uniqueness", () => {
       "trending_topics/userA/INSERT",
     ]);
     expect(repeated[4]?.slots).toEqual(["warnings/admin/DELETE", "warnings/userA/DELETE"]);
-    // 475 cases - 9 repeated occurrences = 466 distinct descriptions.
-    expect(new Set(MATRIX.map((c) => c.description)).size).toBe(466);
+    // 476 cases - 9 repeated occurrences = 467 distinct descriptions.
+    expect(new Set(MATRIX.map((c) => c.description)).size).toBe(467);
   });
 });
 
@@ -1161,15 +1161,20 @@ describe("security-shape invariants", () => {
     expect(withdrawals[1]?.context.followee_id).toBe(EXPECTED_UIDS.userA);
   });
 
-  it("messages distinguish sender-side and recipient-side UPDATE", () => {
+  it("messages distinguish sender-side, recipient-side, and non-participant UPDATE", () => {
     const updates = MATRIX.filter(
       (c) => c.table === "messages" && c.action === "UPDATE" && c.role === "userA",
     );
-    expect(updates).toHaveLength(2);
+    expect(updates).toHaveLength(3);
     expect(updates[0]?.expected).toBe("allow");
     expect(updates[0]?.context.sender_id).toBe(EXPECTED_UIDS.userB);
     expect(updates[1]?.expected).toBe("deny");
     expect(updates[1]?.context.sender_id).toBe(EXPECTED_UIDS.userA);
+    // Hardening migration 20261023090000: a recipient who is not a
+    // participant of the message's conversation cannot update it either.
+    expect(updates[2]?.expected).toBe("deny");
+    expect(updates[2]?.context.user_a_id).toBe(EXPECTED_UIDS.userB);
+    expect(updates[2]?.context.user_b_id).toBe(EXPECTED_UIDS.stranger);
   });
 
   it("conversations deny both UPDATE and DELETE outright", () => {

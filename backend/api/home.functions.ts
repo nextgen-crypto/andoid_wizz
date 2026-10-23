@@ -107,32 +107,43 @@ export const fetchFeedPage = createServerFn({ method: "POST" })
     );
   });
 
-/** Minimum gap between cache busts per process — a signed-in user hammering
- * this endpoint must not turn into a constant feed-recompute lever. */
+/** Minimum gap between cache busts per user per process — one signed-in user
+ * hammering this endpoint must not turn into a constant feed-recompute
+ * lever, while independent publishers don't wait on each other. */
 const BUST_MIN_INTERVAL_MS = 10_000;
-let lastBustAt = 0;
+const lastBustByUser = new Map<string, number>();
 
 /**
  * Bust home caches after a publish so new content appears instantly
  * instead of waiting out the 60s TTL. Any signed-in user may bust (the
- * publish/delete flows run as ordinary users, not admins); a per-process
- * throttle keeps it cheap. Best-effort — failures resolve true anyway
- * because TTLs still expire stale rows.
+ * publish/delete flows run as ordinary users, not admins); a per-user
+ * cooldown keeps it cheap and stops one account from holding the cache
+ * permanently cold. Best-effort — failures resolve true anyway because TTLs
+ * still expire stale rows.
  */
 export const invalidateHomeCache = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
+  .handler(async ({ context }) => {
     preventSharedCaching();
+    const { userId } = homeContext(context);
     const now = Date.now();
-    if (now - lastBustAt >= BUST_MIN_INTERVAL_MS) {
-      lastBustAt = now;
-      await Promise.all([
-        invalidate.feedAll(),
-        invalidate.candidates(),
-        invalidate.stories(),
-        invalidate.trending("global"),
-      ]).catch(() => undefined);
+    const key = userId ?? "anonymous";
+    if (now - (lastBustByUser.get(key) ?? 0) < BUST_MIN_INTERVAL_MS) {
+      return { ok: true as const };
     }
+    lastBustByUser.set(key, now);
+    // Opportunistic prune so a long-lived process can't grow the map forever.
+    if (lastBustByUser.size > 500) {
+      for (const [id, at] of lastBustByUser) {
+        if (now - at >= BUST_MIN_INTERVAL_MS) lastBustByUser.delete(id);
+      }
+    }
+    await Promise.all([
+      invalidate.feedAll(),
+      invalidate.candidates(),
+      invalidate.stories(),
+      invalidate.trending("global"),
+    ]).catch(() => undefined);
     return { ok: true as const };
   });
 

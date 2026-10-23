@@ -314,9 +314,17 @@ const UPDATE_RULES: Readonly<Record<string, readonly Rule[]>> = {
   news_comments: [auth(owns("author_id"))],
   notifications: [auth(owns("user_id"))],
   warnings: [auth(owns("user_id"))],
-  // "Recipients can mark messages read": USING/WHERE uid <> sender.
+  // "Recipients can mark messages read": USING uid <> sender AND the viewer
+  // is a participant of the message's conversation (hardening migration
+  // 20261023090000).
   messages: [
-    auth((ctx, v) => v.uid !== null && ctx.sender_id !== undefined && ctx.sender_id !== v.uid),
+    auth(
+      (ctx, v) =>
+        v.uid !== null &&
+        ctx.sender_id !== undefined &&
+        ctx.sender_id !== v.uid &&
+        (ctx.user_a_id === v.uid || ctx.user_b_id === v.uid),
+    ),
   ],
   ad_campaigns: [auth(owns("advertiser_id"))],
   ad_exposures: [auth(owns("viewer_id"))],

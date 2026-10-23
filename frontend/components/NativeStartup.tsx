@@ -5,6 +5,18 @@ import { SplashScreen } from "@capacitor/splash-screen";
 
 import { isNativePlatform } from "@/frontend/lib/native";
 
+// Splash failsafe: if the bundle loads but React never reaches its first
+// paint (a crash during boot), the effect inside NativeStartup never runs
+// and the `launchAutoHide: false` splash would cover a dead screen forever.
+// This module still executes in that case, so dismiss on a timer no matter
+// what — when boot is healthy this fires seconds after the normal hide and
+// the duplicate call is a no-op.
+if (typeof window !== "undefined") {
+  window.setTimeout(() => {
+    if (isNativePlatform()) void SplashScreen.hide();
+  }, 4_000);
+}
+
 /**
  * Native-only boot glue. Renders nothing.
  *

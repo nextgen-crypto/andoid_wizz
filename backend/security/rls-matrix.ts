@@ -1066,6 +1066,14 @@ const CASES: RlsTestCase[] = [
   deny(
     "messages",
     "userA",
+    "UPDATE",
+    "Non-participants cannot update messages",
+    "Recipients can mark messages read",
+    { sender_id: userB, user_a_id: userB, user_b_id: stranger },
+  ),
+  deny(
+    "messages",
+    "userA",
     "DELETE",
     "No DELETE policy on messages",
     "No DELETE policy on messages",
