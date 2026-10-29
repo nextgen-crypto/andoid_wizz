@@ -14,6 +14,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as ChildSafetyRouteImport } from './routes/child-safety'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as MessagesRouteImport } from './routes/messages'
@@ -57,6 +58,11 @@ const BookmarksRoute = BookmarksRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChildSafetyRoute = ChildSafetyRouteImport.update({
+  id: '/child-safety',
+  path: '/child-safety',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeleteAccountRoute = DeleteAccountRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/bookmarks': typeof BookmarksRoute
   '/checkout': typeof CheckoutRoute
+  '/child-safety': typeof ChildSafetyRoute
   '/delete-account': typeof DeleteAccountRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/bookmarks': typeof BookmarksRoute
   '/checkout': typeof CheckoutRoute
+  '/child-safety': typeof ChildSafetyRoute
   '/delete-account': typeof DeleteAccountRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
@@ -213,6 +221,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/bookmarks': typeof BookmarksRoute
   '/checkout': typeof CheckoutRoute
+  '/child-safety': typeof ChildSafetyRoute
   '/delete-account': typeof DeleteAccountRoute
   '/explore': typeof ExploreRoute
   '/messages': typeof MessagesRoute
@@ -241,6 +250,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/bookmarks'
     | '/checkout'
+    | '/child-safety'
     | '/delete-account'
     | '/explore'
     | '/messages'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/bookmarks'
     | '/checkout'
+    | '/child-safety'
     | '/delete-account'
     | '/explore'
     | '/messages'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/bookmarks'
     | '/checkout'
+    | '/child-safety'
     | '/delete-account'
     | '/explore'
     | '/messages'
@@ -319,6 +331,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   BookmarksRoute: typeof BookmarksRoute
   CheckoutRoute: typeof CheckoutRoute
+  ChildSafetyRoute: typeof ChildSafetyRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
   ExploreRoute: typeof ExploreRoute
   MessagesRoute: typeof MessagesRoute
@@ -372,6 +385,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/child-safety': {
+      id: '/child-safety'
+      path: '/child-safety'
+      fullPath: '/child-safety'
+      preLoaderRoute: typeof ChildSafetyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/delete-account': {
@@ -539,6 +559,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   BookmarksRoute: BookmarksRoute,
   CheckoutRoute: CheckoutRoute,
+  ChildSafetyRoute: ChildSafetyRoute,
   DeleteAccountRoute: DeleteAccountRoute,
   ExploreRoute: ExploreRoute,
   MessagesRoute: MessagesRoute,
