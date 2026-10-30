@@ -1217,6 +1217,14 @@ export function CreationEngine({
 
         {step === "publishing" && (
           <div className="px-2 py-10 text-center">
+            {photoUrl && (
+              <img
+                src={photoUrl}
+                alt="Photo being published"
+                style={{ filter: photoFilter }}
+                className="mx-auto mb-4 size-20 rounded-2xl object-cover"
+              />
+            )}
             {videoPosterUrl && (
               <img
                 src={videoPosterUrl}
