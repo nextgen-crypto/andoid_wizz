@@ -358,7 +358,9 @@ export function FeedCard({
           <video
             className="aspect-[4/5] w-full object-cover"
             src={clipSrc}
-            poster={imageUrl(image?.objectKey ?? post.id, "large", 0.8)}
+            poster={
+              item.thumbnailSrc ?? (image ? imageUrl(image.objectKey, "large", 0.8) : undefined)
+            }
             playsInline
             loop
             muted

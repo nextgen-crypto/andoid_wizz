@@ -43,9 +43,12 @@ export interface FeedItem {
   clipObjectKey?: string;
   /** Owner-uploaded video (short-lived signed URL). Takes precedence over clipObjectKey. */
   videoSrc?: string;
+  /** Poster for an owner-uploaded video, signed with the same viewer access. */
+  thumbnailSrc?: string;
   /** Internal canonical paths, resolved only for the returned page slice. */
   imagePath?: string;
   videoPath?: string;
+  thumbnailPath?: string;
 }
 
 export interface StoryItem {
@@ -202,6 +205,8 @@ interface RealPostRow {
   image_path?: string | null;
   video_url?: string | null;
   video_path?: string | null;
+  thumbnail_url?: string | null;
+  thumbnail_path?: string | null;
   comments_count?: number;
   comments_enabled?: boolean;
   allow_sharing?: boolean;
@@ -283,7 +288,7 @@ async function tryRealSelect(
   const full = await supabase
     .from("posts")
     .select(
-      "id, author_id, caption, image_url, image_path, video_url, video_path, comments_count, comments_enabled, allow_sharing, visibility, status, content_kind, scheduled_at, story_expires_at, story_overlays, story_background, content_type, video_width, video_height, hashtags, location, category, created_at",
+      "id, author_id, caption, image_url, image_path, video_url, video_path, thumbnail_url, thumbnail_path, comments_count, comments_enabled, allow_sharing, visibility, status, content_kind, scheduled_at, story_expires_at, story_overlays, story_background, content_type, video_width, video_height, hashtags, location, category, created_at",
     )
     .eq("status", "published")
     .eq("content_kind", "post")
@@ -425,8 +430,10 @@ async function fetchRealCandidates(viewerClient?: SupabaseClient | null): Promis
           premiumUntil: profile.premium_until ?? null,
         },
         ...(row.video_url ? { videoSrc: row.video_url } : {}),
+        ...(row.thumbnail_url ? { thumbnailSrc: row.thumbnail_url } : {}),
         ...(row.image_path ? { imagePath: row.image_path } : {}),
         ...(row.video_path ? { videoPath: row.video_path } : {}),
+        ...(row.thumbnail_path ? { thumbnailPath: row.thumbnail_path } : {}),
       },
       followers: followerCount.get(row.author_id) ?? 0,
     });
@@ -440,10 +447,15 @@ async function resolveFeedItemMedia(
 ): Promise<FeedItem[]> {
   const supabase = serverSupabase(viewerClient);
   if (!supabase) {
-    return items.map(({ imagePath: _imagePath, videoPath: _videoPath, ...item }) => item);
+    return items.map(
+      ({ imagePath: _imagePath, videoPath: _videoPath, thumbnailPath: _thumbnailPath, ...item }) =>
+        item,
+    );
   }
   // One batched storage call per media kind instead of per-item signing.
-  const imagePaths = [...new Set(items.map((it) => it.imagePath).filter(Boolean) as string[])];
+  const imagePaths = [
+    ...new Set(items.flatMap((it) => [it.imagePath, it.thumbnailPath]).filter(Boolean) as string[]),
+  ];
   const videoPaths = [...new Set(items.map((it) => it.videoPath).filter(Boolean) as string[])];
   const [imageMap, videoMap] = await Promise.all([
     imagePaths.length > 0
@@ -453,11 +465,13 @@ async function resolveFeedItemMedia(
       ? signStoredMediaBatch(supabase, videoPaths)
       : Promise.resolve(new Map<string, string>()),
   ]);
-  return items.map(({ imagePath, videoPath, ...item }) => {
+  return items.map(({ imagePath, videoPath, thumbnailPath, ...item }) => {
     const imageUrl = imagePath ? (imageMap.get(imagePath) ?? null) : null;
     const videoUrl = videoPath ? videoMap.get(videoPath) : undefined;
+    const thumbnailUrl = thumbnailPath ? imageMap.get(thumbnailPath) : item.thumbnailSrc;
     return {
       ...item,
+      ...(thumbnailUrl ? { thumbnailSrc: thumbnailUrl } : {}),
       post: {
         ...item.post,
         media: imageUrl

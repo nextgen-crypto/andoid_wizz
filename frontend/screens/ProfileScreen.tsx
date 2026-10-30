@@ -354,6 +354,7 @@ export function ProfileScreen() {
                   <span className="relative block">
                     <video
                       src={p.video_url}
+                      poster={p.thumbnail_url || p.image_url || undefined}
                       muted
                       playsInline
                       preload="metadata"

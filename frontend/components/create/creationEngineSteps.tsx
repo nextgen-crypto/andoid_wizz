@@ -263,6 +263,7 @@ export function PhotoStep({
 
 export function VideoStep({
   videoUrl,
+  posterUrl,
   playable,
   detectedType,
   trim,
@@ -279,6 +280,7 @@ export function VideoStep({
   error,
 }: {
   videoUrl: string | null;
+  posterUrl: string | null;
   playable: boolean;
   detectedType: "short" | "video" | null;
   trim: [number, number];
@@ -330,6 +332,7 @@ export function VideoStep({
       <video
         ref={videoRef}
         src={videoUrl}
+        poster={posterUrl ?? undefined}
         controls
         playsInline
         muted={muted}
@@ -483,6 +486,7 @@ export function VideoStep({
 export function StoryStep({
   photoUrl,
   videoUrl,
+  posterUrl,
   textBody,
   textBg,
   overlays,
@@ -495,6 +499,7 @@ export function StoryStep({
 }: {
   photoUrl: string | null;
   videoUrl: string | null;
+  posterUrl: string | null;
   textBody: string;
   textBg: string;
   overlays: string[];
@@ -512,7 +517,13 @@ export function StoryStep({
         {photoUrl ? (
           <img src={photoUrl} alt="Story preview" className="size-full object-cover" />
         ) : videoUrl ? (
-          <video src={videoUrl} muted playsInline className="size-full object-cover" />
+          <video
+            src={videoUrl}
+            poster={posterUrl ?? undefined}
+            muted
+            playsInline
+            className="size-full object-cover"
+          />
         ) : textBody.trim() ? (
           <div
             className="grid size-full place-items-center p-4"

@@ -263,6 +263,52 @@ export interface VideoMetadata {
   contentType: "short" | "video";
 }
 
+/**
+ * Create the poster persisted with a user-uploaded video. Storage does not
+ * derive video thumbnails, so decoding failures are intentionally non-fatal:
+ * the original video remains publishable even when this device cannot preview it.
+ */
+export function captureVideoThumbnail(file: File): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (typeof document === "undefined") return resolve(null);
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    let settled = false;
+    const finish = (thumbnail: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      resolve(thumbnail);
+    };
+    const timer = window.setTimeout(() => finish(null), 12_000);
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.onerror = () => finish(null);
+    video.onloadedmetadata = () => {
+      if (!video.videoWidth || !video.videoHeight) return finish(null);
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      video.currentTime = duration > 0 ? Math.min(0.5, Math.max(0.05, duration * 0.1)) : 0;
+    };
+    video.onseeked = () => {
+      try {
+        const scale = Math.min(1, 1280 / video.videoWidth);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        const context = canvas.getContext("2d");
+        if (!context) return finish(null);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => finish(blob), "image/jpeg", 0.84);
+      } catch {
+        finish(null);
+      }
+    };
+    video.src = url;
+  });
+}
+
 /** Read a video file's dimensions/duration so uploads self-classify. */
 export function probeVideoMetadata(file: File): Promise<VideoMetadata | null> {
   return new Promise((resolve) => {

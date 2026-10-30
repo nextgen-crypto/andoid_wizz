@@ -36,6 +36,7 @@ import {
   IMAGE_MAX_BYTES,
   VIDEO_MAX_BYTES,
   bakeOrOriginal,
+  captureVideoThumbnail,
   extOf,
   friendlyPublishError,
   mimeMismatch,
@@ -194,6 +195,9 @@ export function CreationEngine({
   const [cropping, setCropping] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoThumbnail, setVideoThumbnail] = useState<Blob | null>(null);
+  const [videoPosterUrl, setVideoPosterUrl] = useState<string | null>(null);
+  const videoSelectionRef = useRef(0);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
   // False while the metadata probe runs: the preview stays optimistic until the
   // probe *settles* — only a settled failure flips `playable` off.
@@ -311,6 +315,12 @@ export function CreationEngine({
     },
     [videoUrl],
   );
+  useEffect(
+    () => () => {
+      if (videoPosterUrl) URL.revokeObjectURL(videoPosterUrl);
+    },
+    [videoPosterUrl],
+  );
 
   function mapKind(k: CreateKind): Step {
     if (k === "photo" || k === "video" || k === "story" || k === "text") return k;
@@ -408,14 +418,23 @@ export function CreationEngine({
       return;
     }
     setError(null);
+    const selection = ++videoSelectionRef.current;
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
+    setVideoThumbnail(null);
+    setVideoPosterUrl(null);
     setVideoMeta(null);
     setVideoProbeDone(false);
     setTrim([0, 100]);
     void probeVideoMetadata(file).then((meta) => {
+      if (selection !== videoSelectionRef.current) return;
       setVideoMeta(meta);
       setVideoProbeDone(true);
+    });
+    void captureVideoThumbnail(file).then((thumbnail) => {
+      if (selection !== videoSelectionRef.current || !thumbnail) return;
+      setVideoThumbnail(thumbnail);
+      setVideoPosterUrl(URL.createObjectURL(thumbnail));
     });
   }
 
@@ -428,8 +447,11 @@ export function CreationEngine({
   }
 
   function clearVideo() {
+    videoSelectionRef.current += 1;
     setVideoFile(null);
     setVideoUrl(null);
+    setVideoThumbnail(null);
+    setVideoPosterUrl(null);
     setVideoMeta(null);
     setVideoProbeDone(false);
     setTrim([0, 100]);
@@ -564,6 +586,8 @@ export function CreationEngine({
       let videoPath: string | null = null;
       let imageUrl: string | null = null;
       let legacyVideoUrl: string | null = null;
+      let thumbnailPath: string | null = null;
+      let legacyThumbnailUrl: string | null = null;
       let probedMeta: VideoMetadata | null = null;
 
       if (photo && (kind === "photo" || kind === "story")) {
@@ -603,6 +627,10 @@ export function CreationEngine({
         // trusting whatever state happens to be there.
         probedMeta = videoMeta ?? (await probeVideoMetadata(videoFile));
         if (!videoMeta) setVideoMeta(probedMeta);
+        // Publishing may begin before the optimistic background capture has
+        // settled; make one final best-effort capture so fast taps do not
+        // produce a video row with no poster.
+        const capturedThumbnail = videoThumbnail ?? (await captureVideoThumbnail(videoFile));
         // `video/mov` is not a real MIME type — resolve from type/extension.
         const videoMime = resolveUploadMime(videoFile, "video", extension);
         videoPath = `${user.id}/video-${stamp}.${extension}`;
@@ -621,6 +649,25 @@ export function CreationEngine({
             .createSignedUrl(videoPath, TEN_YEARS);
           if (signed.error) throw signed.error;
           legacyVideoUrl = signed.data.signedUrl;
+        }
+        if (capturedThumbnail) {
+          thumbnailPath = `${user.id}/thumbnail-${stamp}.jpg`;
+          uploadedPaths.push(thumbnailPath);
+          if (capabilities.media) {
+            await uploadStoredObject("post-images", thumbnailPath, capturedThumbnail, {
+              contentType: "image/jpeg",
+            });
+          } else {
+            legacyThumbnailUrl = await uploadAndSign(
+              "post-images",
+              thumbnailPath,
+              capturedThumbnail,
+              {
+                contentType: "image/jpeg",
+                width: 1280,
+              },
+            );
+          }
         }
         setProgress(65);
       }
@@ -641,9 +688,13 @@ export function CreationEngine({
               // is the schema's marker for "this post has no image/video".
               image_path: imagePath ?? "",
               ...(videoPath ? { video_path: videoPath, video_url: "" } : {}),
+              ...(thumbnailPath ? { thumbnail_path: thumbnailPath, thumbnail_url: "" } : {}),
             }
           : legacyVideoUrl
-            ? { video_url: legacyVideoUrl }
+            ? {
+                video_url: legacyVideoUrl,
+                ...(legacyThumbnailUrl ? { thumbnail_url: legacyThumbnailUrl } : {}),
+              }
             : {}),
         ...(capabilities.settings
           ? {
@@ -806,6 +857,7 @@ export function CreationEngine({
         {step === "video" && (
           <VideoStep
             videoUrl={videoUrl}
+            posterUrl={videoPosterUrl}
             playable={videoFile ? videoMeta !== null || !videoProbeDone : true}
             detectedType={videoMeta?.contentType ?? null}
             trim={trim}
@@ -827,6 +879,7 @@ export function CreationEngine({
           <StoryStep
             photoUrl={photoUrl}
             videoUrl={videoUrl}
+            posterUrl={videoPosterUrl}
             textBody={textBody}
             textBg={textBg}
             overlays={storyOverlays}
@@ -1023,6 +1076,7 @@ export function CreationEngine({
                 {videoUrl && !photoUrl && (
                   <video
                     src={videoUrl}
+                    poster={videoPosterUrl ?? undefined}
                     muted
                     playsInline
                     className="size-14 rounded-xl object-cover"
@@ -1163,6 +1217,13 @@ export function CreationEngine({
 
         {step === "publishing" && (
           <div className="px-2 py-10 text-center">
+            {videoPosterUrl && (
+              <img
+                src={videoPosterUrl}
+                alt="Video thumbnail"
+                className="mx-auto mb-4 size-20 rounded-2xl object-cover"
+              />
+            )}
             {/* CSS transform-only spinner: cheap on slow/low-end devices, no layout jank */}
             <Loader2
               className="mx-auto size-8 animate-spin [animation-duration:0.9s] text-brand"
