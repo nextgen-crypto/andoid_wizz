@@ -274,24 +274,20 @@ export function captureVideoThumbnail(file: File): Promise<Blob | null> {
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
     let settled = false;
+    let seekFallback = 0;
     const finish = (thumbnail: Blob | null) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      window.clearTimeout(seekFallback);
       URL.revokeObjectURL(url);
       resolve(thumbnail);
     };
     const timer = window.setTimeout(() => finish(null), 12_000);
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
-    video.onerror = () => finish(null);
-    video.onloadedmetadata = () => {
-      if (!video.videoWidth || !video.videoHeight) return finish(null);
-      const duration = Number.isFinite(video.duration) ? video.duration : 0;
-      video.currentTime = duration > 0 ? Math.min(0.5, Math.max(0.05, duration * 0.1)) : 0;
-    };
-    video.onseeked = () => {
+    const draw = () => {
+      // A fallback may fire before metadata is ready; leave the final deadline
+      // to decide rather than treating "not decoded yet" as a failure.
+      if (settled || !video.videoWidth || !video.videoHeight) return;
       try {
         const scale = Math.min(1, 1280 / video.videoWidth);
         const canvas = document.createElement("canvas");
@@ -305,6 +301,26 @@ export function captureVideoThumbnail(file: File): Promise<Blob | null> {
         finish(null);
       }
     };
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.onerror = () => finish(null);
+    video.onloadedmetadata = () => {
+      if (!video.videoWidth || !video.videoHeight) return finish(null);
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      if (duration > 0.05) {
+        video.currentTime = Math.min(0.5, Math.max(0.05, duration * 0.1));
+      }
+      // Clips that report 0/Infinity duration (common in Android WebView)
+      // never fire `seeked` when seeking to 0. Draw the first decoded frame
+      // instead of leaving the preview black until the 12s deadline.
+      seekFallback = window.setTimeout(draw, 1_500);
+    };
+    video.onloadeddata = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      if (duration <= 0.05) draw();
+    };
+    video.onseeked = draw;
     video.src = url;
   });
 }
