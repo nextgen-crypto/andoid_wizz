@@ -27,7 +27,16 @@ function useMaintenance(): boolean {
   return on;
 }
 
-export function AppShell({ title, children }: { title: string; children: ReactNode }) {
+export function AppShell({
+  title,
+  children,
+  fullHeight = false,
+}: {
+  title: string;
+  children: ReactNode;
+  /** Lock the shell to the viewport so a screen can own its own inner scroll. */
+  fullHeight?: boolean;
+}) {
   const maintenance = useMaintenance();
   const { user } = useSession();
   const [warnings, setWarnings] = useState<{ id: string; message: string }[]>([]);
@@ -55,9 +64,21 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   }
 
   return (
-    <div className="min-h-[100dvh] bg-surface-strong md:pl-20">
+    <div
+      className={
+        fullHeight
+          ? "h-[100dvh] overflow-hidden bg-surface-strong md:pl-20"
+          : "min-h-[100dvh] bg-surface-strong md:pl-20"
+      }
+    >
       <NavigationRail />
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background md:border-x md:border-border">
+      <div
+        className={
+          fullHeight
+            ? "mx-auto flex h-[100dvh] min-h-0 w-full max-w-3xl flex-col bg-background md:border-x md:border-border"
+            : "mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background md:border-x md:border-border"
+        }
+      >
         <TopBar />
         {maintenance && (
           <p className="bg-live px-4 py-2 text-center text-xs font-bold text-white">
@@ -78,7 +99,13 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             </button>
           </div>
         ))}
-        <main className="min-w-0 flex-1 pb-24 md:pb-10">
+        <main
+          className={
+            fullHeight
+              ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+              : "min-w-0 flex-1 pb-24 md:pb-10"
+          }
+        >
           <h1 className="sr-only">{title}</h1>
           {children}
         </main>

@@ -40,6 +40,26 @@ export function MessagesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, activeMessages.length]);
 
+  // Keep the newest message and the composer in view when the on-screen
+  // keyboard opens. Android resizes the WebView; browsers report the new
+  // height through visualViewport.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport || !selected) return;
+    let frame = 0;
+    const keepBottomVisible = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ block: "end" });
+      });
+    };
+    viewport.addEventListener("resize", keepBottomVisible);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("resize", keepBottomVisible);
+    };
+  }, [selected]);
+
   function pick(id: string) {
     setSelected(id);
     setDraft("");
@@ -147,10 +167,22 @@ export function MessagesScreen() {
   );
 
   return (
-    <AppShell title="Messages">
-      <div className="lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:divide-x lg:divide-border">
-        <div className={cn(selected && "hidden lg:block")}>{list}</div>
-        <div className={cn(!selected && "hidden lg:flex", "min-h-[60dvh] flex-col")}>
+    <AppShell title="Messages" fullHeight>
+      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:divide-x lg:divide-border">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto lg:h-full",
+            selected && "hidden lg:block",
+          )}
+        >
+          {list}
+        </div>
+        <div
+          className={cn(
+            !selected && "hidden lg:flex",
+            "flex min-h-0 flex-1 flex-col lg:h-full",
+          )}
+        >
           {!active ? (
             <div className="hidden flex-1 place-items-center px-6 text-center lg:grid">
               <p className="text-sm text-muted-foreground">
@@ -159,7 +191,7 @@ export function MessagesScreen() {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+              <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
                 <button
                   aria-label="Back to conversations"
                   onClick={() => {
@@ -196,7 +228,7 @@ export function MessagesScreen() {
                   </span>
                 </Link>
               </div>
-              <div className="flex max-h-[52dvh] min-h-[40dvh] flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-3 lg:max-h-[62dvh]">
+              <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-4 py-3">
                 {thread.isLoading ? (
                   <Loader2 className="mx-auto mt-8 size-5 animate-spin text-muted-foreground" />
                 ) : activeMessages.length === 0 ? (
@@ -224,7 +256,7 @@ export function MessagesScreen() {
                 )}
                 <div ref={bottomRef} />
               </div>
-              <div className="border-t border-border p-3">
+              <div className="shrink-0 border-t border-border p-3">
                 <div className="flex items-center gap-2">
                   <input
                     value={draft}
@@ -235,7 +267,7 @@ export function MessagesScreen() {
                     placeholder="Message…"
                     maxLength={1000}
                     aria-label="Write a message"
-                    className="min-w-0 flex-1 rounded-full bg-secondary px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
+                    className="min-w-0 flex-1 rounded-full bg-secondary px-4 py-2.5 text-base outline-none placeholder:text-muted-foreground md:text-sm"
                   />
                   <button
                     aria-label="Send message"
