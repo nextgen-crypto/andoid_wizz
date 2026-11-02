@@ -47,6 +47,8 @@ export interface FeedItem {
   thumbnailSrc?: string;
   /** Internal canonical paths, resolved only for the returned page slice. */
   imagePath?: string;
+  /** Multi-photo carousel paths (image_paths column). Falls back to imagePath. */
+  imagePaths?: string[];
   videoPath?: string;
   thumbnailPath?: string;
 }
@@ -203,9 +205,9 @@ interface RealPostRow {
   caption: string;
   image_url: string | null;
   image_path?: string | null;
+  image_paths?: string[] | null;
   video_url?: string | null;
   video_path?: string | null;
-  thumbnail_url?: string | null;
   thumbnail_path?: string | null;
   comments_count?: number;
   comments_enabled?: boolean;
@@ -288,10 +290,11 @@ async function tryRealSelect(
   const full = await supabase
     .from("posts")
     .select(
-      "id, author_id, caption, image_url, image_path, video_url, video_path, thumbnail_url, thumbnail_path, comments_count, comments_enabled, allow_sharing, visibility, status, content_kind, scheduled_at, story_expires_at, story_overlays, story_background, content_type, video_width, video_height, hashtags, location, category, created_at",
+      "id, author_id, caption, image_url, image_path, image_paths, video_url, video_path, thumbnail_path, comments_count, comments_enabled, allow_sharing, visibility, status, content_kind, scheduled_at, story_expires_at, story_overlays, story_background, content_type, video_width, video_height, hashtags, location, category, created_at",
     )
     .eq("status", "published")
     .eq("content_kind", "post")
+    .eq("visibility", "public")
     // News-category posts live only in the News tab; keep them out of Home.
     // `.or(is.null…)` so older NULL-category posts still show (`!= 'News'`
     // would drop NULLs in Postgres).
@@ -306,12 +309,30 @@ async function tryRealSelect(
     return { data: null, error: full.error };
   }
 
+  // image_paths not migrated yet: keep every other rich column by retrying
+  // the same query without only the new array column.
+  const noArray = await supabase
+    .from("posts")
+    .select(
+      "id, author_id, caption, image_url, image_path, video_url, video_path, thumbnail_path, comments_count, comments_enabled, allow_sharing, visibility, status, content_kind, scheduled_at, story_expires_at, story_overlays, story_background, content_type, video_width, video_height, hashtags, location, category, created_at",
+    )
+    .eq("status", "published")
+    .eq("content_kind", "post")
+    .eq("visibility", "public")
+    .or("category.is.null,category.neq.News")
+    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()}`)
+    .or("content_type.neq.short,content_type.is.null")
+    .order("created_at", { ascending: false })
+    .limit(REAL_POST_LIMIT);
+  if (!noArray.error) return { data: noArray.data as unknown[], error: null };
+
   const compatible = await supabase
     .from("posts")
     .select(
       "id, author_id, caption, image_url, video_url, comments_count, comments_enabled, visibility, hashtags, location, category, created_at",
     )
     .eq("status", "published")
+    .eq("visibility", "public")
     .or("category.is.null,category.neq.News")
     .order("created_at", { ascending: false })
     .limit(REAL_POST_LIMIT);
@@ -383,7 +404,14 @@ async function fetchRealCandidates(viewerClient?: SupabaseClient | null): Promis
   for (const row of real) {
     const profile = profiles.get(row.author_id);
     if (!profile) continue;
-    const imageKey = row.image_path || row.image_url;
+    // Multi-photo rows carry image_paths; legacy rows only image_path. Keep
+    // the first path in imagePath (single-sign fast path) and the full ordered
+    // list in imagePaths for the carousel. Video posts use thumbnail_path (the
+    // composer-captured cover frame) as their poster.
+    const imageList = (row.image_paths ?? []).filter((p): p is string => Boolean(p));
+    const isVideoRow = Boolean(row.video_path || row.video_url);
+    const imageKey =
+      imageList[0] ?? (row.image_path || row.image_url || (isVideoRow ? row.thumbnail_path : ""));
     const post: Post = {
       id: row.id,
       authorId: row.author_id,
@@ -430,8 +458,13 @@ async function fetchRealCandidates(viewerClient?: SupabaseClient | null): Promis
           premiumUntil: profile.premium_until ?? null,
         },
         ...(row.video_url ? { videoSrc: row.video_url } : {}),
-        ...(row.thumbnail_url ? { thumbnailSrc: row.thumbnail_url } : {}),
-        ...(row.image_path ? { imagePath: row.image_path } : {}),
+        // imagePath is the signable poster/photo key: image_path first, else
+        // the video cover frame (thumbnail_path) — without it the carousel
+        // resolver would treat the poster as unsigned and drop it.
+        ...(row.image_path || (isVideoRow && row.thumbnail_path)
+          ? { imagePath: row.image_path || row.thumbnail_path || "" }
+          : {}),
+        ...(imageList.length > 1 ? { imagePaths: imageList } : {}),
         ...(row.video_path ? { videoPath: row.video_path } : {}),
         ...(row.thumbnail_path ? { thumbnailPath: row.thumbnail_path } : {}),
       },
@@ -448,14 +481,17 @@ async function resolveFeedItemMedia(
   const supabase = serverSupabase(viewerClient);
   if (!supabase) {
     return items.map(
-      ({ imagePath: _imagePath, videoPath: _videoPath, thumbnailPath: _thumbnailPath, ...item }) =>
-        item,
+      ({ imagePath: _imagePath, imagePaths: _imagePaths, videoPath: _videoPath, ...item }) => item,
     );
   }
   // One batched storage call per media kind instead of per-item signing.
-  const imagePaths = [
-    ...new Set(items.flatMap((it) => [it.imagePath, it.thumbnailPath]).filter(Boolean) as string[]),
-  ];
+  // Carousel posts sign every path in imagePaths, not just the first.
+  const allImagePaths = items.flatMap((it) =>
+    (it.imagePaths && it.imagePaths.length > 0 ? it.imagePaths : [it.imagePath]).filter(
+      (p): p is string => Boolean(p),
+    ),
+  );
+  const imagePaths = [...new Set(allImagePaths)];
   const videoPaths = [...new Set(items.map((it) => it.videoPath).filter(Boolean) as string[])];
   const [imageMap, videoMap] = await Promise.all([
     imagePaths.length > 0
@@ -465,23 +501,40 @@ async function resolveFeedItemMedia(
       ? signStoredMediaBatch(supabase, videoPaths)
       : Promise.resolve(new Map<string, string>()),
   ]);
-  return items.map(({ imagePath, videoPath, thumbnailPath, ...item }) => {
-    const imageUrl = imagePath ? (imageMap.get(imagePath) ?? null) : null;
+  return items.map(({ imagePath, imagePaths, videoPath, ...item }) => {
     const videoUrl = videoPath ? videoMap.get(videoPath) : undefined;
-    const thumbnailUrl = thumbnailPath ? imageMap.get(thumbnailPath) : item.thumbnailSrc;
+    const hasImagePaths = Boolean(imagePaths && imagePaths.length > 0);
+    if (!hasImagePaths && !imagePath) {
+      // No canonical image path (seed items carry resolved URLs already).
+      return { ...item, ...(videoUrl ? { videoSrc: videoUrl } : {}) };
+    }
+    const template = item.post.media.find((m) => m.kind === "image");
+    const signedUrls = (imagePaths && imagePaths.length > 0 ? imagePaths : [imagePath])
+      .filter((p): p is string => Boolean(p))
+      .map((p) => imageMap.get(p))
+      .filter((url): url is string => Boolean(url));
+    // Expand the carousel into one media entry per signed path, keeping the
+    // template's dimensions/alt for every slide.
+    const images = signedUrls.map((url, idx) =>
+      idx === 0 && template
+        ? { ...template, objectKey: url }
+        : {
+            kind: "image" as const,
+            objectKey: url,
+            width: template?.width ?? 1080,
+            height: template?.height ?? 1080,
+            blurColor: template?.blurColor ?? "#888",
+            alt: template?.alt ?? "Post photo",
+          },
+    );
+    // Signing failed for every path → drop image entries entirely: a dangling
+    // canonical path must never render as a broken image.
+    const media = images.length
+      ? [...images, ...item.post.media.filter((m) => m.kind !== "image")]
+      : item.post.media.filter((m) => m.kind !== "image");
     return {
       ...item,
-      ...(thumbnailUrl ? { thumbnailSrc: thumbnailUrl } : {}),
-      post: {
-        ...item.post,
-        media: imageUrl
-          ? item.post.media.map((media) =>
-              media.kind === "image" ? { ...media, objectKey: imageUrl } : media,
-            )
-          : imagePath
-            ? item.post.media.filter((media) => media.kind !== "image")
-            : item.post.media,
-      },
+      post: { ...item.post, media },
       ...(videoUrl ? { videoSrc: videoUrl } : {}),
     };
   });
@@ -524,11 +577,10 @@ async function getCandidates(
     return { real, seed, stats };
   };
 
-  // Shared caching is safe only for the anonymous viewer. Authenticated rows
-  // must be re-read after blocks, follows, privacy, or visibility changes.
-  return viewerId === CURRENT_USER_ID
-    ? cacheAside(cacheKeys.candidates(viewerId), TTL.feed, load)
-    : load();
+  // Candidate rows are public data (published posts + public profiles). The
+  // per-user cache key keeps each viewer's pool isolated; the short TTL means
+  // a newly blocked/hidden author disappears within one minute.
+  return cacheAside(cacheKeys.candidates(viewerId), TTL.feed, load);
 }
 
 /** Public impression counters for rate-based discovery (empty until migration). */
@@ -770,13 +822,34 @@ export function tupleAfter(a: RankTuple, cur: FeedCursor): boolean {
   return a.id > cur.id;
 }
 
+/** Feed selection: the full ranked mix, or a chronological follow-only lane. */
+export type FeedMode = "all" | "following";
+
 async function rankAll(
   profile: InterestProfile,
   now: number,
   viewerId: string,
   viewerClient?: SupabaseClient | null,
+  mode: FeedMode = "all",
 ): Promise<{ items: FeedItem[]; tuples: RankTuple[] }> {
   const { real, seed, stats } = await getCandidates(viewerId, viewerClient);
+  if (mode === "following") {
+    // Follow-only lane: chronological posts from followed creators plus the
+    // viewer's own. No discovery seeding — the contract is "accounts I follow".
+    const following = new Set(profile.followingIds);
+    const items = real
+      .map((r) => r.item)
+      .filter((item) => following.has(item.author.id) || item.author.id === viewerId)
+      .sort((a, b) => b.post.createdAt.localeCompare(a.post.createdAt));
+    return {
+      items,
+      tuples: items.map((item) => ({
+        s: 1e9 - Math.max(0, (now - Date.parse(item.post.createdAt)) / 3_600_000),
+        t: item.post.createdAt,
+        id: item.post.id,
+      })),
+    };
+  }
   const weights = laneWeightsFor(profile);
   const queues: Record<Scored["lane"], Scored[]> = { personalized: [], fresh: [], discovery: [] };
   for (const r of real) {
@@ -836,14 +909,15 @@ export async function getFeedPage(
   cursor: string | null,
   profile?: InterestProfile | null,
   viewerClient?: SupabaseClient | null,
+  mode: FeedMode = "all",
 ): Promise<CursorPage<FeedItem>> {
   const clean = sanitizeProfile(profile);
   // Pin "now" inside the cursor so every page of a session ranks identically.
   const decoded = decodeCursor(cursor);
   const now = decoded && Number.isFinite(decoded.n) ? decoded.n : Date.now();
-  const cacheKey = decoded ? cursor! : "start";
+  const cacheKey = (decoded ? cursor! : "start") + ":" + mode;
   const load = async (): Promise<CursorPage<FeedItem>> => {
-    const { items, tuples } = await rankAll(clean, now, userId, viewerClient);
+    const { items, tuples } = await rankAll(clean, now, userId, viewerClient, mode);
     let startIndex = 0;
     if (decoded) {
       const idx = tuples.findIndex((t, i) => items[i]?.post.id === decoded.id);
@@ -867,9 +941,7 @@ export async function getFeedPage(
     };
   };
 
-  return userId === CURRENT_USER_ID
-    ? cacheAside(cacheKeys.feed(userId, cacheKey, profileCacheKey(clean)), TTL.feed, load)
-    : load();
+  return cacheAside(cacheKeys.feed(userId, cacheKey, profileCacheKey(clean)), TTL.feed, load);
 }
 
 interface RealStoryRow {
@@ -886,7 +958,10 @@ interface RealStoryRow {
   story_expires_at: string;
 }
 
-async function fetchRealStories(viewerClient?: SupabaseClient | null): Promise<StoryItem[]> {
+async function fetchRealStories(
+  viewerClient?: SupabaseClient | null,
+  viewerId?: string | null,
+): Promise<StoryItem[]> {
   const supabase = serverSupabase(viewerClient);
   if (!supabase) return [];
   const { data, error } = await supabase
@@ -910,6 +985,27 @@ async function fetchRealStories(viewerClient?: SupabaseClient | null): Promise<S
   const profiles = new Map(
     ((profileRows ?? []) as RealProfileRow[]).map((profile) => [profile.id, profile]),
   );
+
+  // Seen-state comes from story_views; the table (or permission) may not
+  // exist yet, so a failure degrades to "all unseen" instead of emptying
+  // the rail.
+  const viewedIds = new Set<string>();
+  if (viewerId) {
+    const { data: viewRows, error: viewError } = await supabase
+      .from("story_views")
+      .select("story_id")
+      .eq("viewer_id", viewerId)
+      .in(
+        "story_id",
+        rows.map((row) => row.id),
+      )
+      .limit(200);
+    if (!viewError) {
+      for (const row of (viewRows ?? []) as { story_id: string }[]) {
+        viewedIds.add(row.story_id);
+      }
+    }
+  }
 
   const signedMedia = await signStoredMediaBatch(
     supabase,
@@ -940,7 +1036,7 @@ async function fetchRealStories(viewerClient?: SupabaseClient | null): Promise<S
         overlays: row.story_overlays ?? [],
         createdAt: row.created_at,
         expiresAt: row.story_expires_at,
-        viewed: false,
+        viewed: viewedIds.has(row.id),
         real: true,
       } satisfies StoryItem,
     ];
@@ -952,13 +1048,11 @@ export async function getStoryRail(
   viewerClient?: SupabaseClient | null,
 ): Promise<StoryItem[]> {
   const load = async (): Promise<StoryItem[]> => {
-    const real = await fetchRealStories(viewerClient).catch(() => []);
+    const real = await fetchRealStories(viewerClient, userId).catch(() => []);
     return real;
   };
 
-  return userId === CURRENT_USER_ID
-    ? cacheAside(cacheKeys.stories(userId), TTL.feed, load)
-    : load();
+  return cacheAside(cacheKeys.stories(userId), TTL.feed, load);
 }
 
 export async function getTrending(region: string): Promise<TrendingTopic[]> {
@@ -1028,12 +1122,13 @@ export async function getHomeFeed(
   profile?: InterestProfile | null,
   viewerId: string | null = null,
   viewerClient?: SupabaseClient | null,
+  mode: FeedMode = "all",
 ): Promise<HomeFeed> {
   const userId = viewerId ?? CURRENT_USER_ID;
   const [storyRail, topics, feed] = await Promise.all([
     getStoryRail(userId, viewerClient),
     getTrending("global"),
-    getFeedPage(userId, cursor, profile, viewerClient),
+    getFeedPage(userId, cursor, profile, viewerClient, mode),
   ]);
   // Creator-shaped display chrome still uses the bundled demo identity. The
   // viewer's real UUID is only the RLS/cache identity above.

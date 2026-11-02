@@ -5,7 +5,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/frontend/hooks/useSession";
 import { PasswordReset } from "@/frontend/components/auth/PasswordReset";
 import { formatWait, useLoginThrottle } from "@/frontend/hooks/useLoginThrottle";
-import { authRedirectOrigin, oauthRedirectTo, openExternalUrl } from "@/frontend/lib/native";
+import {
+  authRedirectOrigin,
+  describeOAuthError,
+  oauthRedirectTo,
+  onOAuthReturnError,
+  openExternalUrl,
+} from "@/frontend/lib/native";
 import { cn } from "@/lib/utils";
 
 type Mode = "signin" | "signup";
@@ -29,6 +35,38 @@ export function AuthScreen() {
     // the reset panel is closed.
     if (!sessionLoading && session && !resetting) void navigate({ to: "/", replace: true });
   }, [session, sessionLoading, resetting, navigate]);
+
+  useEffect(() => {
+    // OAuth failures have to reach the user, or "Google login failed" has no
+    // cause to act on. Two legs, one message channel:
+    //  - native: the deep-link exchange in native.ts publishes failures here
+    //    (it also replays one that fired before this screen mounted);
+    //  - web: GoTrue bounces back with ?error=…&error_description=…, which
+    //    auth-js clears from the URL without surfacing — read it once, then
+    //    clean the URL so a reload doesn't replay the same banner.
+    const unsubscribe = onOAuthReturnError((message) => {
+      setNotice(null);
+      setError(message);
+    });
+    try {
+      const url = new URL(window.location.href);
+      const fromQuery = url.searchParams.get("error") ?? url.searchParams.get("error_code") ?? null;
+      const fromHash = new URLSearchParams(url.hash.replace(/^#/, "")).get("error");
+      const errCode = fromQuery ?? fromHash;
+      if (errCode) {
+        const description =
+          url.searchParams.get("error_description") ??
+          new URLSearchParams(url.hash.replace(/^#/, "")).get("error_description");
+        setError(describeOAuthError(errCode, description));
+        url.search = "";
+        url.hash = "";
+        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+      }
+    } catch {
+      // URL parsing unavailable — the form still works without the banner.
+    }
+    return unsubscribe;
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -133,6 +171,21 @@ export function AuthScreen() {
       });
       if (err) throw err;
       if (!data.url) throw new Error("Google sign-in is unavailable right now.");
+      // Google bounces with "redirect_uri_mismatch" whenever the project
+      // baked into this build isn't the one Google's client is configured
+      // for — an APK built against a stale .env. Verify the pairing here,
+      // where the message can name the cause, instead of stranding the user
+      // on Google's opaque 400 page.
+      const projectUrl = (import.meta.env["VITE_SUPABASE_URL"] ?? "").replace(/\/$/, "");
+      if (projectUrl) {
+        const expected = `${projectUrl}/auth/v1/callback`;
+        const actual = new URL(data.url).searchParams.get("redirect_uri")?.replace(/\/$/, "");
+        if (actual && actual !== expected) {
+          throw new Error(
+            "This build of WIZZ talks to a different Supabase project than Google allows — install the newest APK build.",
+          );
+        }
+      }
       await openExternalUrl(data.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed.");

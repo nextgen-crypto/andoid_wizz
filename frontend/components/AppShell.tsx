@@ -3,26 +3,25 @@ import { BottomNav } from "@/frontend/components/home/BottomNav";
 import { NavigationRail } from "@/frontend/components/home/NavigationRail";
 import { TopBar } from "@/frontend/components/home/TopBar";
 import { useSession } from "@/frontend/hooks/useSession";
+import { fetchAppConfig } from "@/frontend/lib/appConfig";
 import { supabase } from "@/integrations/supabase/client";
 
 function useMaintenance(): boolean {
   const [on, setOn] = useState(false);
   useEffect(() => {
-    const read = () => {
-      try {
-        const raw = localStorage.getItem("wizz:admin-ops-v1");
-        setOn(
-          Boolean(
-            raw && (JSON.parse(raw) as { config?: { maintenance?: boolean } }).config?.maintenance,
-          ),
-        );
-      } catch {
-        setOn(false);
-      }
+    let cancelled = false;
+    // Server-backed first so the banner reaches every device, not just the
+    // admin's browser; falls back to the local mirror when unreachable.
+    fetchAppConfig()
+      .then(({ config }) => {
+        if (!cancelled) setOn(Boolean(config.maintenance));
+      })
+      .catch(() => {
+        if (!cancelled) setOn(false);
+      });
+    return () => {
+      cancelled = true;
     };
-    read();
-    window.addEventListener("storage", read);
-    return () => window.removeEventListener("storage", read);
   }, []);
   return on;
 }
@@ -31,15 +30,56 @@ export function AppShell({
   title,
   children,
   fullHeight = false,
+  hideNav = false,
 }: {
   title: string;
   children: ReactNode;
-  /** Lock the shell to the viewport so a screen can own its own inner scroll. */
   fullHeight?: boolean;
+  hideNav?: boolean;
 }) {
   const maintenance = useMaintenance();
   const { user } = useSession();
   const [warnings, setWarnings] = useState<{ id: string; message: string }[]>([]);
+  const [announcement, setAnnouncement] = useState<{
+    id: string;
+    title: string;
+    message: string;
+  } | null>(null);
+
+  // Latest published announcement from the admin console's outbox.
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("announcements")
+      .select("id, title, message")
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data, error }) => {
+        if (cancelled || error || !data?.[0]) return;
+        const row = data[0] as { id: string; title: string; message: string };
+        try {
+          if (sessionStorage.getItem(`wizz:ann:${row.id}`)) return;
+        } catch {
+          // sessionStorage unavailable — just show it.
+        }
+        setAnnouncement(row);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function dismissAnnouncement() {
+    if (announcement) {
+      try {
+        sessionStorage.setItem(`wizz:ann:${announcement.id}`, "1");
+      } catch {
+        // ignore
+      }
+    }
+    setAnnouncement(null);
+  }
 
   useEffect(() => {
     if (!user) {
@@ -85,6 +125,20 @@ export function AppShell({
             Maintenance mode is ON — some features may be unavailable.
           </p>
         )}
+        {announcement && (
+          <div className="flex items-start gap-3 bg-foreground px-4 py-2 text-background">
+            <p className="min-w-0 flex-1 text-xs leading-5">
+              <span className="font-bold">{announcement.title}</span>
+              <span className="opacity-80"> — {announcement.message}</span>
+            </p>
+            <button
+              onClick={dismissAnnouncement}
+              className="shrink-0 rounded-full bg-background/20 px-3 py-1 text-[11px] font-bold"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {warnings.map((w) => (
           <div
             key={w.id}
@@ -109,7 +163,7 @@ export function AppShell({
           <h1 className="sr-only">{title}</h1>
           {children}
         </main>
-        <BottomNav />
+        {!hideNav && <BottomNav />}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { App as NativeApp } from "@capacitor/app";
 import { SplashScreen } from "@capacitor/splash-screen";
 
 import { isNativePlatform } from "@/frontend/lib/native";
+import { closeTopOverlay } from "@/frontend/components/media/overlayStack";
 
 // Splash failsafe: if the bundle loads but React never reaches its first
 // paint (a crash during boot), the effect inside NativeStartup never runs
@@ -42,6 +43,9 @@ export function NativeStartup() {
 
     let handle: { remove: () => Promise<void> } | undefined;
     void NativeApp.addListener("backButton", ({ canGoBack }) => {
+      // A full-screen overlay (image viewer, story viewer) wins over history:
+      // closing it should not also pop the route underneath.
+      if (closeTopOverlay()) return;
       if (canGoBack) {
         router.history.back();
         return;

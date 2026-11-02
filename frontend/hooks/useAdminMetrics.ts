@@ -52,14 +52,26 @@ function dayKey(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-function isMissingFunction(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error ?? "");
-  return /42883|PGRST202|function .* does not exist|Could not find the function/i.test(msg);
-}
-
-function isAdminOnlyError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error ?? "");
-  return /admin only|admin_roles|is_admin/i.test(msg);
+/** Well-formed empty payload so every section can render even when both the
+ *  RPC and the client-side fallback fail — a blank dashboard hides the error
+ *  instead of showing it. */
+export function emptyMetrics(): AdminMetrics {
+  const series: DayBucket[] = Array.from({ length: 14 }, (_, i) => ({
+    day: dayKey(Date.now() - (13 - i) * DAY),
+    users: 0,
+    posts: 0,
+    follows: 0,
+  }));
+  return {
+    totals: { users: 0, posts: 0, follows: 0, today: 0 },
+    series,
+    categories: [],
+    hashtags: [],
+    leaders: [],
+    recent: [],
+    users: [],
+    newWeek: 0,
+  };
 }
 
 interface RpcMetrics {
@@ -80,11 +92,11 @@ async function loadViaRpc(): Promise<AdminMetrics> {
   const m = (data ?? {}) as unknown as RpcMetrics;
   const nameOf = new Map((m.users ?? []).map((u) => [u.id, u.username]));
   return {
-    totals: m.totals,
-    series: m.series,
-    categories: m.categories,
-    hashtags: m.hashtags,
-    leaders: m.leaders,
+    totals: m.totals ?? { users: 0, posts: 0, follows: 0, today: 0 },
+    series: m.series ?? [],
+    categories: m.categories ?? [],
+    hashtags: m.hashtags ?? [],
+    leaders: m.leaders ?? [],
     recent: (m.recent ?? []).map((p) => ({
       id: p.id,
       caption: p.caption,
@@ -92,8 +104,8 @@ async function loadViaRpc(): Promise<AdminMetrics> {
       created_at: p.created_at,
       hasImage: p.has_image,
     })),
-    users: m.users,
-    newWeek: m.newWeek,
+    users: m.users ?? [],
+    newWeek: m.newWeek ?? 0,
   };
 }
 
@@ -269,16 +281,18 @@ export function useAdminMetrics(enabled: boolean) {
       setLoading(true);
       setError(null);
       try {
-        const metrics = await loadViaRpc().catch((e) => {
-          // Fall back to client-side if RPC is missing OR if admin_roles
-          // table isn't populated (email-based admin check passes on frontend
-          // but backend RPC rejects).
-          if (isMissingFunction(e) || isAdminOnlyError(e)) return loadClientSide();
-          throw e;
-        });
+        // Server RPC first; ANY failure (missing function, admin gate, network,
+        // schema drift) falls back to reading the tables directly from the
+        // client so the dashboard still fills in instead of erroring out.
+        const metrics = await loadViaRpc().catch(() => loadClientSide());
         if (!cancelled) setData(metrics);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not load metrics.");
+        // Both paths failed: render every section with empty-but-valid data
+        // and explain why, rather than leaving a blank console.
+        if (!cancelled) {
+          setData(emptyMetrics());
+          setError(e instanceof Error ? e.message : "Could not load metrics.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

@@ -227,16 +227,85 @@ export async function openExternalUrl(url: string): Promise<void> {
  * to this running shell instead of the WebView ever navigating itself.
  * exchangeCodeForSession consumes the single-use code and persists the
  * session exactly like the web leg does.
+ *
+ * Every failure path reports instead of vanishing: a denied consent or a
+ * rejected exchange used to land the user back on the auth screen with no
+ * explanation, which reads as "Google login is broken" with nothing to act on.
  */
 async function completeOAuthReturn(url?: string): Promise<void> {
   if (!url) return;
+  // Close the Custom Tab now that we're back in-app (no-op when the OS
+  // already dismissed it; a rejection here must not mask the auth outcome).
+  if (Capacitor.isNativePlatform()) await Browser.close().catch(() => undefined);
   try {
-    const code = new URL(url).searchParams.get("code");
-    if (code) await supabase.auth.exchangeCodeForSession(code);
-  } catch {
-    // Malformed URL or already-consumed code: the session watcher simply
-    // stays signed out, which is the safe default for an auth return leg.
+    const parsed = new URL(url);
+    // Consent denied / GoTrue rejection: the return leg carries ?error=…
+    // rather than ?code=…, so surface it instead of silently signing out.
+    const errCode = parsed.searchParams.get("error") ?? parsed.searchParams.get("error_code");
+    if (errCode) {
+      reportOAuthReturnError(
+        describeOAuthError(errCode, parsed.searchParams.get("error_description")),
+      );
+      return;
+    }
+    const code = parsed.searchParams.get("code");
+    if (!code) return;
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      reportOAuthReturnError(describeOAuthError(error.code ?? "exchange_failed", error.message));
+      return;
+    }
+    lastOAuthReturnError = null;
+  } catch (err) {
+    reportOAuthReturnError(
+      describeOAuthError("exchange_failed", err instanceof Error ? err.message : undefined),
+    );
   }
+}
+
+type OAuthReturnErrorHandler = (message: string) => void;
+const oauthReturnHandlers = new Set<OAuthReturnErrorHandler>();
+let lastOAuthReturnError: string | null = null;
+
+/**
+ * Human copy for an OAuth failure code, whether it comes back from Google
+ * (`access_denied`), from GoTrue (`bad_code_verifier`, `validation_failed`,
+ * …), or from our own exchange call.
+ */
+export function describeOAuthError(code: string, description?: string | null): string {
+  const ACCESS_DENIED = "Google sign-in was cancelled or declined.";
+  const known: Record<string, string> = {
+    access_denied: ACCESS_DENIED,
+    provider_email_needs_verification:
+      "That Google account needs its email verified — verify it, then try again.",
+    bad_code_verifier: "The sign-in session expired — please try Google again.",
+    validation_failed: "Google sign-in was rejected — please try again.",
+    exchange_failed: "Google sign-in couldn't be completed — please try again.",
+    server_error: "Google sign-in hit a temporary error — please try again.",
+  };
+  const base =
+    known[code] ??
+    (code.includes("access_denied") ? ACCESS_DENIED : "Google sign-in failed. Please try again.");
+  return description ? `${base} (${description})` : base;
+}
+
+/**
+ * Subscribe to OAuth return-leg failures so the auth screen can show them.
+ * Replays the most recent failure on subscribe — the return leg can fire
+ * before React mounts (same reason the handler installs at load time).
+ */
+export function onOAuthReturnError(handler: OAuthReturnErrorHandler): () => void {
+  oauthReturnHandlers.add(handler);
+  if (lastOAuthReturnError) handler(lastOAuthReturnError);
+  return () => {
+    oauthReturnHandlers.delete(handler);
+  };
+}
+
+function reportOAuthReturnError(message: string): void {
+  console.error("[auth] oauth return failed:", message);
+  lastOAuthReturnError = message;
+  for (const handler of oauthReturnHandlers) handler(message);
 }
 
 let oauthReturnInstalled = false;

@@ -173,6 +173,96 @@ export type Database = {
         };
         Relationships: [];
       };
+      announcements: {
+        Row: {
+          id: string;
+          title: string;
+          message: string;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title?: string;
+          message?: string;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          message?: string;
+          status?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      app_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          key: string;
+          value?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      showcase_slides: {
+        Row: {
+          id: string;
+          title: string;
+          subtitle: string;
+          image_url: string;
+          bg_from: string;
+          bg_to: string;
+          accent: string;
+          cta: string;
+          link_url: string;
+          active: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title?: string;
+          subtitle?: string;
+          image_url?: string;
+          bg_from?: string;
+          bg_to?: string;
+          accent?: string;
+          cta?: string;
+          link_url?: string;
+          active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          subtitle?: string;
+          image_url?: string;
+          bg_from?: string;
+          bg_to?: string;
+          accent?: string;
+          cta?: string;
+          link_url?: string;
+          active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       news_stories: {
         Row: {
           id: string;
@@ -920,6 +1010,7 @@ export type Database = {
           hashtags: string[];
           id: string;
           image_path: string;
+          image_paths: string[];
           image_url: string | null;
           is_edited: boolean;
           is_pinned: boolean;
@@ -954,6 +1045,7 @@ export type Database = {
           hashtags?: string[];
           id?: string;
           image_path?: string;
+          image_paths?: string[];
           image_url?: string | null;
           is_edited?: boolean;
           is_pinned?: boolean;
@@ -988,6 +1080,7 @@ export type Database = {
           hashtags?: string[];
           id?: string;
           image_path?: string;
+          image_paths?: string[];
           image_url?: string | null;
           is_edited?: boolean;
           is_pinned?: boolean;
@@ -1175,6 +1268,32 @@ export type Database = {
             columns: ["user_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      story_views: {
+        Row: {
+          story_id: string;
+          viewed_at: string;
+          viewer_id: string;
+        };
+        Insert: {
+          story_id: string;
+          viewed_at?: string;
+          viewer_id: string;
+        };
+        Update: {
+          story_id?: string;
+          viewed_at?: string;
+          viewer_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "story_views_story_id_fkey";
+            columns: ["story_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
             referencedColumns: ["id"];
           },
         ];

@@ -15,19 +15,72 @@ import {
 } from "@/frontend/components/admin/ui";
 import { exportCsv, newId } from "@/frontend/components/admin/opStore";
 import { getAds } from "@/frontend/components/ads/ads";
+import { useSession } from "@/frontend/hooks/useSession";
+import { saveAppConfig, useAppConfig } from "@/frontend/lib/appConfig";
 import type { SectionProps } from "@/frontend/components/admin/SectionsA";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------ NOTIFICATIONS */
+
+type LiveAnnouncement = {
+  id: string;
+  title: string;
+  message: string;
+  audience: string;
+  scheduled_for: string | null;
+  status: string;
+  created_at: string;
+};
+
 export function NotificationsSection({ ops, act }: SectionProps) {
+  const queryClient = useQueryClient();
+  const { user } = useSession();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [audience, setAudience] = useState("All users");
   const [schedule, setSchedule] = useState("");
+  const [sync, setSync] = useState<"idle" | "saving" | "synced" | "local">("idle");
 
-  function save(status: "draft" | "scheduled" | "published", verb: string) {
+  // Server rows win; the per-browser outbox is the fallback when the table
+  // can't be reached, so a failed write is still visible (and labelled).
+  const liveQuery = useQuery({
+    queryKey: ["admin-announcements"],
+    staleTime: 15_000,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("announcements")
+        .select("id, title, message, audience, scheduled_for, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? []) as LiveAnnouncement[];
+    },
+  });
+  const live = !liveQuery.isError && liveQuery.data !== undefined;
+
+  const rows: {
+    id: string;
+    title: string;
+    message: string;
+    audience: string;
+    schedule: string;
+    status: "draft" | "scheduled" | "published";
+  }[] = live
+    ? (liveQuery.data ?? []).map((a) => ({
+        id: a.id,
+        title: a.title,
+        message: a.message,
+        audience: a.audience,
+        schedule: a.scheduled_for ? new Date(a.scheduled_for).toLocaleString() : "Now",
+        status: a.status as "draft" | "scheduled" | "published",
+      }))
+    : ops.announcements;
+
+  async function save(status: "draft" | "scheduled" | "published", verb: string) {
     if (!title.trim() || !message.trim()) return;
+    // Audit + local mirror always; the server row is what every device reads.
     act(`${verb} announcement`, title.trim(), (s) => ({
       ...s,
       announcements: [
@@ -43,16 +96,44 @@ export function NotificationsSection({ ops, act }: SectionProps) {
         ...s.announcements,
       ],
     }));
+    setSync("saving");
+    try {
+      const { error } = await supabase.from("announcements").insert({
+        title: title.trim(),
+        message: message.trim(),
+        audience,
+        scheduled_for: schedule ? new Date(schedule).toISOString() : null,
+        status,
+        created_by: user?.id ?? null,
+      });
+      if (error) throw error;
+      setSync("synced");
+      void queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
+    } catch {
+      setSync("local");
+    }
     setTitle("");
     setMessage("");
     setSchedule("");
   }
 
+  const syncLabel =
+    sync === "saving"
+      ? "Publishing…"
+      : sync === "synced"
+        ? "Published to every device"
+        : sync === "local"
+          ? "Saved in this browser only — server rejected the write"
+          : live
+            ? "Live from the announcements table"
+            : "Server unreachable — using this browser's outbox";
+
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Panel
         title="Create announcement"
-        hint="Push delivery needs a provider — drafts publish in-app for now"
+        hint={`${syncLabel} · published announcements appear in-app`}
+        right={<Badge tone={sync === "local" || !live ? "gray" : "dark"}>{live ? "server" : "local"}</Badge>}
       >
         <div className="space-y-2">
           <Field label="Title">
@@ -92,13 +173,13 @@ export function NotificationsSection({ ops, act }: SectionProps) {
           </div>
           <div className="flex gap-2 pt-1">
             <button
-              onClick={() => save("draft", "Save announcement draft")}
+              onClick={() => void save("draft", "Save announcement draft")}
               className="flex-1 rounded-full bg-secondary py-2.5 text-sm font-bold"
             >
               Save draft
             </button>
             <button
-              onClick={() => save(schedule ? "scheduled" : "published", "Publish announcement")}
+              onClick={() => void save(schedule ? "scheduled" : "published", "Publish announcement")}
               className="flex-1 rounded-full bg-foreground py-2.5 text-sm font-bold text-background"
             >
               {schedule ? "Schedule" : "Publish"}
@@ -106,12 +187,17 @@ export function NotificationsSection({ ops, act }: SectionProps) {
           </div>
         </div>
       </Panel>
-      <Panel title={`Outbox (${ops.announcements.length})`}>
-        {ops.announcements.length === 0 ? (
+      <Panel
+        title={`Outbox (${rows.length})`}
+        hint={liveQuery.isLoading ? "Loading…" : live ? "Published announcements" : "Local fallback"}
+      >
+        {liveQuery.isLoading ? (
+          <Empty text="Loading announcements…" />
+        ) : rows.length === 0 ? (
           <Empty text="No announcements yet." />
         ) : (
           <ul className="divide-y divide-border">
-            {ops.announcements.map((a) => (
+            {rows.map((a) => (
               <li key={a.id} className="flex items-start gap-3 py-2.5">
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13px] font-bold">{a.title}</span>
@@ -240,10 +326,47 @@ const CONFIG_ROWS: {
 ];
 
 export function ConfigSection({ ops, act }: SectionProps) {
+  const queryClient = useQueryClient();
+  const { user } = useSession();
+  const { data, isLoading } = useAppConfig();
+  const [sync, setSync] = useState<"idle" | "saving" | "synced" | "local">("idle");
+  // Server row wins; the local mirror is the fallback when it can't be read.
+  const config = data?.config ?? ops.config;
+
+  async function toggle(key: (typeof CONFIG_ROWS)[number]["key"], label: string, value: boolean) {
+    const next = { ...config, [key]: value };
+    act(`Set ${label} ${value ? "ON" : "OFF"}`, "app-config", (s) => ({
+      ...s,
+      config: { ...s.config, [key]: value },
+    }));
+    setSync("saving");
+    const ok = await saveAppConfig(next, user?.id ?? null);
+    if (ok) queryClient.setQueryData(["app-config"], { config: next, live: true });
+    setSync(ok ? "synced" : "local");
+  }
+
+  const syncLabel =
+    sync === "saving"
+      ? "Syncing…"
+      : sync === "synced"
+        ? "Synced — applies to every device"
+        : sync === "local"
+          ? "Saved locally only — server rejected the write"
+          : isLoading
+            ? "Loading…"
+            : data?.live === false
+              ? "Server unreachable — using this browser's copy"
+              : "Live — applies to every device";
+
   return (
     <Panel
       title="App configuration"
-      hint="Applies instantly per-browser · backend enforcement pending, except maintenance banner"
+      hint={syncLabel}
+      right={
+        <Badge tone={sync === "local" ? "red" : data?.live === false ? "gray" : "dark"}>
+          {sync === "local" ? "local" : data?.live === false ? "offline" : "server"}
+        </Badge>
+      }
     >
       <ul className="divide-y divide-border">
         {CONFIG_ROWS.map((row) => (
@@ -253,13 +376,8 @@ export function ConfigSection({ ops, act }: SectionProps) {
               <span className="block text-[11px] text-muted-foreground">{row.desc}</span>
             </span>
             <ToggleRow
-              checked={ops.config[row.key]}
-              onChange={(v) =>
-                act(`Set ${row.label} ${v ? "ON" : "OFF"}`, "app-config", (s) => ({
-                  ...s,
-                  config: { ...s.config, [row.key]: v },
-                }))
-              }
+              checked={Boolean(config[row.key])}
+              onChange={(v) => void toggle(row.key, row.label, v)}
               label={row.label}
             />
           </li>

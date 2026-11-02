@@ -45,11 +45,15 @@ const NAV_ITEMS = [...left, ...right].filter(
 export function BottomNav() {
   const [createOpen, setCreateOpen] = useState(false);
   const [initialKind, setInitialKind] = useState<CreateKind | null>(null);
+  const [initialTrackId, setInitialTrackId] = useState<string | null>(null);
+  const [initialSourceUser, setInitialSourceUser] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const kind = (e as CustomEvent<{ kind?: CreateKind }>).detail?.kind ?? null;
-      setInitialKind(kind);
+      const detail = (e as CustomEvent<{ kind?: CreateKind; trackId?: string; sourceUser?: string }>).detail;
+      setInitialKind(detail?.kind ?? null);
+      setInitialTrackId(detail?.trackId ?? null);
+      setInitialSourceUser(detail?.sourceUser ?? null);
       setCreateOpen(true);
     };
     window.addEventListener("open-create", handler);
@@ -72,9 +76,13 @@ export function BottomNav() {
       <CreationEngine
         open={createOpen}
         initial={initialKind}
+        initialTrackId={initialTrackId}
+        initialSourceUser={initialSourceUser}
         onClose={() => {
           setCreateOpen(false);
           setInitialKind(null);
+          setInitialTrackId(null);
+          setInitialSourceUser(null);
         }}
       />
     </>

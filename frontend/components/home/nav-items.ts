@@ -44,8 +44,8 @@ export const createActions: {
 ];
 
 /** Global creation entry: any surface can dispatch this to open the same engine. */
-export function openCreate(kind?: CreateKind) {
-  window.dispatchEvent(new CustomEvent("open-create", { detail: { kind } }));
+export function openCreate(kind?: CreateKind, opts?: { trackId?: string; sourceUser?: string }) {
+  window.dispatchEvent(new CustomEvent("open-create", { detail: { kind, ...opts } }));
 }
 
 /** Camera icon kept for legacy imports. */

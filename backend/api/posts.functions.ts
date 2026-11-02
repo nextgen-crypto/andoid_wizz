@@ -15,6 +15,8 @@ export interface PostingCapabilities {
   full: boolean;
   /** content_type / video_width / video_height columns are present. */
   types: boolean;
+  /** image_paths (multi-photo carousel) column is present. */
+  imagePaths: boolean;
 }
 
 /** Server-side schema probe keeps expected legacy fallbacks out of browser consoles. */
@@ -38,6 +40,7 @@ export const fetchPostingCapabilities = createServerFn({ method: "GET" })
       saves,
       scheduler,
       types,
+      imagePathsColumn,
     ] = await Promise.all([
       supports("visibility,comments_enabled"),
       supports("video_url"),
@@ -66,6 +69,7 @@ export const fetchPostingCapabilities = createServerFn({ method: "GET" })
         return !error && data === true;
       })().catch(() => false),
       supports("content_type,video_width,video_height"),
+      supports("image_paths"),
     ]);
     const scheduling = scheduledColumns && scheduler;
     const media = mediaColumns && scheduler;
@@ -81,6 +85,7 @@ export const fetchPostingCapabilities = createServerFn({ method: "GET" })
       integrity: scheduler,
       full: sharing && media && scheduling && stories,
       types,
+      imagePaths: imagePathsColumn,
     };
   });
 

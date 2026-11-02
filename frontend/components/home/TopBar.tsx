@@ -399,7 +399,11 @@ export function TopBar() {
 
   const accountName = myProfile?.display_name ?? displayName ?? "Your account";
   const accountHandle = myProfile?.username ?? email?.split("@")[0] ?? "you";
-  const accountAvatar = myProfile?.avatar_url ?? avatarUrl;
+  // Only use an avatar the user has explicitly uploaded through the app.
+  // Google OAuth picture is intentionally excluded — the initial letter shows
+  // by default until the user edits their profile photo.
+  const accountAvatar = myProfile?.avatar_url ?? null;
+  const accountInitial = (accountName).slice(0, 1).toUpperCase() || "W";
 
   async function signOut() {
     close();
@@ -449,16 +453,17 @@ export function TopBar() {
               <MessageBadge userId={user?.id ?? null} />
             </button>
             {session ? (
-              <button onClick={() => setOpen("account")} aria-label="Your account" className="ml-1">
-                {avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt={displayName ?? "Your account"}
-                    className="size-8 rounded-full border border-border object-cover"
+              <button onClick={() => setOpen("account")} aria-label="Your account" className="relative ml-1">
+                {accountAvatar ? (
+                  <AvatarWithFallback
+                    src={accountAvatar}
+                    alt={accountName}
+                    initial={accountInitial}
+                    size="sm"
                   />
                 ) : (
                   <span className="grid size-8 place-items-center rounded-full bg-brand text-xs font-bold text-brand-foreground">
-                    {(displayName ?? "B").slice(0, 1).toUpperCase()}
+                    {accountInitial}
                   </span>
                 )}
               </button>
@@ -483,14 +488,15 @@ export function TopBar() {
               className="flex items-center gap-3 rounded-2xl bg-secondary px-3 py-2.5"
             >
               {accountAvatar ? (
-                <img
+                <AvatarWithFallback
                   src={accountAvatar}
                   alt={accountName}
-                  className="size-10 shrink-0 rounded-full border border-border object-cover"
+                  initial={accountInitial}
+                  size="md"
                 />
               ) : (
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-brand-foreground">
-                  {accountName.slice(0, 1).toUpperCase()}
+                  {accountInitial}
                 </span>
               )}
               <span className="min-w-0 flex-1">
@@ -1018,5 +1024,38 @@ export function TopBar() {
         )}
       </Sheet>
     </>
+  );
+}
+
+/** Avatar that falls back to an initial-letter circle if the image fails to load. */
+function AvatarWithFallback({
+  src,
+  alt,
+  initial,
+  size,
+}: {
+  src: string;
+  alt: string;
+  initial: string;
+  size: "sm" | "md";
+}) {
+  const [failed, setFailed] = useState(false);
+  const dim = size === "sm" ? "size-8 text-xs" : "size-10 text-sm";
+  if (failed) {
+    return (
+      <span
+        className={`grid ${dim} shrink-0 place-items-center rounded-full bg-brand font-bold text-brand-foreground`}
+      >
+        {initial}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setFailed(true)}
+      className={`${dim} shrink-0 rounded-full border border-border object-cover`}
+    />
   );
 }

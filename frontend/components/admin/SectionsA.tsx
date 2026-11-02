@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { creators, news, shorts, videos } from "@/backend/database/seed";
 import {
   fetchAdminReports,
   resolveAdminReport,
   type ResolveAction,
 } from "@/backend/api/admin.functions";
+import { fetchAdminCreators, adminSetPostStatus, type AdminCreator } from "@/backend/api/admin-console";
 import { TRACKS } from "@/frontend/components/create/creationEngine";
 import { Badge, Empty, Field, Panel, Select, inputCls } from "@/frontend/components/admin/ui";
 import { exportCsv, newId, type ActFn, type OpStore } from "@/frontend/components/admin/opStore";
@@ -26,27 +26,105 @@ export interface SectionProps {
 const tz = (n: number) => `TZS ${n.toLocaleString()}`;
 
 /* ---------------------------------------------------------- CONTENT */
+
+type ContentTab =
+  | "posts"
+  | "videos"
+  | "shorts"
+  | "stories"
+  | "news"
+  | "comments"
+  | "tags"
+  | "audio"
+  | "live";
+
+const CONTENT_TABS: ContentTab[] = [
+  "posts",
+  "videos",
+  "shorts",
+  "stories",
+  "news",
+  "comments",
+  "tags",
+  "audio",
+  "live",
+];
+
+type ContentRow = {
+  id: string;
+  caption: string;
+  category: string;
+  created_at: string;
+  author_id: string;
+  status: string;
+  content_kind: string;
+  content_type: string;
+};
+
+type NewsRow = {
+  id: string;
+  headline: string;
+  category: string;
+  state: string;
+  created_at: string;
+};
+
+/** Live rows from `posts` — the same table the feed reads, so what the
+ *  console lists is what users actually see (seed data never was). */
+async function fetchPostsWhere(pairs: [string, string][], limit = 50): Promise<ContentRow[]> {
+  let q = supabase
+    .from("posts")
+    .select("id, caption, category, created_at, author_id, status, content_kind, content_type")
+    .neq("status", "deleted")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  for (const [col, val] of pairs) q = q.eq(col, val);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as ContentRow[];
+}
+
 export function ContentSection({ m, ops, act }: SectionProps) {
-  const [tab, setTab] = useState<
-    "posts" | "videos" | "shorts" | "news" | "comments" | "tags" | "audio" | "live"
-  >("posts");
-  const { data: posts = [], isLoading } = useQuery({
-    queryKey: ["admin-posts"],
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<ContentTab>("posts");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const postsQ = useQuery({
+    queryKey: ["admin-content", "posts"],
     staleTime: 30_000,
+    retry: false,
+    queryFn: () => fetchPostsWhere([["content_kind", "post"], ["content_type", ""]]),
+  });
+  const videosQ = useQuery({
+    queryKey: ["admin-content", "videos"],
+    staleTime: 30_000,
+    retry: false,
+    queryFn: () => fetchPostsWhere([["content_type", "video"]]),
+  });
+  const shortsQ = useQuery({
+    queryKey: ["admin-content", "shorts"],
+    staleTime: 30_000,
+    retry: false,
+    queryFn: () => fetchPostsWhere([["content_type", "short"]]),
+  });
+  const storiesQ = useQuery({
+    queryKey: ["admin-content", "stories"],
+    staleTime: 30_000,
+    retry: false,
+    queryFn: () => fetchPostsWhere([["content_kind", "story"]]),
+  });
+  const newsQ = useQuery({
+    queryKey: ["admin-content", "news"],
+    staleTime: 30_000,
+    retry: false,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("posts")
-        .select("id, caption, category, created_at, author_id")
+        .from("news_stories")
+        .select("id, headline, category, state, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      return (data ?? []) as {
-        id: string;
-        caption: string;
-        category: string;
-        created_at: string;
-        author_id: string;
-      }[];
+      return (data ?? []) as NewsRow[];
     },
   });
   const { data: commentsProbe } = useQuery({
@@ -64,13 +142,80 @@ export function ContentSection({ m, ops, act }: SectionProps) {
     retry: false,
   });
   const names = new Map((m?.users ?? []).map((u) => [u.id, u.username]));
-  const isHidden = (kind: string, refId: string) =>
-    ops.hidden.some((h) => h.kind === kind && h.refId === refId);
+  const isHidden = (row: ContentRow) =>
+    row.status !== "published" ||
+    ops.hidden.some((h) => h.kind === "post" && h.refId === row.id);
+
+  /** Hide = archive server-side, which drops the post out of every feed for
+   *  every user; Restore puts it back. The old button only wrote to this
+   *  browser's localStorage, so it never hid anything. */
+  async function toggleVisibility(row: ContentRow, key: unknown[]) {
+    const hide = row.status === "published";
+    setBusyId(row.id);
+    try {
+      await adminSetPostStatus({ data: { id: row.id, status: hide ? "archived" : "published" } });
+      act(hide ? "Hide post" : "Restore post", row.id.slice(0, 8), (s) => ({
+        ...s,
+        hidden: hide
+          ? [...s.hidden, { kind: "post", refId: row.id, reason: "admin hide" }]
+          : s.hidden.filter((h) => h.refId !== row.id),
+      }));
+      await queryClient.invalidateQueries({ queryKey: key });
+      toast.success(hide ? "Hidden from every feed." : "Restored to every feed.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update that post.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function renderRows(rows: ContentRow[], key: unknown[]) {
+    if (rows.length === 0) return <Empty text="Nothing here yet." />;
+    return (
+      <ul className="divide-y divide-border">
+        {rows.map((p) => {
+          const hidden = isHidden(p);
+          return (
+            <li key={p.id} className="flex items-center gap-3 py-2.5">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold">
+                  {p.caption.slice(0, 80) || "Photo post"}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  @{names.get(p.author_id) ?? "?"} · {p.content_kind === "story" ? "story" : p.content_type || p.category || "post"} ·{" "}
+                  {timeAgo(p.created_at)}
+                </span>
+              </span>
+              {hidden && <Badge tone="red">hidden</Badge>}
+              <button
+                onClick={() => void toggleVisibility(p, key)}
+                disabled={busyId === p.id}
+                className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+              >
+                {busyId === p.id ? "…" : hidden ? "Restore" : "Hide"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  function loading(q: { isLoading: boolean; isError: boolean; error: unknown }) {
+    if (q.isLoading) return <Empty text="Loading live content…" />;
+    if (q.isError)
+      return (
+        <Empty
+          text={`Could not load: ${q.error instanceof Error ? q.error.message : "query failed"}`}
+        />
+      );
+    return null;
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
-        {(["posts", "videos", "shorts", "news", "comments", "tags", "audio", "live"] as const).map(
+        {CONTENT_TABS.map(
           (t) => (
             <button
               key={t}
@@ -89,152 +234,52 @@ export function ContentSection({ m, ops, act }: SectionProps) {
       </div>
 
       {tab === "posts" && (
-        <Panel title={`Posts (${posts.length})`} hint="Latest 50">
-          {isLoading ? (
-            <Empty text="Loading…" />
-          ) : (
-            <ul className="divide-y divide-border">
-              {posts.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 py-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold">
-                      {p.caption.slice(0, 80) || "Photo post"}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      @{names.get(p.author_id) ?? "?"} · {p.category} · {timeAgo(p.created_at)}
-                    </span>
-                  </span>
-                  {isHidden("post", p.id) ? (
-                    <Badge tone="red">hidden</Badge>
-                  ) : (
-                    <button
-                      onClick={() =>
-                        act("Hide post", p.id.slice(0, 8), (s) => ({
-                          ...s,
-                          hidden: [
-                            ...s.hidden,
-                            { kind: "post", refId: p.id, reason: "admin hide" },
-                          ],
-                        }))
-                      }
-                      className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold"
-                    >
-                      Hide
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+        <Panel title={`Posts (${postsQ.data?.length ?? 0})`} hint="Live from the posts table · latest 50">
+          {loading(postsQ) ?? renderRows(postsQ.data ?? [], ["admin-content", "posts"])}
         </Panel>
       )}
 
       {tab === "videos" && (
-        <Panel title={`Videos (${videos.length})`} hint="Seed catalogue">
-          <ul className="divide-y divide-border">
-            {videos.map((v) => {
-              const a = creators.find((c) => c.id === v.authorId);
-              return (
-                <li key={v.id} className="flex items-center gap-3 py-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold">{v.title}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {a?.displayName} · {v.category} · {v.views.toLocaleString()} views
-                    </span>
-                  </span>
-                  {isHidden("video", v.id) ? (
-                    <Badge tone="red">hidden</Badge>
-                  ) : (
-                    <button
-                      onClick={() =>
-                        act("Hide video", v.id, (s) => ({
-                          ...s,
-                          hidden: [
-                            ...s.hidden,
-                            { kind: "video", refId: v.id, reason: "admin hide" },
-                          ],
-                        }))
-                      }
-                      className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold"
-                    >
-                      Hide
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+        <Panel title={`Videos (${videosQ.data?.length ?? 0})`} hint="Live · posts with a video">
+          {loading(videosQ) ?? renderRows(videosQ.data ?? [], ["admin-content", "videos"])}
         </Panel>
       )}
 
       {tab === "shorts" && (
-        <Panel title={`Shorts (${shorts.length})`} hint="Seed feed catalogue">
-          <ul className="divide-y divide-border">
-            {shorts.map((s) => {
-              const a = creators.find((c) => c.id === s.authorId);
-              return (
-                <li key={s.id} className="flex items-center gap-3 py-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold">{s.caption}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {a?.displayName} · {s.category} · {s.metrics.views.toLocaleString()} views
-                    </span>
-                  </span>
-                  {isHidden("short", s.id) ? (
-                    <Badge tone="red">hidden</Badge>
-                  ) : (
-                    <button
-                      onClick={() =>
-                        act("Hide short", s.id, (st) => ({
-                          ...st,
-                          hidden: [
-                            ...st.hidden,
-                            { kind: "short", refId: s.id, reason: "admin hide" },
-                          ],
-                        }))
-                      }
-                      className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold"
-                    >
-                      Hide
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+        <Panel title={`Shorts (${shortsQ.data?.length ?? 0})`} hint="Live · posts marked as shorts">
+          {loading(shortsQ) ?? renderRows(shortsQ.data ?? [], ["admin-content", "shorts"])}
+        </Panel>
+      )}
+
+      {tab === "stories" && (
+        <Panel title={`Stories (${storiesQ.data?.length ?? 0})`} hint="Live · story posts">
+          {loading(storiesQ) ?? renderRows(storiesQ.data ?? [], ["admin-content", "stories"])}
         </Panel>
       )}
 
       {tab === "news" && (
-        <Panel title={`News (${news.length})`} hint="Seed articles">
-          <ul className="divide-y divide-border">
-            {news.map((n) => (
-              <li key={n.id} className="flex items-center gap-3 py-2.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold">{n.title}</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {n.sourceName} · {n.category}
-                    {n.live ? " · LIVE" : ""}
-                  </span>
-                </span>
-                {isHidden("news", n.id) ? (
-                  <Badge tone="red">hidden</Badge>
-                ) : (
-                  <button
-                    onClick={() =>
-                      act("Hide article", n.id, (st) => ({
-                        ...st,
-                        hidden: [...st.hidden, { kind: "news", refId: n.id, reason: "admin hide" }],
-                      }))
-                    }
-                    className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold"
-                  >
-                    Hide
-                  </button>
-                )}
-              </li>
+        <Panel
+          title={`News (${newsQ.data?.length ?? 0})`}
+          hint="Live from news_stories · publish, edit and remove in News"
+        >
+          {loading(newsQ) ??
+            ((newsQ.data ?? []).length === 0 ? (
+              <Empty text="No stories yet — add one in News." />
+            ) : (
+              <ul className="divide-y divide-border">
+                {(newsQ.data ?? []).map((n) => (
+                  <li key={n.id} className="flex items-center gap-3 py-2.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold">{n.headline}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {n.category} · {n.state} · {timeAgo(n.created_at)}
+                      </span>
+                    </span>
+                    <Badge tone={n.state === "breaking" ? "red" : "gray"}>{n.state}</Badge>
+                  </li>
+                ))}
+              </ul>
             ))}
-          </ul>
         </Panel>
       )}
 
@@ -930,16 +975,38 @@ export function PaymentsSection({ ops, act }: SectionProps) {
 
 /* ---------------------------------------------------------- CREATORS */
 
+/** Both the admin endpoint and the metrics RPC leaderboard share this shape. */
+type CreatorRow = AdminCreator;
+
 export function CreatorsSection({ m, ops, act }: SectionProps) {
-  const leaders = m?.leaders ?? [];
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-creators"],
+    staleTime: 30_000,
+    queryFn: () => fetchAdminCreators(),
+    retry: false,
+  });
+  const live = data?.live === true;
+  // Endpoint first; the metrics RPC leaderboard is only a stand-in when the
+  // service-role backend isn't configured.
+  const leaders: CreatorRow[] =
+    live && data.creators.length > 0 ? data.creators : ((m?.leaders ?? []) as CreatorRow[]);
 
   return (
     <div className="flex flex-col gap-4">
       <Panel
         title="Creator management"
-        hint="Earnings estimated from audience · payouts tracked locally"
+        hint={
+          isLoading
+            ? "Fetching creators…"
+            : live
+              ? "Live from the admin endpoint · true follower and post counts"
+              : "Endpoint unavailable — showing metrics RPC leaderboard"
+        }
+        right={<Badge tone={live ? "dark" : "gray"}>{live ? "API live" : "fallback"}</Badge>}
       >
-        {leaders.length === 0 ? (
+        {isLoading ? (
+          <Empty text="Loading creators…" />
+        ) : leaders.length === 0 ? (
           <Empty text="No creators yet." />
         ) : (
           <div className="overflow-x-auto">

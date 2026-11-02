@@ -1,7 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
-import { Panel, Field, Toggle, Empty, inputCls } from "@/frontend/components/admin/ui";
-import { getSlides, saveSlides, type ShowcaseSlide } from "@/frontend/components/showcase/showcase";
+import { Badge, Panel, Field, Toggle, Empty, inputCls } from "@/frontend/components/admin/ui";
+import {
+  fetchSlides,
+  getSlides,
+  saveSlides,
+  type ShowcaseSlide,
+} from "@/frontend/components/showcase/showcase";
 import { ShowcaseCarousel } from "@/frontend/components/showcase/ShowcaseCarousel";
 import { uploadAndSign } from "@/frontend/lib/storageUpload";
 import { friendlyPublishError } from "@/frontend/lib/mediaFormat";
@@ -28,11 +33,36 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [live, setLive] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function persist(next: ShowcaseSlide[]) {
+  // Hydrate from the server so this console shows exactly what every device
+  // shows — the list used to start from this browser's localStorage alone.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSlides().then(({ slides: remote, live: ok }) => {
+      if (cancelled) return;
+      setSlides(remote);
+      setLive(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function persist(next: ShowcaseSlide[]) {
     setSlides(next);
-    saveSlides(next);
+    setSaving(true);
+    setError(null);
+    const ok = await saveSlides(next);
+    setLive(ok);
+    setSaving(false);
+    if (!ok) {
+      setError(
+        "Saved in this browser only — the server rejected the write. Sign in with an admin account to publish it to the app.",
+      );
+    }
   }
 
   async function uploadArt(file: File) {
@@ -61,7 +91,7 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
     }
     setError(null);
     if (editingId) {
-      persist(
+      void persist(
         slides.map((s) => (s.id === editingId ? { ...s, ...form, title: form.title.trim() } : s)),
       );
       setEditingId(null);
@@ -79,7 +109,7 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
         active: true,
         createdAt: new Date().toISOString(),
       };
-      persist([slide, ...slides]);
+      void persist([slide, ...slides]);
     }
     setForm(EMPTY_FORM);
   }
@@ -240,17 +270,27 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
               )}
               <button
                 onClick={save}
-                disabled={uploading}
+                disabled={uploading || saving}
                 className="flex-1 rounded-full bg-foreground py-2.5 text-sm font-bold text-background disabled:opacity-60"
               >
-                {editingId ? "Save changes" : "Add slide"}
+                {saving ? "Syncing…" : editingId ? "Save changes" : "Add slide"}
               </button>
             </div>
           </div>
         </div>
       </Panel>
 
-      <Panel title={`Slides (${slides.length})`} hint="Only active slides show in the app feed">
+      <Panel
+        title={`Slides (${slides.length})`}
+        hint={
+          live === null
+            ? "Loading from the server…"
+            : live
+              ? "Synced — active slides show in the app feed on every device"
+              : "Offline — showing this browser's copy; the app won't see changes yet"
+        }
+        right={<Badge tone={live === null ? "gray" : live ? "dark" : "red"}>{live ? "server" : "local"}</Badge>}
+      >
         {slides.length === 0 ? (
           <Empty text="No slides yet — build your first animated banner above." />
         ) : (
@@ -283,9 +323,9 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
                 </span>
                 <Toggle
                   checked={s.active}
-                  onChange={(v) =>
-                    persist(slides.map((x) => (x.id === s.id ? { ...x, active: v } : x)))
-                  }
+                  onChange={(v) => {
+                    void persist(slides.map((x) => (x.id === s.id ? { ...x, active: v } : x)));
+                  }}
                   label={`Show ${s.title}`}
                 />
                 <button
@@ -297,7 +337,7 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
                 </button>
                 <button
                   aria-label={`Delete ${s.title}`}
-                  onClick={() => persist(slides.filter((x) => x.id !== s.id))}
+                  onClick={() => void persist(slides.filter((x) => x.id !== s.id))}
                   className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary"
                 >
                   <Trash2 className="size-4" />

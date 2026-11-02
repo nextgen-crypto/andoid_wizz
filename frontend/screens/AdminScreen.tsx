@@ -140,10 +140,57 @@ export function AdminScreen() {
 
   return (
     <>
-      {/* Desktop command center */}
-      <div className="hidden min-h-[100dvh] bg-surface-strong lg:block">
+      {/* ── Mobile header + tab strip ── */}
+      <div className="sticky top-0 z-30 border-b border-border bg-background lg:hidden">
+        <div className="flex items-center justify-between px-4 pb-2 pt-3">
+          <span className="text-lg font-black text-title">WIZZ Admin</span>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  connected ? "animate-pulse bg-brand" : "bg-muted-foreground",
+                )}
+              />
+              {connected ? "LIVE" : "…"}
+            </span>
+            <Link
+              to="/"
+              className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold"
+            >
+              ← App
+            </Link>
+          </div>
+        </div>
+        <div className="flex gap-1 overflow-x-auto px-3 pb-2 no-scrollbar">
+          {NAV.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setSection(id)}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                section === id
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-muted-foreground",
+              )}
+            >
+              <Icon className="size-3.5 shrink-0" />
+              {label}
+              {id === "moderation" && pendingReports > 0 && (
+                <span className="rounded-full bg-live px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  {pendingReports}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Full layout (sidebar on desktop, stacked on mobile) ── */}
+      <div className="min-h-[100dvh] bg-surface-strong">
         <div className="flex min-h-[100dvh]">
-          <aside className="sticky top-0 flex h-[100dvh] w-60 shrink-0 flex-col border-r border-border bg-background">
+          {/* Sidebar — desktop only */}
+          <aside className="sticky top-0 hidden h-[100dvh] w-60 shrink-0 flex-col border-r border-border bg-background lg:flex">
             <div className="flex items-center justify-between px-5 pb-2 pt-5">
               <span className="text-xl font-black text-title">WIZZ</span>
               <span className="flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold">
@@ -193,7 +240,7 @@ export function AdminScreen() {
           </aside>
 
           <main className="min-w-0 flex-1">
-            <div className="mx-auto w-full max-w-[1400px] p-6">
+            <div className="mx-auto w-full max-w-[1400px] p-3 lg:p-6">
               {loading && (
                 <div className="grid grid-cols-4 gap-3">
                   {[0, 1, 2, 3].map((i) => (
@@ -201,11 +248,19 @@ export function AdminScreen() {
                   ))}
                 </div>
               )}
-              {error && <p className="text-sm font-semibold text-live">{error}</p>}
+              {error && (
+                <div className="mb-4 rounded-2xl border border-border bg-card p-4">
+                  <p className="text-sm font-bold text-live">Live metrics unavailable</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {error} — the panels below are showing whatever could be loaded instead of
+                    nothing.
+                  </p>
+                </div>
+              )}
 
               {data && section === "overview" && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <Stat
                       label="Total users"
                       value={compact.format(data.totals.users)}
@@ -243,8 +298,8 @@ export function AdminScreen() {
                       sub={connected ? "streaming now" : "connecting"}
                     />
                   </div>
-                  <div className="grid grid-cols-5 gap-4">
-                    <div className="col-span-3 rounded-2xl border border-border bg-card p-4">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                    <div className="rounded-2xl border border-border bg-card p-4 lg:col-span-3">
                       <h3 className="text-sm font-bold">Activity — last 14 days</h3>
                       <div className="mt-2 h-60">
                         <ResponsiveContainer width="100%" height="100%">
@@ -286,7 +341,7 @@ export function AdminScreen() {
                         </ResponsiveContainer>
                       </div>
                     </div>
-                    <div className="col-span-2 space-y-4">
+                    <div className="space-y-4 lg:col-span-2">
                       <Panel title="System health">
                         <ul className="space-y-2 text-[13px]">
                           <li className="flex items-center justify-between">
@@ -471,26 +526,7 @@ export function AdminScreen() {
         </div>
       </div>
 
-      {/* Admin is desktop-only */}
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center px-6 pt-24 text-center lg:hidden">
-        <span className="grid size-16 place-items-center rounded-2xl bg-secondary">
-          <ShieldAlert className="size-7 text-muted-foreground" />
-        </span>
-        <h1 className="mt-4 text-xl font-bold">Desktop required</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The admin console is a desktop workspace. Open /admin in a desktop browser.
-        </p>
-        <Link
-          to="/"
-          className="mt-5 w-full rounded-full bg-foreground px-5 py-3 text-sm font-bold text-background"
-        >
-          Back to app
-        </Link>
-      </div>
-
-      <div className="lg:hidden">
-        <BottomNav />
-      </div>
+      {/* BottomNav is for regular app screens; admin has its own mobile top nav */}
       {managing && <UserDrawer user={managing} onClose={() => setManaging(null)} act={act} />}
     </>
   );

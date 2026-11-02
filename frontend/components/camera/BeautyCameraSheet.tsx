@@ -241,9 +241,9 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
           onClick={onClose}
           className="grid size-10 place-items-center rounded-full bg-scrim"
         >
-          <X className="size-5 text-media-foreground" />
+          <X className="size-5 text-white/80" />
         </button>
-        <span className="text-sm font-semibold text-media-foreground">{titles[mode]}</span>
+        <span className="text-sm font-semibold text-white/80">{titles[mode]}</span>
         <span className="grid size-10 place-items-center">
           {flash !== "off" && <Zap className="size-4 text-white" fill="currentColor" />}
         </span>
@@ -354,12 +354,12 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
         </div>
         {!ready && !error && (
           <div className="absolute inset-0 grid place-items-center">
-            <Loader2 className="size-6 animate-spin text-media-foreground" />
+            <Loader2 className="size-6 animate-spin text-white/80" />
           </div>
         )}
         {error && (
           <div className="absolute inset-0 grid place-items-center px-8 text-center">
-            <p className="text-sm font-semibold text-media-foreground">{error}</p>
+            <p className="text-sm font-semibold text-white/80">{error}</p>
           </div>
         )}
         {recording && (
@@ -420,7 +420,7 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
                 className={
                   active
                     ? "shrink-0 rounded-full bg-brand px-4 py-1.5 text-xs font-bold text-brand-foreground"
-                    : "shrink-0 rounded-full bg-scrim px-4 py-1.5 text-xs font-medium text-media-foreground"
+                    : "shrink-0 rounded-full bg-scrim px-4 py-1.5 text-xs font-medium text-white/80"
                 }
               >
                 {p.label}
@@ -432,7 +432,7 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
             className={
               useCustom
                 ? "shrink-0 rounded-full bg-brand px-4 py-1.5 text-xs font-bold text-brand-foreground"
-                : "shrink-0 rounded-full bg-scrim px-4 py-1.5 text-xs font-medium text-media-foreground"
+                : "shrink-0 rounded-full bg-scrim px-4 py-1.5 text-xs font-medium text-white/80"
             }
           >
             Custom
@@ -449,7 +449,7 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
               ] as const
             ).map(([key, label, min, max]) => (
               <label key={key} className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[11px] text-media-foreground/80">{label}</span>
+                <span className="w-28 shrink-0 text-[11px] text-white/80/80">{label}</span>
                 <input
                   type="range"
                   min={min}
@@ -463,7 +463,7 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
           </div>
         ) : (
           <label className="flex items-center gap-3">
-            <span className="w-28 shrink-0 text-[11px] text-media-foreground/80">Intensity</span>
+            <span className="w-28 shrink-0 text-[11px] text-white/80/80">Intensity</span>
             <input
               type="range"
               min={0}
@@ -514,7 +514,7 @@ export function BeautyCameraSheet({ open, mode, onClose, onCapture }: Props) {
               >
                 <Radio className="size-4" /> Go live
               </button>
-              <span className="text-[11px] text-media-foreground/70">
+              <span className="text-[11px] text-white/80/70">
                 Live streaming opens soon — your filter is saved for it.
               </span>
             </div>

@@ -33,12 +33,18 @@ function preventSharedCaching() {
   );
 }
 
-type HomeInput = { cursor?: string | null; profile?: unknown; scope?: "public" | "viewer" };
+type HomeInput = {
+  cursor?: string | null;
+  profile?: unknown;
+  scope?: "public" | "viewer";
+  mode?: "all" | "following";
+};
 
 function cleanProfile(data: HomeInput | undefined): {
   cursor: string | null;
   profile: InterestProfile;
   scope: "public" | "viewer";
+  mode: "all" | "following";
 } {
   const raw = (data?.profile ?? {}) as Partial<InterestProfile>;
   const strArray = (v: unknown): string[] =>
@@ -58,6 +64,7 @@ function cleanProfile(data: HomeInput | undefined): {
   return {
     cursor: data?.cursor ?? null,
     scope: data?.scope === "viewer" ? "viewer" : "public",
+    mode: data?.mode === "following" ? "following" : "all",
     profile: {
       followingIds: strArray(raw.followingIds),
       savedCategories: strArray(raw.savedCategories),
@@ -78,15 +85,20 @@ export const fetchHome = createServerFn({ method: "POST" })
   .validator((data: HomeInput | undefined) =>
     data?.profile !== undefined
       ? cleanProfile(data)
-      : { cursor: data?.cursor ?? null, profile: EMPTY_PROFILE, scope: data?.scope ?? "public" },
+      : {
+          cursor: data?.cursor ?? null,
+          profile: EMPTY_PROFILE,
+          scope: data?.scope ?? "public",
+          mode: data?.mode === "following" ? ("following" as const) : ("all" as const),
+        },
   )
   .handler(async ({ context, data }) => {
     preventSharedCaching();
     if (data.scope !== "viewer") {
-      return getHomeFeed(data.cursor, data.profile, null, undefined);
+      return getHomeFeed(data.cursor, data.profile, null, undefined, data.mode);
     }
     const viewer = homeContext(context);
-    return getHomeFeed(data.cursor, data.profile, viewer.userId, viewer.supabase);
+    return getHomeFeed(data.cursor, data.profile, viewer.userId, viewer.supabase, data.mode);
   });
 
 export const fetchFeedPage = createServerFn({ method: "POST" })
@@ -94,7 +106,11 @@ export const fetchFeedPage = createServerFn({ method: "POST" })
   .validator((data: HomeInput | undefined) =>
     data?.profile !== undefined
       ? cleanProfile(data)
-      : { cursor: data?.cursor ?? null, profile: EMPTY_PROFILE },
+      : {
+          cursor: data?.cursor ?? null,
+          profile: EMPTY_PROFILE,
+          mode: data?.mode === "following" ? ("following" as const) : ("all" as const),
+        },
   )
   .handler(async ({ context, data }) => {
     preventSharedCaching();
@@ -104,6 +120,7 @@ export const fetchFeedPage = createServerFn({ method: "POST" })
       data.cursor,
       data.profile,
       viewer.supabase,
+      data.mode,
     );
   });
 

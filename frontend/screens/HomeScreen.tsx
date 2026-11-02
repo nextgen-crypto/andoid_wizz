@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { useSuspenseQuery, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2 } from "lucide-react";
@@ -8,6 +8,7 @@ import { homeQueryOptions, personalFeedQueryOptions } from "@/frontend/queries/h
 import { TopBar } from "@/frontend/components/home/TopBar";
 import { StoryRail } from "@/frontend/components/home/StoryRail";
 import { FeedCard } from "@/frontend/components/home/FeedCard";
+import { FeedSkeleton } from "@/frontend/components/home/FeedSkeleton";
 import { BottomNav } from "@/frontend/components/home/BottomNav";
 import { useAds } from "@/frontend/components/ads/ads";
 import { SponsoredCard } from "@/frontend/components/ads/SponsoredCard";
@@ -20,7 +21,10 @@ import { useSavedPosts } from "@/frontend/hooks/useSavedPosts";
 import { useFollowList } from "@/frontend/hooks/usePublicProfile";
 import { buildInterestProfile, useFeedPrefs } from "@/frontend/hooks/useFeedPrefs";
 import { useEventTracker } from "@/frontend/hooks/useEventTracker";
+import { cn } from "@/frontend/lib/utils";
 import { toast } from "sonner";
+
+type FeedMode = "all" | "following";
 
 export function HomeScreen() {
   const { data: base } = useSuspenseQuery(homeQueryOptions);
@@ -65,25 +69,37 @@ export function HomeScreen() {
   }, [following, savedPosts, prefs.muted, prefs.hidden, prefs.notInterested, prefs.watched]);
 
   const [mounted, setMounted] = useState(false);
+
+  // ---- Feed state (declared before mode/refresh callbacks that mutate it) ----
+  const [storyRail, setStoryRail] = useState(base.stories);
+  const [storyViewerId, setStoryViewerId] = useState<string | null>(null);
+  const [feed, setFeed] = useState<FeedItem[] | null>(null);
+  const [feedViewerId, setFeedViewerId] = useState<string | null>(null);
+  /** Which tab the current `feed` pages belong to — guards cross-tab bleed. */
+  const [feedMode, setFeedMode] = useState<FeedMode | null>(null);
+  const [extra, setExtra] = useState<FeedItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(base.feed.nextCursor);
+  const [hasMore, setHasMore] = useState(base.feed.hasMore);
+  const [loading, setLoading] = useState(false);
+  /** "page" = infinite-scroll failure; "refresh" = pull-to-refresh failure. */
+  const [feedError, setFeedError] = useState<"page" | "refresh" | null>(null);
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  const feedRequestVersion = useRef(0);
+
+  const mode: FeedMode = "all";
   useEffect(() => {
     setMounted(true);
   }, []);
 
   // Personalized first page replaces the generic SSR page once ready. Story
   // state is separate because the viewer-specific query also refreshes it.
-  const [storyRail, setStoryRail] = useState(base.stories);
-  const [storyViewerId, setStoryViewerId] = useState<string | null>(null);
-  const [feed, setFeed] = useState<FeedItem[] | null>(null);
-  const [feedViewerId, setFeedViewerId] = useState<string | null>(null);
-  const [extra, setExtra] = useState<FeedItem[]>([]);
-  const [cursor, setCursor] = useState<string | null>(base.feed.nextCursor);
-  const [hasMore, setHasMore] = useState(base.feed.hasMore);
-  const [loading, setLoading] = useState(false);
-  const sentinel = useRef<HTMLDivElement | null>(null);
-  const feedRequestVersion = useRef(0);
-
-  const { data: personal } = useQuery({
-    ...personalFeedQueryOptions(profile, userId),
+  const {
+    data: personal,
+    isPending: personalPending,
+    isError: personalError,
+    refetch: refetchPersonal,
+  } = useQuery({
+    ...personalFeedQueryOptions(profile, userId, mode),
     enabled: mounted && !sessionLoading,
   });
 
@@ -99,27 +115,90 @@ export function HomeScreen() {
     setStoryViewerId(userId);
     setFeed(personal.feed.items);
     setFeedViewerId(userId);
+    setFeedMode(mode);
     setCursor(personal.feed.nextCursor);
     setHasMore(personal.feed.hasMore);
     setExtra([]);
-  }, [personal, userId]);
+    setFeedError(null);
+  }, [personal, mode, userId]);
+
+  // ---- Pull-to-refresh: refetch the personalized page (stories ride along)
+  // without resetting the base suspense query, which would suspend the screen. ----
+  const [refreshing, setRefreshing] = useState(false);
+  const [pullDist, setPullDist] = useState(0);
+  const pullStart = useRef<number | null>(null);
+  const refreshingRef = useRef(false);
+
+  const refreshFeed = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    setFeedError(null);
+    try {
+      const result = await refetchPersonal();
+      if (result.error) {
+        setFeedError("refresh");
+      } else {
+        window.scrollTo({ top: 0 });
+      }
+    } catch {
+      setFeedError("refresh");
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+      setPullDist(0);
+      pullStart.current = null;
+    }
+  }, [refetchPersonal]);
+
+  const onPullStart = (e: TouchEvent) => {
+    if (refreshingRef.current || window.scrollY > 0) return;
+    pullStart.current = e.touches[0]?.clientY ?? null;
+  };
+  const onPullMove = (e: TouchEvent) => {
+    if (pullStart.current == null || refreshingRef.current) return;
+    const dy = (e.touches[0]?.clientY ?? 0) - pullStart.current;
+    if (dy <= 0) {
+      setPullDist(0);
+      return;
+    }
+    // Resistance so the indicator follows the finger without yanking the page.
+    setPullDist(Math.min(dy * 0.4, 72));
+  };
+  const onPullEnd = () => {
+    if (pullStart.current == null) return;
+    const shouldRefresh = pullDist >= 48;
+    pullStart.current = null;
+    setPullDist(0);
+    if (shouldRefresh) void refreshFeed();
+  };
 
   const loadMore = useCallback(async () => {
-    if (feedViewerId !== userId || loading || !hasMore || !cursor) return;
+    if (feedViewerId !== userId || feedMode !== mode) return;
+    if (loading || !hasMore || !cursor) return;
     const requestVersion = ++feedRequestVersion.current;
     setLoading(true);
+    setFeedError(null);
     try {
-      const page = await loadPage({ data: { cursor, profile } });
+      const page = await loadPage({ data: { cursor, profile, mode } });
       if (requestVersion !== feedRequestVersion.current || feedViewerId !== userId) return;
-      setExtra((prev) => [...prev, ...page.items]);
+      // Keyset pages can repeat an id at lane boundaries — drop duplicates so
+      // pagination never renders the same post twice.
+      setExtra((prev) => {
+        const seen = new Set(prev.map((i) => i.post.id));
+        return [...prev, ...page.items.filter((i) => !seen.has(i.post.id))];
+      });
       setCursor(page.nextCursor);
       setHasMore(page.hasMore);
     } catch {
-      if (requestVersion === feedRequestVersion.current) setHasMore(false);
+      if (requestVersion === feedRequestVersion.current) {
+        // Keep hasMore true so the retry button can resume from the same cursor.
+        setFeedError("page");
+      }
     } finally {
       if (requestVersion === feedRequestVersion.current) setLoading(false);
     }
-  }, [cursor, feedViewerId, hasMore, loading, loadPage, profile, userId]);
+  }, [cursor, feedMode, feedViewerId, hasMore, loading, loadPage, mode, profile, userId]);
 
   useEffect(() => {
     const node = sentinel.current;
@@ -144,8 +223,14 @@ export function HomeScreen() {
     setExtra((prev) => prev.filter((i) => i.author.id !== authorId));
   }
 
-  const personalFeedReady = feedViewerId === userId;
-  const items = personalFeedReady ? [...(feed ?? base.feed.items), ...extra] : base.feed.items;
+  // Data for the selected tab: personalized pages when they match the tab,
+  // otherwise the instant SSR fallback — but only for "all" (the SSR page is a
+  // mixed feed, never a valid Following result).
+  const feedMatchesTab = feedViewerId === userId && feedMode === mode;
+  const paged = feed !== null ? [...feed, ...extra] : [];
+  const items: FeedItem[] = feedMatchesTab ? paged : mode === "all" ? base.feed.items : [];
+  const showSkeleton = !feedMatchesTab && personalPending && items.length === 0;
+
   const visibleStoryRail = storyViewerId === userId ? storyRail : base.stories;
   const ads = useAds();
   const slides = useShowcase();
@@ -153,11 +238,46 @@ export function HomeScreen() {
   const [hiddenPromos, setHiddenPromos] = useState<string[]>([]);
   const livePromos = promotions.filter((p) => !hiddenPromos.includes(p.campaignId));
 
+  const followingEmpty = false;
+  const followingError = false;
+
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background md:border-x md:border-border">
+    <div
+      className="mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background md:border-x md:border-border"
+      onTouchStart={onPullStart}
+      onTouchMove={onPullMove}
+      onTouchEnd={onPullEnd}
+    >
       <TopBar />
       <main className="min-w-0 flex-1 pb-24 sm:pb-28">
         <h1 className="sr-only">WIZZ home feed</h1>
+
+        {/* Pull-to-refresh indicator — expands with the drag distance. */}
+        <div
+          aria-hidden="true"
+          className="flex items-center justify-center overflow-hidden transition-[height] duration-200"
+          style={{ height: refreshing ? 44 : pullDist }}
+        >
+          {(refreshing || pullDist > 8) && (
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          )}
+        </div>
+
+        {feedError === "refresh" && (
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-secondary/50 px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">Couldn&apos;t refresh the feed.</p>
+            <button
+              onClick={() => {
+                setFeedError(null);
+                void refreshFeed();
+              }}
+              className="text-xs font-semibold text-foreground underline-offset-2 hover:underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         <StoryRail
           currentUser={base.currentUser}
           currentUserAvatar={myProfile?.avatar_url}
@@ -165,7 +285,42 @@ export function HomeScreen() {
           stories={visibleStoryRail}
         />
         {slides.length > 0 && <ShowcaseCarousel slides={slides} />}
-        {items.length === 0 && (
+
+        {showSkeleton && <FeedSkeleton />}
+
+        {followingError && (
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm font-semibold text-foreground">Couldn&apos;t load this feed</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Check your connection and try again.
+            </p>
+            <button
+              onClick={() => void refetchPersonal()}
+              className="mt-4 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {followingEmpty && (
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm font-semibold text-foreground">
+              No posts from people you follow yet
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When you follow creators, their posts show up here.
+            </p>
+            <button
+              onClick={() => void refreshFeed()}
+              className="mt-4 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+            >
+              Refresh
+            </button>
+          </div>
+        )}
+
+        {!showSkeleton && items.length === 0 && mode === "all" && (
           <div className="px-6 py-12 text-center">
             <p className="text-sm font-semibold text-foreground">No posts yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -173,6 +328,7 @@ export function HomeScreen() {
             </p>
           </div>
         )}
+
         {items.map((item, i) => (
           <div key={item.post.id}>
             <FeedCard
@@ -223,9 +379,18 @@ export function HomeScreen() {
                 i % 4 === 3 && <SponsoredCard ad={ads[Math.floor(i / 4) % ads.length]!} />}
           </div>
         ))}
+
         <div ref={sentinel} className="grid h-16 place-items-center">
           {loading && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
-          {!hasMore && !loading && (
+          {feedError === "page" && !loading && (
+            <button
+              onClick={() => void loadMore()}
+              className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+            >
+              Couldn&apos;t load more — Retry
+            </button>
+          )}
+          {!hasMore && !loading && !feedError && items.length > 0 && (
             <p className="text-xs text-muted-foreground">You&apos;re all caught up</p>
           )}
         </div>

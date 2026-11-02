@@ -7,10 +7,12 @@ export const homeQueryOptions = queryOptions({
   queryKey: ["home", "feed", "start"],
   queryFn: () => fetchHome({ data: { cursor: null, scope: "public" } }),
   staleTime: 30_000,
-  // Transient RPC failures ("Failed to fetch" while the preview reconnects)
-  // should retry instead of blanking the screen.
-  retry: 3,
-  retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
+  // Transient RPC failures ("Failed to fetch" while the preview reconnects,
+  // or the native bridge retrying through CapacitorHttp) should retry instead
+  // of blanking the screen. Four attempts with exponential back-off covers
+  // most transient network hiccups on native.
+  retry: 4,
+  retryDelay: (attempt) => Math.min(800 * 2 ** attempt, 6000),
 });
 
 function profileHash(p: InterestProfile): string {
@@ -34,20 +36,25 @@ function profileHash(p: InterestProfile): string {
 }
 
 /** Personalized first page. The generic SSR page stays as instant fallback. */
-export const personalFeedQueryOptions = (profile: InterestProfile, viewerId: string | null) =>
+export const personalFeedQueryOptions = (
+  profile: InterestProfile,
+  viewerId: string | null,
+  mode: "all" | "following" = "all",
+) =>
   queryOptions({
-    queryKey: ["home", "feed", "personal", viewerId ?? "anonymous", profileHash(profile)],
-    queryFn: () => fetchHome({ data: { cursor: null, profile, scope: "viewer" } }),
+    queryKey: ["home", "feed", "personal", viewerId ?? "anonymous", mode, profileHash(profile)],
+    queryFn: () => fetchHome({ data: { cursor: null, profile, scope: "viewer", mode } }),
     staleTime: 30_000,
-    retry: 2,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
+    retry: 3,
+    retryDelay: (attempt) => Math.min(800 * 2 ** attempt, 6000),
   });
 
 export async function loadFeedPage(
   cursor: string | null,
   profile: InterestProfile = EMPTY_PROFILE,
+  mode: "all" | "following" = "all",
 ) {
-  return fetchFeedPage({ data: { cursor, profile } });
+  return fetchFeedPage({ data: { cursor, profile, mode } });
 }
 
 export const cacheStatsQueryOptions = queryOptions({

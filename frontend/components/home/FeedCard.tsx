@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { publicUrl } from "@/frontend/lib/native";
 import {
   BadgeCheck,
@@ -8,9 +9,13 @@ import {
   Heart,
   MessageCircle,
   MoreHorizontal,
+  Music,
   Play,
+  RotateCcw,
   Share2,
   UserX,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +23,8 @@ import { imageSrcSet, imageUrl, placeholderUrl, videoUrl } from "@/backend/domai
 import type { FeedItem } from "@/backend/services/feedService";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { ReportDialog, type ReportTarget } from "@/frontend/components/moderation/ReportDialog";
+import { ImageViewer } from "@/frontend/components/media/ImageViewer";
+import { claimPlayback, releasePlayback } from "@/frontend/hooks/useSinglePlayer";
 import { useSession } from "@/frontend/hooks/useSession";
 import { isPremiumActive } from "@/frontend/lib/membership";
 import { useAuthGate } from "@/frontend/hooks/useAuthGate";
@@ -33,6 +40,8 @@ import { cn } from "@/lib/utils";
 import { visibleHashtags } from "@/frontend/lib/hashtags";
 import { timeAgoCompact } from "@/frontend/lib/format";
 import { neutralizeBrokenImage } from "@/frontend/lib/mediaFormat";
+import { openCreate } from "@/frontend/components/home/nav-items";
+import { TRACKS } from "@/frontend/components/create/creationEngineSteps";
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
 const DOUBLE_TAP_MS = 280;
@@ -42,8 +51,7 @@ function isUuid(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
-/** Deterministic clock so SSR markup and hydrated markup agree exactly. */
-const REFERENCE_NOW = Date.parse("2026-08-27T12:00:00.000Z");
+// Timestamps use Date.now() so they reflect the actual current time on-device.
 
 export function FeedCard({
   item,
@@ -71,11 +79,18 @@ export function FeedCard({
   const [localSaved, setLocalSaved] = useState(false);
   const [localFollowing, setLocalFollowing] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [buffering, setBuffering] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [progressPct, setProgressPct] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [carouselPage, setCarouselPage] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [burst, setBurst] = useState(0);
+  const mediaRef = useRef<HTMLVideoElement | null>(null);
   const tapTimer = useRef<number | null>(null);
   const completedRef = useRef(false);
   const playCountRef = useRef(0);
@@ -150,7 +165,9 @@ export function FeedCard({
     author.username === myProfile?.username ||
     (userId === null && author.id === SEED_SELF_ID);
 
-  const image = post.media.find((m) => m.kind === "image");
+  const images = post.media.filter((m) => m.kind === "image");
+  const image = images[0];
+  const imageUrls = images.map((m) => imageUrl(m.objectKey, "original", m.width / m.height));
   const aspect = image ? image.width / image.height : 1;
   const commentsEnabled = post.commentsEnabled !== false;
   const sharingEnabled = post.allowSharing !== false;
@@ -175,7 +192,9 @@ export function FeedCard({
     }
   }
 
-  /** Mobile-reliable double-tap (onDoubleClick is flaky on touch). */
+  /** Mobile-reliable double-tap (onDoubleClick is flaky on touch).
+   *  Double-tap = like; a lone tap (no second hit within the window) opens
+   *  the full-screen viewer. */
   function handleMediaTap() {
     if (tapTimer.current) {
       window.clearTimeout(tapTimer.current);
@@ -185,6 +204,7 @@ export function FeedCard({
     }
     tapTimer.current = window.setTimeout(() => {
       tapTimer.current = null;
+      setViewerOpen(true);
     }, DOUBLE_TAP_MS);
   }
 
@@ -242,22 +262,52 @@ export function FeedCard({
       style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
     >
       <header className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-start gap-2 px-3 pt-3 sm:gap-3 sm:px-5">
-        <img
-          src={imageUrl(author.avatarKey, "thumbnail")}
-          alt={author.displayName}
-          loading="lazy"
-          onError={neutralizeBrokenImage}
-          className="size-9 shrink-0 rounded-full object-cover"
-        />
+        <Link
+          to="/u/$username"
+          params={{ username: author.username }}
+          aria-label={`Open ${author.displayName}'s profile`}
+          className="shrink-0"
+        >
+          <img
+            src={imageUrl(author.avatarKey, "thumbnail")}
+            alt={author.displayName}
+            loading="lazy"
+            onError={neutralizeBrokenImage}
+            className="size-9 rounded-full object-cover"
+          />
+        </Link>
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1">
+          <Link
+            to="/u/$username"
+            params={{ username: author.username }}
+            className="flex min-w-0 items-center gap-1 hover:underline"
+          >
             <span className="truncate text-sm font-bold text-foreground">{author.displayName}</span>
             {(author.verified || isPremiumActive(author.premiumUntil)) && (
               <BadgeCheck className="size-4 shrink-0 text-brand" aria-label="Verified" />
             )}
-          </div>
+          </Link>
           <p className="truncate text-xs text-muted-foreground">
-            @{author.username} · {timeAgoCompact(post.createdAt, REFERENCE_NOW)}
+            <Link
+              to="/u/$username"
+              params={{ username: author.username }}
+              className="hover:underline"
+            >
+              @{author.username}
+            </Link>
+            {" · "}
+            {isUuid(post.id) ? (
+              <Link
+                to="/post/$postId"
+                params={{ postId: post.id }}
+                className="hover:underline"
+                aria-label="Open post"
+              >
+                {timeAgoCompact(post.createdAt)}
+              </Link>
+            ) : (
+              timeAgoCompact(post.createdAt)
+            )}
           </p>
         </div>
         {!isSelf && (
@@ -354,8 +404,18 @@ export function FeedCard({
       </p>
 
       {clipSrc ? (
-        <div className="relative bg-surface-strong" onClick={handleMediaTap}>
+        <div
+          className="relative bg-surface-strong"
+          onClick={() => {
+            // Tap media: toggle play/pause (the play overlay handles start).
+            const v = mediaRef.current;
+            if (!v) return;
+            if (v.paused) void v.play()?.catch(() => setVideoError(true));
+            else v.pause();
+          }}
+        >
           <video
+            ref={mediaRef}
             className="aspect-[4/5] w-full object-cover"
             src={clipSrc}
             poster={
@@ -363,22 +423,31 @@ export function FeedCard({
             }
             playsInline
             loop
-            muted
-            controls={playing}
+            muted={muted}
             preload="none"
+            onError={() => setVideoError(true)}
             onPlay={() => {
               setPlaying(true);
+              setVideoError(false);
+              claimPlayback(mediaRef.current);
               reportWatch(false);
               playCountRef.current += 1;
               track?.(playCountRef.current > 1 ? "video_replay" : "video_play", post.id, {
                 authorId: author.id,
               });
             }}
-            onPause={() => track?.("video_pause", post.id, { authorId: author.id })}
+            onPause={() => {
+              setPlaying(false);
+              releasePlayback(mediaRef.current);
+              track?.("video_pause", post.id, { authorId: author.id });
+            }}
+            onWaiting={() => setBuffering(true)}
+            onPlaying={() => setBuffering(false)}
             onTimeUpdate={(e) => {
               const v = e.currentTarget;
               if (!(v.duration > 0)) return;
               const pct = v.currentTime / v.duration;
+              setProgressPct(pct * 100);
               for (const mark of [0.25, 0.5, 0.75]) {
                 if (pct >= mark && !progressRef.current.has(mark)) {
                   progressRef.current.add(mark);
@@ -391,24 +460,137 @@ export function FeedCard({
               }
             }}
           />
-          {!playing && (
+          {/* Viewport management: pause when scrolled away so only the on-screen
+              video is ever decoding. */}
+          <ViewportPauser elementRef={mediaRef} />
+          {videoError ? (
             <button
-              aria-label="Play video"
+              aria-label="Retry video"
               onClick={(e) => {
-                const video = e.currentTarget.previousElementSibling as HTMLVideoElement | null;
-                setPlaying(true);
-                void video?.play()?.catch(() => undefined);
+                e.stopPropagation();
+                const v = mediaRef.current;
+                if (!v) return;
+                setVideoError(false);
+                v.load();
+                void v.play()?.catch(() => setVideoError(true));
               }}
-              className="absolute inset-0 grid place-items-center bg-scrim/20"
+              className="absolute inset-0 grid place-items-center gap-2 bg-scrim/40"
             >
               <span className="grid size-14 place-items-center rounded-full bg-on-media/90">
-                <Play className="size-6 translate-x-0.5 fill-foreground text-foreground" />
+                <RotateCcw className="size-6 text-foreground" />
               </span>
+              <span className="text-sm font-semibold text-white">Tap to retry</span>
             </button>
+          ) : (
+            !playing && (
+              <button
+                aria-label="Play video"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const video = mediaRef.current;
+                  setPlaying(true);
+                  void video?.play()?.catch(() => setVideoError(true));
+                }}
+                className="absolute inset-0 grid place-items-center bg-scrim/20"
+              >
+                <span className="grid size-14 place-items-center rounded-full bg-on-media/90">
+                  <Play className="size-6 translate-x-0.5 fill-foreground text-foreground" />
+                </span>
+              </button>
+            )
+          )}
+          {buffering && !videoError && (
+            <span className="pointer-events-none absolute inset-0 grid place-items-center">
+              <span className="size-8 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            </span>
+          )}
+          {/* Mute toggle (feed videos start muted by default). */}
+          <button
+            aria-label={muted ? "Unmute video" : "Mute video"}
+            aria-pressed={muted}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMuted((m) => !m);
+            }}
+            className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"
+          >
+            {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+          </button>
+          {/* Playback progress strip. */}
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20">
+            <div
+              className="h-full bg-white transition-[width] duration-200"
+              style={{ width: `${Math.min(100, progressPct)}%` }}
+            />
+          </div>
+        </div>
+      ) : images.length > 1 ? (
+        <div
+          className="relative select-none"
+          style={{ touchAction: "manipulation" }}
+          onClick={handleMediaTap}
+        >
+          {/* Multi-photo carousel: horizontal snap paging + page dots. */}
+          <div
+            className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain no-scrollbar"
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              const page = Math.round(el.scrollLeft / Math.max(el.clientWidth, 1));
+              setCarouselPage(Math.min(page, images.length - 1));
+            }}
+          >
+            {images.map((m, i) => (
+              <img
+                key={m.objectKey + i}
+                src={imageUrl(m.objectKey, "large", m.width / m.height)}
+                srcSet={imageSrcSet(m.objectKey, m.width / m.height)}
+                sizes="(max-width: 768px) 100vw, 768px"
+                alt={i === 0 ? m.alt : `${m.alt} — photo ${i + 1}`}
+                width={m.width}
+                height={m.height}
+                loading={i === 0 ? "eager" : "lazy"}
+                decoding="async"
+                onError={neutralizeBrokenImage}
+                style={{
+                  backgroundImage: `url(${placeholderUrl(m.objectKey)})`,
+                  backgroundSize: "cover",
+                }}
+                draggable={false}
+                className="w-full shrink-0 snap-center bg-surface-strong object-cover"
+              />
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
+            <span className="rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+              {carouselPage + 1}/{images.length}
+            </span>
+          </div>
+          <div className="flex justify-center gap-1.5 py-2">
+            {images.map((m, i) => (
+              <span
+                key={`dot-${m.objectKey}-${i}`}
+                className={cn(
+                  "size-1.5 rounded-full transition-colors",
+                  i === carouselPage ? "bg-foreground" : "bg-border",
+                )}
+              />
+            ))}
+          </div>
+          {burst > 0 && (
+            <span
+              key={burst}
+              className="pointer-events-none absolute inset-0 grid place-items-center"
+            >
+              <Heart className="animate-heart-burst size-20 fill-white text-white drop-shadow-lg" />
+            </span>
           )}
         </div>
       ) : image ? (
-        <div className="relative" onClick={handleMediaTap}>
+        <div
+          className="relative select-none"
+          style={{ touchAction: "manipulation" }}
+          onClick={handleMediaTap}
+        >
           <img
             src={imageUrl(image.objectKey, "large", aspect)}
             srcSet={imageSrcSet(image.objectKey, aspect)}
@@ -418,6 +600,7 @@ export function FeedCard({
             height={image.height}
             loading="lazy"
             decoding="async"
+            draggable={false}
             onError={neutralizeBrokenImage}
             style={{
               backgroundImage: `url(${placeholderUrl(image.objectKey)})`,
@@ -435,6 +618,22 @@ export function FeedCard({
           )}
         </div>
       ) : null}
+
+      {/* Use this sound chip — visible on video posts so viewers can create with the same audio */}
+      {clipSrc && (
+        <div className="flex items-center gap-2 px-3 pb-1">
+          <button
+            onClick={() => openCreate("video", {
+              trackId: TRACKS[4]!.id, // "Original audio" track
+              sourceUser: author.username,
+            })}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground"
+          >
+            <Music className="size-3.5 text-brand" />
+            Use this sound · @{author.username}
+          </button>
+        </div>
+      )}
 
       {clipSrc && burst > 0 && (
         <span
@@ -529,6 +728,49 @@ export function FeedCard({
       {reportTarget && (
         <ReportDialog open onClose={() => setReportTarget(null)} target={reportTarget} />
       )}
+      {viewerOpen && images.length > 0 && (
+        <ImageViewer
+          images={imageUrls}
+          startIndex={0}
+          liked={liked}
+          onToggleLike={likeWithBurst}
+          onClose={() => setViewerOpen(false)}
+          alt={image?.alt ?? post.caption}
+          header={
+            <Link
+              to="/u/$username"
+              params={{ username: author.username }}
+              className="hover:underline"
+            >
+              {author.displayName} · @{author.username}
+            </Link>
+          }
+        />
+      )}
     </article>
   );
+}
+
+/**
+ * Pauses its video element whenever the card scrolls out of the viewport so
+ * only the on-screen video ever decodes. Play requests that begin while hidden
+ * are aborted, which also covers videos that were mid-play at scroll time.
+ */
+function ViewportPauser({ elementRef }: { elementRef: React.RefObject<HTMLVideoElement | null> }) {
+  useEffect(() => {
+    const el = elementRef.current;
+    const host = el?.parentElement;
+    if (!el || !host) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting && !el.paused) el.pause();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    io.observe(host);
+    return () => io.disconnect();
+  }, [elementRef]);
+  return null;
 }

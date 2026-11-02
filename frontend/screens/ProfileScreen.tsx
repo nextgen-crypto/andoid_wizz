@@ -31,6 +31,7 @@ import type { SavedPost } from "@/frontend/hooks/useSavedPosts";
 
 import { supabase } from "@/integrations/supabase/client";
 import { openCreate } from "@/frontend/components/home/nav-items";
+import { publicUrl } from "@/frontend/lib/native";
 import { cn } from "@/lib/utils";
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
@@ -66,7 +67,9 @@ export function ProfileScreen() {
   const shownName = myProfile?.display_name ?? displayName ?? "Your profile";
 
   async function shareProfile() {
-    const url = window.location.href;
+    const handle = myProfile?.username ?? email?.split("@")[0] ?? "";
+    // Use the public web origin so the link works outside the device WebView.
+    const url = handle ? publicUrl(`/u/${handle}`) : publicUrl("/profile");
     try {
       if (navigator.share) {
         await navigator.share({ title: shownName, url });
@@ -138,7 +141,9 @@ export function ProfileScreen() {
     );
   }
 
-  const shownAvatar = myProfile?.avatar_url ?? avatarUrl;
+  // Only use an avatar the user explicitly uploaded. Google OAuth picture is
+  // excluded — initial letter shows by default until the user edits their photo.
+  const shownAvatar = myProfile?.avatar_url ?? null;
   const shownHandle = myProfile?.username ?? email ?? "you";
   const shownBio = myProfile?.bio?.trim() ? myProfile.bio : "";
   // Owner grid shows published posts only; archived/deleted live in Manage.
@@ -344,9 +349,8 @@ export function ProfileScreen() {
                     : undefined
                 }
                 onClick={() => {
-                  if (isOwnedPost(p) && (p.video_url || p.image_url || p.thumbnail_url)) {
-                    setViewing(p);
-                  }
+                  // Open all owned posts — text-only posts show the manage sheet
+                  if (isOwnedPost(p)) setViewing(p);
                 }}
                 className="block w-full text-left"
               >

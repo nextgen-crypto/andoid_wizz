@@ -18,9 +18,6 @@ async function uploadObject(
   file: File | Blob,
   opts?: UploadOptions,
 ): Promise<void> {
-  // Resolve the type once here instead of trusting each call site: most pick
-  // flows never pass one, and an empty/application/* label is what storage
-  // MIME allowlists reject with a 415.
   const contentType = resolveStoredMime(path, file, opts?.contentType);
   const uploadOptions =
     contentType || opts?.upsert !== undefined
@@ -29,8 +26,32 @@ async function uploadObject(
           ...(opts?.upsert !== undefined ? { upsert: opts.upsert } : {}),
         }
       : undefined;
-  const { error } = await supabase.storage.from(bucket).upload(path, file, uploadOptions);
-  if (error) throw error;
+
+  // Retry up to 3 times with exponential backoff (1s, 2s, 4s).
+  // Mobile networks often drop the connection mid-upload; a single retry
+  // succeeds in the vast majority of cases without alarming the user.
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => window.setTimeout(r, 1000 * 2 ** (attempt - 1)));
+    }
+    const { error } = await supabase.storage.from(bucket).upload(path, file, uploadOptions);
+    if (!error) return;
+    const msg = error.message?.toLowerCase() ?? "";
+    // Only retry transient network/server errors — not client errors like
+    // permission denied or duplicate path, which retrying can't fix.
+    const transient =
+      msg.includes("failed to fetch") ||
+      msg.includes("networkerror") ||
+      msg.includes("network request failed") ||
+      error.statusCode === "500" ||
+      error.statusCode === "503" ||
+      error.statusCode === "504";
+    lastError = error;
+    if (!transient) break;
+  }
+  throw lastError;
 }
 
 /** Store the canonical object path; URLs are minted only after post RLS. */
