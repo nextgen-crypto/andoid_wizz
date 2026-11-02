@@ -350,9 +350,13 @@ export function Timeline({
             </button>
           </div>
 
-          {/* Sound track row */}
-          <div className="mt-2 px-9">
-            <SoundTrackRow zoom={zoom} offset={0} onAdd={onAddSound} />
+          {/* Sound track row — same left edge as the video track */}
+          <div className="mt-1 flex items-center gap-1">
+            {/* Spacer matching speaker icon width */}
+            <div className="size-8 shrink-0" />
+            <div className="relative flex-1" style={{ height: 36, minWidth: Math.max(0, totalDur * zoom) }}>
+              <SoundTrackRow zoom={zoom} offset={offset} onAdd={onAddSound} />
+            </div>
           </div>
         </div>
       </div>

@@ -355,21 +355,26 @@ function PhotoPreview({
         style={{ aspectRatio: "4/5" }}
         onPointerDown={() => setSelectedId(null)}
       >
-        {imgFailed ? (
-          <div className="grid size-full place-items-center gap-2 text-white/60">
-            <ImagePlus className="size-10 opacity-50" />
-            <span className="text-xs">Preview not available on this device</span>
-            <span className="text-[11px] opacity-60">The photo will still upload correctly</span>
+        <img
+          src={photoUrl}
+          alt="Edit preview"
+          style={{ filter: photoFilter, transform: photoTransform, display: imgFailed ? "none" : undefined }}
+          className="size-full object-cover transition-transform"
+          draggable={false}
+          onError={() => {
+            console.log("[photo-preview] img onError src:", photoUrl?.slice(-60));
+            setImgFailed(true);
+          }}
+        />
+        {imgFailed && (
+          <div className="absolute inset-0 grid place-items-center bg-black/80">
+            <div className="flex flex-col items-center gap-2 px-6 text-center">
+              <ImagePlus className="size-10 text-white/40" />
+              <p className="text-xs text-white/50">
+                Could not render preview — the photo will still upload correctly.
+              </p>
+            </div>
           </div>
-        ) : (
-          <img
-            src={photoUrl}
-            alt="Edit preview"
-            style={{ filter: photoFilter, transform: photoTransform }}
-            className="size-full object-cover transition-transform"
-            draggable={false}
-            onError={() => setImgFailed(true)}
-          />
         )}
         {/* Vignette overlay (separate from CSS filter — canvas baking handles it at export) */}
         {vignetteStyle && <div className="absolute inset-0" style={vignetteStyle} />}

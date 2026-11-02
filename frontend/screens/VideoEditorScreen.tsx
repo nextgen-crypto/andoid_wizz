@@ -149,12 +149,25 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
     selectClip(clips[clips.length - 1]!.id);
   }
 
+  /* ── Revoke blob URLs when editor unmounts ── */
+  useEffect(() => {
+    return () => {
+      for (const clip of useEditorStore.getState().project.clips) {
+        if (clip.src.startsWith("blob:")) URL.revokeObjectURL(clip.src);
+        for (const thumb of clip.thumbnails) {
+          if (thumb.startsWith("blob:")) URL.revokeObjectURL(thumb);
+        }
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isClipSelected = selectedClipId !== null;
 
   return (
     <div
-      className="fixed inset-0 flex flex-col bg-black"
-      style={{ userSelect: "none", WebkitUserSelect: "none" }}
+      className="fixed inset-0 flex flex-col overflow-hidden bg-black"
+      style={{ userSelect: "none", WebkitUserSelect: "none", height: "100dvh" }}
     >
       {/* ── Top bar ── */}
       <div className="flex shrink-0 items-center justify-between px-4 pt-safe pb-1">
@@ -174,9 +187,10 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
         </button>
       </div>
 
-      {/* ── Preview canvas ── */}
-      <div className="mx-auto flex w-full max-w-xs shrink-0 items-center justify-center px-4 py-1">
-        <PreviewCanvas className="w-full" />
+      {/* ── Preview canvas — takes all remaining vertical space ── */}
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden px-2 py-1">
+        {/* height:100% + aspectRatio 9/16 = width auto-derived from height */}
+        <PreviewCanvas className="h-full w-auto max-w-full" />
       </div>
 
       {/* ── Playback bar ── */}
@@ -191,8 +205,11 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
         />
       </div>
 
-      {/* ── Bottom toolbar ── */}
-      <div className="shrink-0 border-t border-white/10 bg-black">
+      {/* ── Bottom toolbar — padded above Android nav bar ── */}
+      <div
+        className="shrink-0 border-t border-white/10 bg-black"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)" }}
+      >
         {isClipSelected ? (
           <ClipToolbar
             onReplace={() => replaceInputRef.current?.click()}
@@ -405,33 +422,55 @@ function StubSheet({ name, onClose }: { name: string; onClose: () => void }) {
 
 /* ─── Helper: load a File into an EditorClip ────────────────────────────── */
 async function loadFileAsClip(file: File): Promise<EditorClip | null> {
+  // The main src blob URL — kept alive for the entire editor session.
+  // NEVER revoke this until the editor unmounts.
   const src = URL.createObjectURL(file);
+  console.log("[editor] loadFileAsClip", file.name, file.type, `${(file.size / 1024).toFixed(0)} KB`, src.slice(-30));
+
   let duration = 0;
 
   if (file.type.startsWith("video/")) {
+    // Use a SEPARATE URL for the metadata probe so revoking the probe URL
+    // never kills the main src that the <video> player will use.
+    const probeUrl = URL.createObjectURL(file);
     duration = await new Promise<number>((resolve) => {
       const v = document.createElement("video");
       v.preload = "metadata";
-      v.onloadedmetadata = () => {
-        resolve(Number.isFinite(v.duration) ? v.duration : 0);
-        URL.revokeObjectURL(v.src);
+      v.muted = true;
+      v.playsInline = true;
+      let settled = false;
+      const done = (dur: number) => {
+        if (settled) return;
+        settled = true;
+        resolve(dur);
       };
-      v.onerror = () => resolve(0);
-      v.src = src;
-      // Don't revoke yet — the video element needs the URL for a moment
+      v.addEventListener("loadedmetadata", () => {
+        console.log("[editor] probe OK dur:", v.duration);
+        done(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
+      }, { once: true });
+      v.addEventListener("error", () => {
+        console.log("[editor] probe FAIL code:", v.error?.code, v.error?.message);
+        done(0);
+      }, { once: true });
+      // 8-second safety valve in case events never fire (codec not supported)
+      window.setTimeout(() => done(0), 8000);
+      v.src = probeUrl;
     });
+    URL.revokeObjectURL(probeUrl);  // Safe: only revokes the probe copy
   } else {
-    duration = 5; // images get 5s
+    duration = 5; // still images shown for 5 s
   }
 
+  // Thumbnails: generateVideoThumbnails creates its own internal URL and revokes it.
+  // For images we reuse src (it's already a JPEG-compatible blob URL from attachPhoto).
   let thumbnails: string[] = [];
   try {
     if (file.type.startsWith("video/")) {
       thumbnails = await generateVideoThumbnails(file, 8);
     } else {
-      thumbnails = [src];
+      thumbnails = [src]; // image preview = the clip itself
     }
-  } catch {}
+  } catch { /* thumbnails is fine empty */ }
 
   const clip: EditorClip = {
     id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,

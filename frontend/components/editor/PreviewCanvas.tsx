@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useEditorStore } from "@/frontend/store/editorStore";
 import {
   resolvePlayhead,
@@ -8,85 +8,63 @@ import {
 } from "@/frontend/lib/editorTypes";
 import { cn } from "@/lib/utils";
 
-/* ─── Single hidden <video> element kept per clip src ──────────────────── */
-const videoCache = new Map<string, HTMLVideoElement>();
-
-function getOrCreateVideo(src: string): HTMLVideoElement {
-  if (videoCache.has(src)) return videoCache.get(src)!;
-  const v = document.createElement("video");
-  v.src = src;
-  v.preload = "auto";
-  v.muted = true;
-  v.playsInline = true;
-  v.style.display = "none";
-  document.body.appendChild(v);
-  videoCache.set(src, v);
-  return v;
-}
-
-/* ─── Layer drag state ──────────────────────────────────────────────────── */
-type DragInfo = {
-  kind: "text" | "sticker";
-  id: string;
-  ox: number; oy: number;
-};
+type DragInfo = { kind: "text" | "sticker"; id: string; ox: number; oy: number };
 
 export function PreviewCanvas({ className }: { className?: string }) {
-  const { project, playhead, playing, selectedClipId, setPlayhead } = useEditorStore();
+  const { project, playhead, playing, selectedClipId } = useEditorStore();
   const { clips, textLayers, stickers, globalFilter, globalAdjust } = project;
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const dragRef = useRef<DragInfo | null>(null);
+  const videoRef    = useRef<HTMLVideoElement | null>(null);
+  const rafRef      = useRef<number | null>(null);
+  const dragRef     = useRef<DragInfo | null>(null);
 
   const updateTextLayer = useEditorStore((s) => s.updateTextLayer);
-  const updateSticker = useEditorStore((s) => s.updateSticker);
+  const updateSticker   = useEditorStore((s) => s.updateSticker);
 
-  /* ── Resolve which clip is active and seek the video ── */
-  const syncVideo = useCallback(() => {
-    if (!clips.length) { videoRef.current = null; return; }
-    const resolved = resolvePlayhead(clips, playhead);
-    if (!resolved) return;
-    const clip = clips[resolved.clipIndex];
-    if (!clip) return;
+  const resolved    = clips.length ? resolvePlayhead(clips, playhead) : null;
+  const activeClip  = resolved ? clips[resolved.clipIndex] : null;
+  const selectedClip = clips.find((c) => c.id === selectedClipId);
 
-    const vid = getOrCreateVideo(clip.src);
-    if (videoRef.current !== vid) {
-      if (videoRef.current) videoRef.current.pause();
-      videoRef.current = vid;
-    }
-    const target = resolved.clipTime;
-    if (Math.abs(vid.currentTime - target) > 0.08) {
-      vid.currentTime = target;
-    }
-  }, [clips, playhead]);
+  const clipFilter  = activeClip
+    ? adjustToCssFilter(activeClip.adjust, activeClip.filter)
+    : adjustToCssFilter(globalAdjust, globalFilter);
 
-  /* ── Playback loop ── */
+  /* ── Play / pause ── */
   useEffect(() => {
-    if (playing) {
-      videoRef.current?.play().catch(() => undefined);
-      let last = performance.now();
-      function tick(now: number) {
-        const dt = (now - last) / 1000;
-        last = now;
-        useEditorStore.getState().setPlayhead(playhead + dt);
-        rafRef.current = requestAnimationFrame(tick);
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    } else {
-      videoRef.current?.pause();
+    const v = videoRef.current;
+    if (!playing) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      v?.pause();
+      return;
     }
+
+    v?.play().catch(() => undefined);
+
+    let last = performance.now();
+    function tick(now: number) {
+      const dt = (now - last) / 1000;
+      last = now;
+      useEditorStore.getState().setPlayhead(useEditorStore.getState().playhead + dt);
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
-  useEffect(() => { syncVideo(); }, [syncVideo]);
+  /* ── Seek when scrubbing (not playing) ── */
+  useEffect(() => {
+    if (playing) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const target = resolved?.clipTime ?? 0;
+    if (Math.abs(v.currentTime - target) > 0.08) v.currentTime = target;
+  }, [playhead, playing, resolved?.clipTime]);
 
-  /* ── Pointer handlers for layer drag ── */
+  /* ── Pointer drag handlers for overlay layers ── */
   function startDrag(e: React.PointerEvent, kind: "text" | "sticker", id: string, x: number, y: number) {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -96,7 +74,7 @@ export function PreviewCanvas({ className }: { className?: string }) {
     dragRef.current = {
       kind, id,
       ox: e.clientX - rect.left - x * rect.width,
-      oy: e.clientY - rect.top - y * rect.height,
+      oy: e.clientY - rect.top  - y * rect.height,
     };
   }
 
@@ -106,23 +84,10 @@ export function PreviewCanvas({ className }: { className?: string }) {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const x = Math.max(0.02, Math.min(0.98, (e.clientX - rect.left - dragRef.current.ox) / rect.width));
-    const y = Math.max(0.02, Math.min(0.98, (e.clientY - rect.top - dragRef.current.oy) / rect.height));
-    if (dragRef.current.kind === "text") {
-      updateTextLayer(dragRef.current.id, { x, y });
-    } else {
-      updateSticker(dragRef.current.id, { x, y });
-    }
+    const y = Math.max(0.02, Math.min(0.98, (e.clientY - rect.top  - dragRef.current.oy) / rect.height));
+    if (dragRef.current.kind === "text")    updateTextLayer(dragRef.current.id, { x, y });
+    else                                    updateSticker  (dragRef.current.id, { x, y });
   }
-
-  const cssFilter = adjustToCssFilter(globalAdjust, globalFilter);
-  const selectedClip = clips.find((c) => c.id === selectedClipId);
-
-  /* ── Active clip for preview (video or placeholder) ── */
-  const resolved = clips.length ? resolvePlayhead(clips, playhead) : null;
-  const activeClip = resolved ? clips[resolved.clipIndex] : null;
-  const clipFilter = activeClip
-    ? adjustToCssFilter(activeClip.adjust, activeClip.filter)
-    : cssFilter;
 
   return (
     <div
@@ -136,29 +101,37 @@ export function PreviewCanvas({ className }: { className?: string }) {
       onPointerMove={moveDrag}
       onPointerUp={() => { dragRef.current = null; }}
     >
-      {/* Video layer */}
+      {/* Video / image layer */}
       {activeClip ? (
         <video
           key={activeClip.src}
+          ref={videoRef}
           src={activeClip.src}
           className="size-full object-cover"
           style={{ filter: clipFilter, opacity: activeClip.opacity }}
           muted
           playsInline
-          ref={(el) => {
-            if (el) {
-              videoRef.current = el;
-              el.currentTime = resolved?.clipTime ?? 0;
-            }
+          preload="auto"
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            console.log("[preview] loadedmetadata OK src:", v.src.slice(-60), "dur:", v.duration);
+            // Seek to playhead after metadata loads (currentTime=0 by default)
+            const target = resolved?.clipTime ?? 0;
+            if (target > 0.05) v.currentTime = target;
+            if (playing) v.play().catch(() => undefined);
+          }}
+          onError={(e) => {
+            const v = e.currentTarget;
+            console.log("[preview] ERROR src:", v.src.slice(-60), "code:", v.error?.code, "msg:", v.error?.message);
           }}
         />
       ) : (
         <div className="grid size-full place-items-center bg-black">
-          <p className="text-xs text-white/40">No clip</p>
+          <p className="text-[11px] text-white/30">No clip</p>
         </div>
       )}
 
-      {/* Vignette */}
+      {/* Vignette overlay */}
       {(globalAdjust.vignette > 0 || (activeClip?.adjust.vignette ?? 0) > 0) && (
         <div
           className="pointer-events-none absolute inset-0"
@@ -203,21 +176,19 @@ function TextLayerNode({
   onPointerDown: (e: React.PointerEvent) => void;
 }) {
   const bgStyle =
-    layer.bg === "dark"
-      ? "rgba(0,0,0,0.55)"
-      : layer.bg === "light"
-        ? "rgba(255,255,255,0.65)"
-        : "transparent";
+    layer.bg === "dark"  ? "rgba(0,0,0,0.55)"   :
+    layer.bg === "light" ? "rgba(255,255,255,0.65)" :
+    "transparent";
   return (
     <span
       style={{
         position: "absolute",
         left: `${layer.x * 100}%`,
-        top: `${layer.y * 100}%`,
+        top:  `${layer.y * 100}%`,
         transform: `translate(-50%,-50%) rotate(${layer.rotation}deg) scale(${layer.scale})`,
         fontSize: `${layer.fontSize}px`,
-        fontWeight: layer.bold ? "bold" : "normal",
-        fontStyle: layer.italic ? "italic" : "normal",
+        fontWeight: layer.bold   ? "bold"   : "normal",
+        fontStyle:  layer.italic ? "italic" : "normal",
         color: layer.color,
         backgroundColor: bgStyle,
         padding: "2px 8px",
@@ -246,9 +217,9 @@ function StickerNode({
       style={{
         position: "absolute",
         left: `${layer.x * 100}%`,
-        top: `${layer.y * 100}%`,
+        top:  `${layer.y * 100}%`,
         transform: `translate(-50%,-50%) rotate(${layer.rotation}deg) scale(${layer.scale})`,
-        fontSize: `clamp(24px, 8vw, 48px)`,
+        fontSize: "clamp(24px, 8vw, 48px)",
         lineHeight: 1,
         touchAction: "none",
         userSelect: "none",
