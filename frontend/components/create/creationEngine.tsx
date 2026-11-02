@@ -47,6 +47,7 @@ import {
 } from "@/frontend/lib/mediaFormat";
 import { canReencodeVideo, reencodeVideoClip, tryExtractPreviewFrame } from "@/frontend/lib/videoEdit";
 import { applyOverlaysToFile, type PhotoOverlay } from "@/frontend/lib/overlayBaker";
+import { compressPhoto, estimateCompressedSize } from "@/frontend/lib/mediaCompressor";
 import { extractHashtags } from "@/frontend/lib/hashtags";
 import { BeautyCameraSheet } from "@/frontend/components/camera/BeautyCameraSheet";
 import { CropSheet } from "@/frontend/components/create/CropSheet";
@@ -258,6 +259,8 @@ export function CreationEngine({
   const [rotate, setRotate] = useState<0 | 90 | 180 | 270>(0);
   const [flip, setFlip] = useState<{ h: boolean; v: boolean }>({ h: false, v: false });
   const [photoOverlays, setPhotoOverlays] = useState<PhotoOverlay[]>([]);
+  const [photoQuality, setPhotoQuality] = useState(92);
+  const [estimatedPhotoSize, setEstimatedPhotoSize] = useState(0);
   const [camera, setCamera] = useState<null | "photo" | "short">(null);
   const [cropping, setCropping] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -408,6 +411,16 @@ export function CreationEngine({
     [videoPosterUrl],
   );
 
+  // Debounced size estimation: re-runs whenever the active photo or quality slider changes.
+  const activePhotoFile = photos[activePhoto] ?? null;
+  useEffect(() => {
+    if (!activePhotoFile) { setEstimatedPhotoSize(0); return; }
+    const id = window.setTimeout(() => {
+      void estimateCompressedSize(activePhotoFile, photoQuality).then(setEstimatedPhotoSize);
+    }, 350);
+    return () => window.clearTimeout(id);
+  }, [activePhotoFile, photoQuality]);
+
   function mapKind(k: CreateKind): Step {
     if (k === "photo" || k === "video" || k === "story" || k === "text") return k;
     if (k === "live") return "live-setup";
@@ -557,6 +570,8 @@ export function CreationEngine({
     setRotate(0);
     setFlip({ h: false, v: false });
     setPhotoOverlays([]);
+    setPhotoQuality(92);
+    setEstimatedPhotoSize(0);
   }
 
   function removePhoto(index: number) {
@@ -787,10 +802,15 @@ export function CreationEngine({
           );
           const withFilter = baked instanceof File ? baked : current;
           // Second canvas pass: bake text + sticker overlays on top of filter result
-          const bakedFile =
+          const withOverlays =
             photoOverlays.length > 0
               ? await applyOverlaysToFile(withFilter, photoOverlays).catch(() => withFilter)
               : withFilter;
+          // Third pass: apply quality/compression slider (only when below the default bake quality)
+          const bakedFile =
+            photoQuality < 92
+              ? await compressPhoto(withOverlays, photoQuality).catch(() => withOverlays)
+              : withOverlays;
           const photoMime = resolveUploadMime(bakedFile, "image", extOf(current));
           const imageExtension = photoMime === "image/jpeg" ? "jpg" : extOf(bakedFile) || "bin";
           const suffix = selection.length > 1 ? `-${i + 1}` : "";
@@ -799,9 +819,9 @@ export function CreationEngine({
           uploadedPaths.push(path);
           setProgress(20 + Math.round((45 * (i + 1)) / selection.length));
           if (capabilities.media) {
-            await uploadStoredObject("post-images", path, baked, { contentType: photoMime });
+            await uploadStoredObject("post-images", path, bakedFile, { contentType: photoMime });
           } else if (i === 0) {
-            imageUrl = await uploadAndSign("post-images", path, baked, {
+            imageUrl = await uploadAndSign("post-images", path, bakedFile, {
               contentType: photoMime,
               width: 1280,
             });
@@ -1065,6 +1085,10 @@ export function CreationEngine({
             setFlip={setFlip}
             overlays={photoOverlays}
             setOverlays={setPhotoOverlays}
+            photoQuality={photoQuality}
+            setPhotoQuality={setPhotoQuality}
+            rawPhotoSize={photos[activePhoto]?.size ?? 0}
+            estimatedPhotoSize={estimatedPhotoSize}
             onCamera={() => setCamera("photo")}
             onUpload={() => {
               pickMode.current = { replace: activePhoto };

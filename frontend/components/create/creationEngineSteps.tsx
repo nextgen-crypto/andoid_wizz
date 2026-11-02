@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { filterCss, filterPresets } from "@/frontend/components/camera/beautyFilters";
 import type { PhotoAdjustments, VideoAdjust } from "@/frontend/components/create/creationEngine";
+import { formatBytes } from "@/frontend/lib/mediaCompressor";
 import { useAudioPlayer } from "@/frontend/lib/audioPlayer";
 import type { Track } from "@/frontend/lib/audioPlayer";
 import type { PhotoOverlay, TextOverlay, StickerOverlay } from "@/frontend/lib/overlayBaker";
@@ -140,6 +141,10 @@ export function PhotoStep({
   setFlip,
   overlays,
   setOverlays,
+  photoQuality,
+  setPhotoQuality,
+  rawPhotoSize,
+  estimatedPhotoSize,
   onCamera,
   onUpload,
   onAddMore,
@@ -169,6 +174,10 @@ export function PhotoStep({
   setFlip: (v: { h: boolean; v: boolean }) => void;
   overlays: PhotoOverlay[];
   setOverlays: (v: PhotoOverlay[]) => void;
+  photoQuality: number;
+  setPhotoQuality: (v: number) => void;
+  rawPhotoSize: number;
+  estimatedPhotoSize: number;
   onCamera: () => void;
   onUpload: () => void;
   onAddMore: () => void;
@@ -238,6 +247,10 @@ export function PhotoStep({
       setFlip={setFlip}
       overlays={overlays}
       setOverlays={setOverlays}
+      photoQuality={photoQuality}
+      setPhotoQuality={setPhotoQuality}
+      rawPhotoSize={rawPhotoSize}
+      estimatedPhotoSize={estimatedPhotoSize}
       onUpload={onUpload}
       onContinue={onContinue}
       error={error}
@@ -272,6 +285,10 @@ function PhotoPreview({
   setFlip,
   overlays,
   setOverlays,
+  photoQuality,
+  setPhotoQuality,
+  rawPhotoSize,
+  estimatedPhotoSize,
   onUpload,
   onContinue,
   error,
@@ -301,6 +318,10 @@ function PhotoPreview({
   setFlip: (v: { h: boolean; v: boolean }) => void;
   overlays: PhotoOverlay[];
   setOverlays: (v: PhotoOverlay[]) => void;
+  photoQuality: number;
+  setPhotoQuality: (v: number) => void;
+  rawPhotoSize: number;
+  estimatedPhotoSize: number;
   onUpload: () => void;
   onContinue: () => void;
   error: string | null;
@@ -673,6 +694,58 @@ function PhotoPreview({
             >
               Reset transforms
             </button>
+          )}
+
+          {/* Export size */}
+          {rawPhotoSize > 0 && (
+            <div className="rounded-2xl bg-secondary p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-muted-foreground">Export size</p>
+                {photoQuality >= 92 ? (
+                  <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand">
+                    High quality
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                    Compressed
+                  </span>
+                )}
+              </div>
+              <label className="flex items-center gap-2">
+                <span className="w-[72px] shrink-0 text-[11px] text-muted-foreground">
+                  Quality {photoQuality}%
+                </span>
+                <input
+                  type="range"
+                  min={60}
+                  max={100}
+                  value={photoQuality}
+                  onChange={(e) => setPhotoQuality(Number(e.target.value))}
+                  className="flex-1 accent-brand"
+                  aria-label="Export quality"
+                />
+              </label>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">
+                  Original <span className="font-semibold text-foreground">{formatBytes(rawPhotoSize)}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  Upload{" "}
+                  {estimatedPhotoSize > 0 ? (
+                    <span className="font-semibold text-foreground">
+                      ~{formatBytes(estimatedPhotoSize)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/50">…</span>
+                  )}
+                </span>
+                {estimatedPhotoSize > 0 && rawPhotoSize > estimatedPhotoSize && (
+                  <span className="font-semibold text-emerald-600">
+                    −{Math.round((1 - estimatedPhotoSize / rawPhotoSize) * 100)}%
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
