@@ -75,6 +75,7 @@ import { cn } from "@/lib/utils";
 
 const TEN_YEARS = 60 * 60 * 24 * 365 * 10;
 const MAX_PHOTO_COUNT = 10;
+const MAX_STORY_SLIDES = 5;
 const DRAFT_KEY_PREFIX = "wizz:create:drafts";
 
 function draftKey(userId: string | null): string {
@@ -283,6 +284,9 @@ export function CreationEngine({
   const [textBody, setTextBody] = useState("");
   const [textBg, setTextBg] = useState(TEXT_BACKGROUNDS[0]!);
   const [storyOverlays, setStoryOverlays] = useState<string[]>([]);
+  const [slideTexts, setSlideTexts] = useState<string[]>([]);
+  const [slideDurations, setSlideDurations] = useState<number[]>([]);
+  const [storyTransition, setStoryTransition] = useState<"cut" | "fade" | "slide">("fade");
 
   // composer fields
   const [caption, setCaption] = useState("");
@@ -572,6 +576,9 @@ export function CreationEngine({
     setPhotoOverlays([]);
     setPhotoQuality(92);
     setEstimatedPhotoSize(0);
+    setSlideTexts([]);
+    setSlideDurations([]);
+    setStoryTransition("fade");
   }
 
   function removePhoto(index: number) {
@@ -779,7 +786,9 @@ export function CreationEngine({
 
       if (photos.length > 0 && (kind === "photo" || kind === "story")) {
         const selection =
-          kind === "story" || !capabilities.imagePaths ? photos.slice(0, 1) : photos;
+          kind === "story"
+            ? (capabilities.imagePaths ? photos.slice(0, MAX_STORY_SLIDES) : photos.slice(0, 1))
+            : photos;
         if (selection.length < photos.length) {
           toast(
             `This build supports ${selection.length === 1 ? "one photo per post" : `${selection.length} photos`} — extra selections weren't uploaded.`,
@@ -955,8 +964,19 @@ export function CreationEngine({
             content_kind: kind === "story" ? "story" : "post",
             story_expires_at:
               kind === "story" ? new Date(Date.now() + STORY_TTL_MS).toISOString() : null,
-            story_overlays: kind === "story" ? storyOverlays : [],
-            story_background: kind === "story" ? textBg : null,
+            story_overlays: kind === "story"
+              ? (() => {
+                  const chips = storyOverlays;
+                  if (imagePaths.length === 0) return chips;
+                  const meta = `__meta__:${JSON.stringify({
+                    texts: slideTexts.slice(0, imagePaths.length),
+                    durations: slideDurations.slice(0, imagePaths.length).map((d) => d || 5),
+                    transition: storyTransition,
+                  })}`;
+                  return [meta, ...chips];
+                })()
+              : [],
+            story_background: kind === "story" ? (textBody.trim() ? textBg : null) : null,
           }
         : basePost;
 
@@ -1150,13 +1170,33 @@ export function CreationEngine({
                 prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
               )
             }
+            storyPhotos={photoUrls}
+            activeSlide={activePhoto}
+            setActiveSlide={setActivePhoto}
+            maxSlides={MAX_STORY_SLIDES}
+            onRemoveSlide={(i) => {
+              removePhoto(i);
+              setSlideTexts((prev) => prev.filter((_, j) => j !== i));
+              setSlideDurations((prev) => prev.filter((_, j) => j !== i));
+            }}
+            onAddSlide={() => {
+              setTextBody("");
+              pickMode.current = { replace: null };
+              fileRef.current?.click();
+            }}
+            slideTexts={slideTexts}
+            setSlideTexts={setSlideTexts}
+            slideDurations={slideDurations}
+            setSlideDurations={setSlideDurations}
+            storyTransition={storyTransition}
+            setStoryTransition={setStoryTransition}
             onClearMedia={() => {
               clearPhoto();
               clearVideo();
             }}
             onPhoto={() => {
-              // Switching to photo mode — clear text so the image preview wins.
               setTextBody("");
+              pickMode.current = { replace: null };
               fileRef.current?.click();
             }}
             onVideo={() => {

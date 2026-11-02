@@ -1517,6 +1517,14 @@ export function VideoStep({
 /*  STORY STEP                                                                  */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
+const STORY_DURATIONS = [3, 5, 7, 10] as const;
+const STORY_TRANSITIONS = [
+  { id: "cut",  label: "Cut" },
+  { id: "fade", label: "Fade" },
+  { id: "slide", label: "Slide" },
+] as const;
+const SLIDE_TEXT_COLORS = ["#ffffff", "#ffee00", "#ff3366", "#00ccff", "#000000"] as const;
+
 export function StoryStep({
   photoUrl,
   videoUrl,
@@ -1525,6 +1533,18 @@ export function StoryStep({
   textBg,
   overlays,
   toggleOverlay,
+  storyPhotos,
+  activeSlide,
+  setActiveSlide,
+  maxSlides,
+  onRemoveSlide,
+  onAddSlide,
+  slideTexts,
+  setSlideTexts,
+  slideDurations,
+  setSlideDurations,
+  storyTransition,
+  setStoryTransition,
   onClearMedia,
   onPhoto,
   onVideo,
@@ -1539,6 +1559,18 @@ export function StoryStep({
   textBg: string;
   overlays: string[];
   toggleOverlay: (o: string) => void;
+  storyPhotos: string[];
+  activeSlide: number;
+  setActiveSlide: (i: number) => void;
+  maxSlides: number;
+  onRemoveSlide: (i: number) => void;
+  onAddSlide: () => void;
+  slideTexts: string[];
+  setSlideTexts: (v: string[]) => void;
+  slideDurations: number[];
+  setSlideDurations: (v: number[]) => void;
+  storyTransition: "cut" | "fade" | "slide";
+  setStoryTransition: (v: "cut" | "fade" | "slide") => void;
   onClearMedia: () => void;
   onPhoto: () => void;
   onVideo: () => void;
@@ -1546,13 +1578,64 @@ export function StoryStep({
   onContinue: () => void;
   error: string | null;
 }) {
+  const isMultiSlide = storyPhotos.length > 0;
   const hasMedia = Boolean(photoUrl || videoUrl);
   const has = Boolean(hasMedia || textBody.trim());
 
+  const activeText = slideTexts[activeSlide] ?? "";
+  const activeDuration = slideDurations[activeSlide] ?? 5;
+
+  function setActiveText(v: string) {
+    setSlideTexts(slideTexts.map((t, i) => (i === activeSlide ? v : t)));
+  }
+  function setActiveDuration(v: number) {
+    setSlideDurations(slideDurations.map((d, i) => (i === activeSlide ? v : d)));
+  }
+
   return (
     <div className="space-y-4">
-      {/* Phone-frame preview */}
-      <div className="relative mx-auto grid aspect-[9/16] max-h-[340px] w-48 place-items-center overflow-hidden rounded-[28px] border-4 border-foreground/20 bg-black shadow-xl">
+      {/* ── Slide strip (multi-photo) ── */}
+      {isMultiSlide && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {storyPhotos.map((url, i) => (
+            <div key={`${url}-${i}`} className="relative shrink-0">
+              <button
+                onClick={() => setActiveSlide(i)}
+                aria-label={`Slide ${i + 1}`}
+                className={cn(
+                  "block size-[56px] overflow-hidden rounded-xl",
+                  i === activeSlide
+                    ? "ring-2 ring-brand ring-offset-1 ring-offset-background"
+                    : "opacity-55",
+                )}
+              >
+                <img src={url} alt="" className="size-full object-cover" />
+              </button>
+              {storyPhotos.length > 1 && (
+                <button
+                  onClick={() => onRemoveSlide(i)}
+                  aria-label={`Remove slide ${i + 1}`}
+                  className="absolute -right-1 -top-1 grid size-[18px] place-items-center rounded-full bg-black/70 text-white"
+                >
+                  <X className="size-2.5" />
+                </button>
+              )}
+            </div>
+          ))}
+          {storyPhotos.length < maxSlides && (
+            <button
+              onClick={onAddSlide}
+              aria-label="Add slide"
+              className="grid size-[56px] shrink-0 place-items-center rounded-xl border-2 border-dashed border-border text-muted-foreground"
+            >
+              <ImagePlus className="size-5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Preview (phone frame) ── */}
+      <div className="relative mx-auto grid aspect-[9/16] max-h-[320px] w-44 place-items-center overflow-hidden rounded-[28px] border-4 border-foreground/20 bg-black shadow-xl">
         {photoUrl ? (
           <img src={photoUrl} alt="Story" className="size-full object-cover" draggable={false} />
         ) : videoUrl ? (
@@ -1570,15 +1653,21 @@ export function StoryStep({
             <p className="text-center text-sm font-bold leading-snug text-white">{textBody}</p>
           </div>
         ) : (
-          <p className="px-5 text-center text-xs text-white/50">Pick a photo, video, or write text below</p>
+          <p className="px-5 text-center text-xs text-white/50">
+            Pick a photo, video, or write text below
+          </p>
         )}
 
-        {hasMedia && textBody.trim() && (
+        {/* Active slide caption preview */}
+        {photoUrl && activeText.trim() && (
           <div className="pointer-events-none absolute inset-x-3 bottom-5 rounded-xl bg-black/55 px-2.5 py-2">
-            <p className="text-center text-[11px] font-bold leading-snug text-white">{textBody}</p>
+            <p className="text-center text-[11px] font-bold leading-snug text-white">
+              {activeText}
+            </p>
           </div>
         )}
 
+        {/* Sticker chips preview */}
         {has && overlays.length > 0 && (
           <div className="pointer-events-none absolute inset-x-0 top-6 flex flex-col items-center gap-1.5 px-2">
             {overlays.map((o) => (
@@ -1591,26 +1680,110 @@ export function StoryStep({
             ))}
           </div>
         )}
+
+        {/* Slide counter badge */}
+        {isMultiSlide && (
+          <div className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white tabular-nums">
+            {activeSlide + 1}/{storyPhotos.length}
+          </div>
+        )}
       </div>
 
-      {/* Media pickers */}
+      {/* ── Per-slide controls (only when photos present) ── */}
+      {isMultiSlide && (
+        <div className="space-y-3">
+          {/* Caption text for this slide */}
+          <div className="rounded-2xl bg-secondary p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground">
+              Caption · slide {activeSlide + 1}
+            </p>
+            <input
+              value={activeText}
+              onChange={(e) => setActiveText(e.target.value)}
+              placeholder="Add a caption…"
+              maxLength={80}
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
+            />
+          </div>
+
+          {/* Duration per slide */}
+          <div>
+            <p className="mb-1.5 px-1 text-[11px] font-semibold text-muted-foreground">
+              Duration · slide {activeSlide + 1}
+            </p>
+            <div className="flex gap-2">
+              {STORY_DURATIONS.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setActiveDuration(d)}
+                  className={cn(
+                    "flex-1 rounded-full py-2 text-xs font-bold transition-colors",
+                    activeDuration === d
+                      ? "bg-brand text-brand-foreground"
+                      : "bg-secondary text-foreground",
+                  )}
+                >
+                  {d}s
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Transition (only meaningful with >1 slide) */}
+          {storyPhotos.length > 1 && (
+            <div>
+              <p className="mb-1.5 px-1 text-[11px] font-semibold text-muted-foreground">
+                Transition
+              </p>
+              <div className="flex gap-2">
+                {STORY_TRANSITIONS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setStoryTransition(id)}
+                    className={cn(
+                      "flex-1 rounded-full py-2 text-xs font-bold transition-colors",
+                      storyTransition === id
+                        ? "bg-brand text-brand-foreground"
+                        : "bg-secondary text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Media pickers ── */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: hasMedia ? "Change photo" : "Photo",   icon: Camera,     action: onPhoto },
-          { label: hasMedia ? "Change video" : "Video",   icon: Video,      action: onVideo },
-          { label: "Text card",                            icon: RefreshCw,  action: onText  },
-        ].map(({ label, icon: Icon, action }) => (
+          {
+            label: isMultiSlide ? "Add photo" : hasMedia ? "Change photo" : "Photo",
+            icon: Camera,
+            action: isMultiSlide ? onAddSlide : onPhoto,
+          },
+          {
+            label: hasMedia ? "Change video" : "Video",
+            icon: Video,
+            action: onVideo,
+            disabled: isMultiSlide,
+          },
+          { label: "Text card", icon: RefreshCw, action: onText },
+        ].map(({ label, icon: Icon, action, disabled }) => (
           <button
             key={label}
             onClick={action}
-            className="press flex flex-col items-center gap-1.5 rounded-2xl bg-secondary py-4"
+            disabled={disabled}
+            className="press flex flex-col items-center gap-1.5 rounded-2xl bg-secondary py-4 disabled:opacity-40"
           >
             <Icon className="size-5 text-brand" />
             <span className="text-center text-xs font-semibold leading-tight">{label}</span>
           </button>
         ))}
       </div>
-      {hasMedia && (
+      {hasMedia && !isMultiSlide && (
         <button
           onClick={onClearMedia}
           className="flex w-full items-center justify-center gap-1.5 rounded-full bg-secondary py-2 text-xs font-semibold text-muted-foreground"
@@ -1618,8 +1791,16 @@ export function StoryStep({
           <X className="size-3.5" /> Remove media
         </button>
       )}
+      {isMultiSlide && storyPhotos.length > 0 && (
+        <button
+          onClick={onClearMedia}
+          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-secondary py-2 text-xs font-semibold text-muted-foreground"
+        >
+          <X className="size-3.5" /> Clear all slides
+        </button>
+      )}
 
-      {/* Sticker overlays */}
+      {/* ── Sticker chips ── */}
       <div>
         <p className="mb-2 px-1 text-xs font-semibold text-muted-foreground">Add stickers</p>
         <div className="flex flex-wrap gap-2">
@@ -1639,7 +1820,10 @@ export function StoryStep({
       </div>
 
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Users className="size-3.5" /> Visible to your audience · disappears in 24 hours
+        <Users className="size-3.5" />
+        {isMultiSlide
+          ? `${storyPhotos.length} slide${storyPhotos.length > 1 ? "s" : ""} · disappears in 24 hours`
+          : "Visible to your audience · disappears in 24 hours"}
       </p>
 
       {error && <p className="text-xs font-semibold text-live">{error}</p>}
