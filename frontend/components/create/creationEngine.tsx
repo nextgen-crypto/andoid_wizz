@@ -46,6 +46,7 @@ import {
   type VideoMetadata,
 } from "@/frontend/lib/mediaFormat";
 import { canReencodeVideo, reencodeVideoClip, tryExtractPreviewFrame } from "@/frontend/lib/videoEdit";
+import { applyOverlaysToFile, type PhotoOverlay } from "@/frontend/lib/overlayBaker";
 import { extractHashtags } from "@/frontend/lib/hashtags";
 import { BeautyCameraSheet } from "@/frontend/components/camera/BeautyCameraSheet";
 import { CropSheet } from "@/frontend/components/create/CropSheet";
@@ -256,6 +257,7 @@ export function CreationEngine({
   const [adjust, setAdjust] = useState<PhotoAdjustments>(DEFAULT_ADJUST);
   const [rotate, setRotate] = useState<0 | 90 | 180 | 270>(0);
   const [flip, setFlip] = useState<{ h: boolean; v: boolean }>({ h: false, v: false });
+  const [photoOverlays, setPhotoOverlays] = useState<PhotoOverlay[]>([]);
   const [camera, setCamera] = useState<null | "photo" | "short">(null);
   const [cropping, setCropping] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -554,6 +556,7 @@ export function CreationEngine({
     setAdjust(DEFAULT_ADJUST);
     setRotate(0);
     setFlip({ h: false, v: false });
+    setPhotoOverlays([]);
   }
 
   function removePhoto(index: number) {
@@ -782,8 +785,13 @@ export function CreationEngine({
               flip,
             ),
           );
-          const bakedFile = baked instanceof File ? baked : current;
-          const photoMime = resolveUploadMime(baked, "image", extOf(current));
+          const withFilter = baked instanceof File ? baked : current;
+          // Second canvas pass: bake text + sticker overlays on top of filter result
+          const bakedFile =
+            photoOverlays.length > 0
+              ? await applyOverlaysToFile(withFilter, photoOverlays).catch(() => withFilter)
+              : withFilter;
+          const photoMime = resolveUploadMime(bakedFile, "image", extOf(current));
           const imageExtension = photoMime === "image/jpeg" ? "jpg" : extOf(bakedFile) || "bin";
           const suffix = selection.length > 1 ? `-${i + 1}` : "";
           const path = `${user.id}/post-${stamp}${suffix}.${imageExtension}`;
@@ -1055,6 +1063,8 @@ export function CreationEngine({
             setRotate={setRotate}
             flip={flip}
             setFlip={setFlip}
+            overlays={photoOverlays}
+            setOverlays={setPhotoOverlays}
             onCamera={() => setCamera("photo")}
             onUpload={() => {
               pickMode.current = { replace: activePhoto };

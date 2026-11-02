@@ -35,13 +35,29 @@ import { filterCss, filterPresets } from "@/frontend/components/camera/beautyFil
 import type { PhotoAdjustments, VideoAdjust } from "@/frontend/components/create/creationEngine";
 import { useAudioPlayer } from "@/frontend/lib/audioPlayer";
 import type { Track } from "@/frontend/lib/audioPlayer";
+import type { PhotoOverlay, TextOverlay, StickerOverlay } from "@/frontend/lib/overlayBaker";
 import { captureVideoFrame } from "@/frontend/lib/videoEdit";
 import { cn } from "@/lib/utils";
 
 export { AtSign, Clock, FolderOpen, Link2, MapPin, Mic, MicOff, Music, RefreshCw, Users, Share2, Square };
 export type { Track };
+export type { PhotoOverlay, TextOverlay, StickerOverlay };
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3] as const;
+
+// Text overlay colors
+const TEXT_COLORS = [
+  "#ffffff", "#000000", "#ffee00", "#ff3366",
+  "#00ccff", "#66ff88", "#ff9900", "#cc44ff",
+] as const;
+
+// Sticker emoji grid (4 rows × 10 = 40 emojis)
+const EMOJI_GRID = [
+  "😍","🥰","😂","🤩","😎","🥳","😅","💀","🤣","😜",
+  "❤️","💕","💯","🔥","✨","🌟","💫","⭐","💥","🎯",
+  "🎉","🎵","🎶","💃","🕺","👑","🌈","🦋","🎊","🏆",
+  "💪","👏","🙌","🫶","💬","📸","🌊","🏄","🚀","💎",
+] as const;
 
 export const TRACKS: Track[] = [
   { id: "t1", title: "Midnight Drive",  creator: "Neon Coast",  duration: "0:29", durationSec: 29, bars: [3, 6, 9, 5, 8, 4, 7, 10, 6, 5, 8, 3] },
@@ -122,6 +138,8 @@ export function PhotoStep({
   setRotate,
   flip,
   setFlip,
+  overlays,
+  setOverlays,
   onCamera,
   onUpload,
   onAddMore,
@@ -149,6 +167,8 @@ export function PhotoStep({
   setRotate: (v: 0 | 90 | 180 | 270) => void;
   flip: { h: boolean; v: boolean };
   setFlip: (v: { h: boolean; v: boolean }) => void;
+  overlays: PhotoOverlay[];
+  setOverlays: (v: PhotoOverlay[]) => void;
   onCamera: () => void;
   onUpload: () => void;
   onAddMore: () => void;
@@ -156,7 +176,7 @@ export function PhotoStep({
   onCrop: () => void;
   error: string | null;
 }) {
-  const [tab, setTab] = useState<"filters" | "adjust" | "tools">("filters");
+  const [tab, setTab] = useState<"filters" | "adjust" | "tools" | "text">("filters");
 
   if (!photoUrl) {
     return (
@@ -216,6 +236,8 @@ export function PhotoStep({
       setRotate={setRotate}
       flip={flip}
       setFlip={setFlip}
+      overlays={overlays}
+      setOverlays={setOverlays}
       onUpload={onUpload}
       onContinue={onContinue}
       error={error}
@@ -248,6 +270,8 @@ function PhotoPreview({
   setRotate,
   flip,
   setFlip,
+  overlays,
+  setOverlays,
   onUpload,
   onContinue,
   error,
@@ -263,8 +287,8 @@ function PhotoPreview({
   maxPhotos: number;
   onCrop: () => void;
   onAddMore: () => void;
-  tab: "filters" | "adjust" | "tools";
-  setTab: (t: "filters" | "adjust" | "tools") => void;
+  tab: "filters" | "adjust" | "tools" | "text";
+  setTab: (t: "filters" | "adjust" | "tools" | "text") => void;
   presetId: string;
   setPresetId: (v: string) => void;
   intensity: number;
@@ -275,11 +299,23 @@ function PhotoPreview({
   setRotate: (v: 0 | 90 | 180 | 270) => void;
   flip: { h: boolean; v: boolean };
   setFlip: (v: { h: boolean; v: boolean }) => void;
+  overlays: PhotoOverlay[];
+  setOverlays: (v: PhotoOverlay[]) => void;
   onUpload: () => void;
   onContinue: () => void;
   error: string | null;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
+  // Overlay drag state
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Text overlay input state
+  const [textInput, setTextInput] = useState("");
+  const [textColor, setTextColor] = useState<string>(TEXT_COLORS[0]);
+  const [textSize, setTextSize] = useState<TextOverlay["fontSize"]>("md");
+  const [textBold, setTextBold] = useState(false);
+  const [textBg, setTextBg] = useState<TextOverlay["bg"]>("none");
 
   const vignetteStyle: React.CSSProperties | undefined =
     vignetteStrength > 0
@@ -293,8 +329,10 @@ function PhotoPreview({
     <div className="flex flex-col gap-0">
       {/* ── Full-bleed preview ── */}
       <div
+        ref={containerRef}
         className="relative w-full overflow-hidden rounded-2xl bg-black"
         style={{ aspectRatio: "4/5" }}
+        onPointerDown={() => setSelectedId(null)}
       >
         {imgFailed ? (
           <div className="grid size-full place-items-center gap-2 text-white/60">
@@ -314,6 +352,116 @@ function PhotoPreview({
         )}
         {/* Vignette overlay (separate from CSS filter — canvas baking handles it at export) */}
         {vignetteStyle && <div className="absolute inset-0" style={vignetteStyle} />}
+
+        {/* ── Photo overlays (text + stickers) ── */}
+        {overlays.map((ov) => {
+          const isSelected = selectedId === ov.id;
+          const previewStyle: React.CSSProperties = {
+            position: "absolute",
+            left: `${ov.x * 100}%`,
+            top: `${ov.y * 100}%`,
+            transform: "translate(-50%, -50%)",
+            touchAction: "none",
+            userSelect: "none",
+            cursor: "grab",
+            zIndex: isSelected ? 20 : 10,
+          };
+          const textSizeCss: Record<TextOverlay["fontSize"], string> = {
+            sm: "clamp(11px,3.2vw,18px)",
+            md: "clamp(16px,5vw,28px)",
+            lg: "clamp(22px,6.5vw,38px)",
+          };
+          const stickerSizeCss: Record<StickerOverlay["scale"], string> = {
+            sm: "clamp(20px,6vw,34px)",
+            md: "clamp(28px,8.5vw,48px)",
+            lg: "clamp(38px,11vw,64px)",
+          };
+          return (
+            <div
+              key={ov.id}
+              style={previewStyle}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setSelectedId(ov.id);
+                const el = containerRef.current;
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                dragRef.current = {
+                  id: ov.id,
+                  ox: e.clientX - rect.left - ov.x * rect.width,
+                  oy: e.clientY - rect.top - ov.y * rect.height,
+                };
+              }}
+              onPointerMove={(e) => {
+                if (!dragRef.current || dragRef.current.id !== ov.id) return;
+                const el = containerRef.current;
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const x = Math.max(0.04, Math.min(0.96, (e.clientX - rect.left - dragRef.current.ox) / rect.width));
+                const y = Math.max(0.04, Math.min(0.96, (e.clientY - rect.top - dragRef.current.oy) / rect.height));
+                setOverlays(overlays.map((o) => (o.id === ov.id ? { ...o, x, y } : o)));
+              }}
+              onPointerUp={() => { dragRef.current = null; }}
+            >
+              {/* Delete button (only when selected) */}
+              {isSelected && (
+                <button
+                  className="absolute -right-2.5 -top-2.5 z-30 grid size-5 place-items-center rounded-full bg-black/70 text-white"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOverlays(overlays.filter((o) => o.id !== ov.id));
+                    setSelectedId(null);
+                  }}
+                >
+                  <X className="size-2.5" />
+                </button>
+              )}
+
+              {ov.kind === "text" && (
+                <span
+                  style={{
+                    fontSize: textSizeCss[ov.fontSize],
+                    fontWeight: ov.bold ? "bold" : "normal",
+                    color: ov.color,
+                    padding: "2px 6px",
+                    borderRadius: "6px",
+                    backgroundColor:
+                      ov.bg === "dark"
+                        ? "rgba(0,0,0,0.55)"
+                        : ov.bg === "light"
+                          ? "rgba(255,255,255,0.65)"
+                          : "transparent",
+                    whiteSpace: "nowrap",
+                    display: "block",
+                    lineHeight: 1.2,
+                    outline: isSelected ? "2px solid rgba(255,255,255,0.7)" : "none",
+                    outlineOffset: "2px",
+                  }}
+                >
+                  {ov.text}
+                </span>
+              )}
+
+              {ov.kind === "sticker" && (
+                <span
+                  style={{
+                    fontSize: stickerSizeCss[ov.scale],
+                    display: "block",
+                    lineHeight: 1,
+                    outline: isSelected ? "2px solid rgba(255,255,255,0.7)" : "none",
+                    outlineOffset: "3px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  {ov.emoji}
+                </span>
+              )}
+            </div>
+          );
+        })}
+
         {/* Overlay controls */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3">
           {photoUrls.length > 1 && (
@@ -373,12 +521,12 @@ function PhotoPreview({
 
       {/* ── Edit tabs ── */}
       <div className="mt-1 flex rounded-full bg-secondary p-1">
-        {(["filters", "adjust", "tools"] as const).map((t) => (
+        {(["filters", "adjust", "tools", "text"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "flex-1 rounded-full py-1.5 text-xs font-semibold capitalize transition-colors",
+              "flex-1 rounded-full py-1 text-[11px] font-semibold capitalize transition-colors",
               tab === t ? "bg-background shadow" : "text-muted-foreground",
             )}
           >
@@ -525,6 +673,153 @@ function PhotoPreview({
             >
               Reset transforms
             </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Text & Stickers tab ── */}
+      {tab === "text" && (
+        <div className="mt-3 space-y-3">
+          {/* Add text */}
+          <div className="rounded-2xl bg-secondary p-3 space-y-2.5">
+            <p className="text-[11px] font-semibold text-muted-foreground">Add Text</p>
+            <input
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="Type something…"
+              maxLength={80}
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
+            />
+            {/* Color swatches */}
+            <div className="flex gap-1.5">
+              {TEXT_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setTextColor(c)}
+                  style={{ backgroundColor: c }}
+                  className={cn(
+                    "size-6 rounded-full border-2 transition-transform",
+                    textColor === c ? "border-brand scale-110" : "border-transparent",
+                  )}
+                />
+              ))}
+            </div>
+            {/* Size / bold / background */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(["sm", "md", "lg"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setTextSize(s)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                    textSize === s ? "bg-brand text-brand-foreground" : "bg-background",
+                  )}
+                >
+                  {s === "sm" ? "S" : s === "md" ? "M" : "L"}
+                </button>
+              ))}
+              <button
+                onClick={() => setTextBold(!textBold)}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                  textBold ? "bg-brand text-brand-foreground" : "bg-background",
+                )}
+              >
+                Bold
+              </button>
+              <div className="ml-auto flex gap-1">
+                {(["none", "dark", "light"] as const).map((bg) => (
+                  <button
+                    key={bg}
+                    onClick={() => setTextBg(bg)}
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                      bg === "dark" ? "bg-black/60 text-white" : bg === "light" ? "bg-white/90 text-black" : "bg-background",
+                      textBg === bg ? "ring-1 ring-brand" : "",
+                    )}
+                  >
+                    {bg === "none" ? "—" : bg === "dark" ? "Dark" : "Light"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              disabled={!textInput.trim()}
+              onClick={() => {
+                if (!textInput.trim()) return;
+                const newOv: TextOverlay = {
+                  kind: "text",
+                  id: `t-${Date.now()}`,
+                  text: textInput.trim(),
+                  x: 0.5, y: 0.38,
+                  color: textColor,
+                  fontSize: textSize,
+                  bold: textBold,
+                  bg: textBg,
+                };
+                setOverlays([...overlays, newOv]);
+                setTextInput("");
+              }}
+              className="w-full rounded-full bg-brand py-2 text-xs font-bold text-brand-foreground disabled:opacity-50"
+            >
+              Add to Photo
+            </button>
+          </div>
+
+          {/* Sticker grid */}
+          <div className="rounded-2xl bg-secondary p-3">
+            <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Add Sticker</p>
+            <div className="grid grid-cols-10 gap-1">
+              {EMOJI_GRID.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => {
+                    const newOv: StickerOverlay = {
+                      kind: "sticker",
+                      id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                      emoji,
+                      x: 0.5, y: 0.5,
+                      scale: "md",
+                    };
+                    setOverlays([...overlays, newOv]);
+                  }}
+                  className="flex aspect-square items-center justify-center text-lg leading-none"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Active overlays list */}
+          {overlays.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">
+                On this photo ({overlays.length})
+              </p>
+              <ul className="space-y-1">
+                {overlays.map((ov) => (
+                  <li key={ov.id} className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
+                    <span className="text-base leading-none">
+                      {ov.kind === "sticker" ? ov.emoji : "T"}
+                    </span>
+                    <span className="flex-1 truncate text-xs text-foreground">
+                      {ov.kind === "text" ? `"${ov.text}"` : ov.emoji}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setOverlays(overlays.filter((o) => o.id !== ov.id));
+                        if (selectedId === ov.id) setSelectedId(null);
+                      }}
+                      className="shrink-0 text-muted-foreground"
+                      aria-label="Remove overlay"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
