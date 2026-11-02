@@ -401,6 +401,12 @@
   transform: scale(0.94);
 }
 
+/* Music waveform bar bounce — used by the audio player track list */
+@keyframes musicBar {
+  from { transform: scaleY(0.4); }
+  to   { transform: scaleY(1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
   .animate-scale-in,

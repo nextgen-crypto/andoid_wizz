@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
   ChevronLeft,
@@ -6,6 +6,7 @@ import {
   Crop,
   FlipHorizontal2,
   ImagePlus,
+  Loader2,
   Music,
   Pause,
   Play,
@@ -32,19 +33,22 @@ import {
 } from "lucide-react";
 import { filterCss, filterPresets } from "@/frontend/components/camera/beautyFilters";
 import type { PhotoAdjustments, VideoAdjust } from "@/frontend/components/create/creationEngine";
+import { useAudioPlayer } from "@/frontend/lib/audioPlayer";
+import type { Track } from "@/frontend/lib/audioPlayer";
 import { captureVideoFrame } from "@/frontend/lib/videoEdit";
 import { cn } from "@/lib/utils";
 
 export { AtSign, Clock, FolderOpen, Link2, MapPin, Mic, MicOff, Music, RefreshCw, Users, Share2, Square };
+export type { Track };
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3] as const;
 
-export const TRACKS = [
-  { id: "t1", title: "Midnight Drive",  creator: "Neon Coast",  duration: "0:29", bars: [3, 6, 9, 5, 8, 4, 7, 10, 6, 5, 8, 3] },
-  { id: "t2", title: "Soft Morning",    creator: "Ayo Beats",    duration: "0:15", bars: [4, 5, 6, 7, 5, 4, 6, 8,  5, 4, 3, 5] },
-  { id: "t3", title: "Street Pulse",    creator: "DJ Mara",      duration: "0:22", bars: [8, 4, 9, 3, 10, 5, 7, 4, 9, 6, 5, 8] },
-  { id: "t4", title: "Golden Hour",     creator: "Luna Waves",   duration: "0:18", bars: [5, 7, 4, 8, 6, 9, 5, 7,  4, 6, 8, 5] },
-  { id: "t5", title: "Original audio",  creator: "You",          duration: "0:00", bars: [2, 3, 2, 4, 3, 2, 3, 4,  2, 3, 2, 3] },
+export const TRACKS: Track[] = [
+  { id: "t1", title: "Midnight Drive",  creator: "Neon Coast",  duration: "0:29", durationSec: 29, bars: [3, 6, 9, 5, 8, 4, 7, 10, 6, 5, 8, 3] },
+  { id: "t2", title: "Soft Morning",    creator: "Ayo Beats",    duration: "0:15", durationSec: 15, bars: [4, 5, 6, 7, 5, 4, 6, 8,  5, 4, 3, 5] },
+  { id: "t3", title: "Street Pulse",    creator: "DJ Mara",      duration: "0:22", durationSec: 22, bars: [8, 4, 9, 3, 10, 5, 7, 4, 9, 6, 5, 8] },
+  { id: "t4", title: "Golden Hour",     creator: "Luna Waves",   duration: "0:18", durationSec: 18, bars: [5, 7, 4, 8, 6, 9, 5, 7,  4, 6, 8, 5] },
+  { id: "t5", title: "Original audio",  creator: "You",          duration: "0:00", durationSec: 0,  bars: [2, 3, 2, 4, 3, 2, 3, 4,  2, 3, 2, 3] },
 ];
 
 function fmtTime(secs: number): string {
@@ -612,11 +616,37 @@ export function VideoStep({
   const [coverBusy, setCoverBusy] = useState(false);
   const [coverNote, setCoverNote] = useState<string | null>(null);
 
+  // Audio player for music track previews
+  const player = useAudioPlayer();
+
   // Keep playback rate in sync
   useEffect(() => {
     const el = videoRef.current;
     if (el) el.playbackRate = speed;
   }, [speed]);
+
+  // Sync music volume (0-100 → 0-1)
+  useEffect(() => {
+    player.setVolume(musicVolume / 100);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [musicVolume]);
+
+  // Sync original-audio volume to video element
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el) el.volume = origVolume / 100;
+  }, [origVolume]);
+
+  // Auto-play selected track when in sound tab; pause when leaving
+  useEffect(() => {
+    if (tab === "sound" && trackId) {
+      const track = TRACKS.find((t) => t.id === trackId);
+      if (track && track.durationSec > 0) void player.play(track);
+    } else {
+      player.pause();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, trackId]);
 
   // Re-probe when src changes
   useEffect(() => {
@@ -928,35 +958,95 @@ export function VideoStep({
             <Music className="size-3.5" /> Add music track
           </p>
           <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
-            {TRACKS.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 px-3 py-2.5">
-                <span className="flex h-7 flex-1 items-end gap-px">
-                  {t.bars.map((h, i) => (
-                    <span
-                      key={i}
-                      style={{ height: `${h * 10}%` }}
-                      className={cn("w-full rounded-sm", trackId === t.id ? "bg-brand" : "bg-border")}
-                    />
-                  ))}
-                </span>
-                <span className="w-28 shrink-0">
-                  <span className="block truncate text-xs font-semibold">{t.title}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {t.creator} · {t.duration}
-                  </span>
-                </span>
-                <button
-                  onClick={() => setTrackId(trackId === t.id ? null : t.id)}
-                  className={cn(
-                    "shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
-                    trackId === t.id ? "bg-brand text-brand-foreground" : "bg-secondary",
+            {TRACKS.map((t) => {
+              const isSelected = trackId === t.id;
+              const isPlaying  = player.playingId === t.id;
+              const isLoading  = player.loading && isSelected;
+              const hasTone    = t.durationSec > 0;
+              return (
+                <li key={t.id} className="flex flex-col gap-1.5 px-3 py-2.5">
+                  <div className="flex items-center gap-3">
+                    {/* Play/pause preview button */}
+                    <button
+                      aria-label={isPlaying ? `Pause ${t.title}` : `Preview ${t.title}`}
+                      disabled={!hasTone || isLoading}
+                      onClick={() => void player.toggle(t)}
+                      className={cn(
+                        "grid size-8 shrink-0 place-items-center rounded-full transition-colors",
+                        isSelected ? "bg-brand text-brand-foreground" : "bg-secondary text-foreground",
+                        (!hasTone || isLoading) && "opacity-50",
+                      )}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : isPlaying ? (
+                        <Pause className="size-3.5 fill-current" />
+                      ) : (
+                        <Play className="size-3.5 translate-x-px fill-current" />
+                      )}
+                    </button>
+
+                    {/* Animated waveform */}
+                    <span className="flex h-7 w-16 shrink-0 items-end gap-px" aria-hidden="true">
+                      {t.bars.map((h, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            height: `${h * 10}%`,
+                            animationDelay: `${(i * 60) % 400}ms`,
+                          }}
+                          className={cn(
+                            "w-full rounded-sm transition-colors",
+                            isPlaying
+                              ? "bg-brand animate-[musicBar_0.6s_ease-in-out_infinite_alternate]"
+                              : isSelected
+                                ? "bg-brand/60"
+                                : "bg-border",
+                          )}
+                        />
+                      ))}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold">{t.title}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {t.creator} · {t.duration}
+                      </span>
+                    </span>
+
+                    {/* Use / Added toggle */}
+                    <button
+                      onClick={() => {
+                        if (isSelected) {
+                          setTrackId(null);
+                          player.pause();
+                        } else {
+                          setTrackId(t.id);
+                        }
+                      }}
+                      className={cn(
+                        "shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                        isSelected ? "bg-brand text-brand-foreground" : "bg-secondary",
+                      )}
+                    >
+                      {isSelected ? "Added" : "Use"}
+                    </button>
+                  </div>
+
+                  {/* Progress bar under playing track */}
+                  {isPlaying && player.duration > 0 && (
+                    <div className="ml-11 h-0.5 w-full overflow-hidden rounded-full bg-border">
+                      <div
+                        className="h-full rounded-full bg-brand transition-[width] duration-100"
+                        style={{ width: `${(player.currentTime / player.duration) * 100}%` }}
+                      />
+                    </div>
                   )}
-                >
-                  {trackId === t.id ? "Added" : "Use"}
-                </button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
+
           {trackId && (
             <label className="flex items-center gap-3 px-2">
               <span className="w-20 shrink-0 text-xs text-muted-foreground">Music vol {musicVolume}%</span>
