@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
+import { setPendingEditorFile } from "@/frontend/lib/editorPendingFile";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -239,6 +240,7 @@ export function CreationEngine({
 }) {
   const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const bustCache = useServerFn(invalidateHomeCache);
   const inspectPostingSchema = useServerFn(fetchPostingCapabilities);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1152,6 +1154,12 @@ export function CreationEngine({
             onRecord={() => setCamera("short")}
             onUpload={() => videoRef.current?.click()}
             onContinue={goComposer}
+            {...(videoFile ? {
+              onOpenEditor: () => {
+                setPendingEditorFile(videoFile);
+                void router.navigate({ to: "/editor" });
+              },
+            } : {})}
             error={error}
           />
         )}

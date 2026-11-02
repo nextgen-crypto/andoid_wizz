@@ -947,6 +947,7 @@ export function VideoStep({
   onRecord,
   onUpload,
   onContinue,
+  onOpenEditor,
   error,
 }: {
   videoUrl: string | null;
@@ -974,6 +975,7 @@ export function VideoStep({
   onRecord: () => void;
   onUpload: () => void;
   onContinue: () => void;
+  onOpenEditor?: () => void;
   error: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1502,6 +1504,14 @@ export function VideoStep({
         >
           Replace
         </button>
+        {onOpenEditor && (
+          <button
+            onClick={onOpenEditor}
+            className="flex-1 rounded-full border border-brand/60 py-2.5 text-sm font-semibold text-brand"
+          >
+            Full editor
+          </button>
+        )}
         <button
           onClick={onContinue}
           className="flex-1 rounded-full bg-brand py-2.5 text-sm font-bold text-brand-foreground"
