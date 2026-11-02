@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { invalidateHomeCache } from "@/backend/api/home.functions";
-import { fetchPostingCapabilities } from "@/backend/api/posts.functions";
+import { fetchPostingCapabilities, type PostingCapabilities } from "@/backend/api/posts.functions";
 import {
   AtSign,
   Camera,
   Check,
   ChevronRight,
   Clock,
-  Crop,
   FolderOpen,
   ImagePlus,
   Link2,
@@ -45,10 +45,12 @@ import {
   sizeError,
   type VideoMetadata,
 } from "@/frontend/lib/mediaFormat";
+import { canReencodeVideo, reencodeVideoClip, tryExtractPreviewFrame } from "@/frontend/lib/videoEdit";
 import { extractHashtags } from "@/frontend/lib/hashtags";
 import { BeautyCameraSheet } from "@/frontend/components/camera/BeautyCameraSheet";
 import { CropSheet } from "@/frontend/components/create/CropSheet";
 import {
+  HubCard,
   PhotoStep,
   StoryStep,
   ToggleRow,
@@ -58,6 +60,7 @@ import {
 
 export { TRACKS };
 import {
+  applyFilterAndTransformToFile,
   applyFilterToFile,
   filterCss,
   filterPresets,
@@ -66,36 +69,81 @@ import { useSession } from "@/frontend/hooks/useSession";
 import { supabase } from "@/integrations/supabase/client";
 import type { CreateKind } from "@/frontend/components/home/nav-items";
 import { createActions } from "@/frontend/components/home/nav-items";
+import { cn } from "@/lib/utils";
 
 const TEN_YEARS = 60 * 60 * 24 * 365 * 10;
+const MAX_PHOTO_COUNT = 10;
 const DRAFT_KEY_PREFIX = "wizz:create:drafts";
 
 function draftKey(userId: string | null): string {
   return `${DRAFT_KEY_PREFIX}:${userId ?? "anonymous"}`;
 }
+
 const CATEGORIES = ["For You", "Trending", "Sports", "Music", "Tech", "Style", "Food", "Travel"];
 const AUDIENCES = ["Public", "Followers", "Private"] as const;
-
 const TEXT_BACKGROUNDS = ["#7c3aed", "#0f766e", "#1d4ed8", "#b45309", "#be123c", "#111827"];
 const STORY_TTL_MS = 24 * 60 * 60 * 1000;
 
-type PhotoAdjustments = {
-  brightness: number;
-  contrast: number;
-  saturation: number;
-  temperature: number;
+/** Accent colours that map each create mode to a brand hue. */
+const HUB_ACCENTS: Partial<Record<string, string>> = {
+  photo: "#7c3aed",
+  video: "#0891b2",
+  story: "#db2777",
+  text: "#d97706",
+  live: "#dc2626",
+  more: "#6b7280",
 };
 
-function adjustmentFilterCss(adjust: PhotoAdjustments): string {
-  return [
-    adjust.brightness ? `brightness(${(1 + adjust.brightness / 100).toFixed(2)})` : "",
-    adjust.contrast ? `contrast(${(1 + adjust.contrast / 100).toFixed(2)})` : "",
-    adjust.saturation ? `saturate(${(1 + adjust.saturation / 100).toFixed(2)})` : "",
-    adjust.temperature > 0 ? `sepia(${(adjust.temperature / 250).toFixed(2)})` : "",
-    adjust.temperature < 0 ? `hue-rotate(${(adjust.temperature / 2).toFixed(0)}deg)` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+export type PhotoAdjustments = {
+  brightness:  number;  // -100 .. 100
+  contrast:    number;  // -100 .. 100
+  saturation:  number;  // -100 .. 100
+  temperature: number;  // -100 .. 100  warm/cool via sepia + hue
+  exposure:    number;  // -100 .. 100  multiplicative brightness
+  highlights:  number;  // -50  .. 50   approx via brightness
+  shadows:     number;  // -50  .. 50   approx via brightness
+  tint:        number;  // -50  .. 50   green-magenta via hue-rotate
+  sharpness:   number;  //  0   .. 100  approx via contrast
+  vignette:    number;  //  0   .. 100  radial overlay (not CSS filter)
+  fade:        number;  //  0   .. 100  saturation wash-out
+};
+
+export const DEFAULT_ADJUST: PhotoAdjustments = {
+  brightness: 0, contrast: 0, saturation: 0, temperature: 0,
+  exposure: 0, highlights: 0, shadows: 0, tint: 0,
+  sharpness: 0, vignette: 0, fade: 0,
+};
+
+function adjustmentFilterCss(a: PhotoAdjustments): string {
+  // Brightness: base + exposure (additive effect)
+  const bright = 1 + (a.brightness + a.exposure) / 100;
+  // Contrast: base + sharpness approximation
+  const cont = 1 + (a.contrast + a.sharpness * 0.35) / 100;
+  // Saturation: reduced by fade
+  const sat = Math.max(0, 1 + (a.saturation - a.fade * 0.55) / 100);
+  // Highlights/shadows: opposing tiny brightness nudges
+  const hlNudge = 1 + (-a.highlights * 0.003 + a.shadows * 0.002);
+
+  const parts: string[] = [];
+  if (Math.abs(bright - 1) > 0.005) parts.push(`brightness(${bright.toFixed(3)})`);
+  if (Math.abs(cont  - 1) > 0.005) parts.push(`contrast(${cont.toFixed(3)})`);
+  if (Math.abs(sat   - 1) > 0.005) parts.push(`saturate(${sat.toFixed(3)})`);
+  if (a.temperature > 0)  parts.push(`sepia(${(a.temperature / 250).toFixed(3)})`);
+  if (a.temperature < 0)  parts.push(`hue-rotate(${(a.temperature / 2).toFixed(1)}deg)`);
+  if (a.tint !== 0)       parts.push(`hue-rotate(${(a.tint * 0.8).toFixed(1)}deg)`);
+  if (Math.abs(hlNudge - 1) > 0.005) parts.push(`brightness(${hlNudge.toFixed(3)})`);
+  return parts.join(" ");
+}
+
+export type VideoAdjust = { brightness: number; contrast: number; saturation: number };
+export const DEFAULT_VIDEO_ADJUST: VideoAdjust = { brightness: 0, contrast: 0, saturation: 0 };
+
+function videoAdjustCss(a: VideoAdjust): string {
+  const parts: string[] = [];
+  if (a.brightness) parts.push(`brightness(${(1 + a.brightness / 100).toFixed(3)})`);
+  if (a.contrast)   parts.push(`contrast(${(1 + a.contrast / 100).toFixed(3)})`);
+  if (a.saturation) parts.push(`saturate(${(1 + a.saturation / 100).toFixed(3)})`);
+  return parts.join(" ");
 }
 
 type Step =
@@ -139,13 +187,25 @@ function loadDrafts(userId: string | null): Draft[] {
   };
   const own = read(draftKey(userId));
   if (!userId) return own;
-  // Carry drafts created before sign-in into the first authenticated session.
   const anonymous = read(draftKey(null));
   return [...own, ...anonymous.filter((draft) => !own.some((item) => item.id === draft.id))].slice(
     0,
     20,
   );
 }
+
+// Module-level cache so a successful probe survives multiple publish attempts
+// within the same page session. On Android the first call may fail due to a
+// transient RPC/network error; subsequent calls (or the fallback) use this.
+let _capabilitiesCache: PostingCapabilities | null = null;
+
+// Full-schema fallback: assume all columns exist (migrations are applied in prod).
+// Used when every probe attempt fails so the user can still publish.
+const FULL_CAPABILITIES: PostingCapabilities = {
+  video: true, media: true, settings: true, full: true, types: true,
+  imagePaths: true, sharing: true, scheduling: true, stories: true,
+  likes: true, saves: true, integrity: true,
+};
 
 const TITLES: Record<Step, string> = {
   hub: "Create",
@@ -164,10 +224,14 @@ const TITLES: Record<Step, string> = {
 export function CreationEngine({
   open,
   initial,
+  initialTrackId = null,
+  initialSourceUser = null,
   onClose,
 }: {
   open: boolean;
   initial: CreateKind | null;
+  initialTrackId?: string | null;
+  initialSourceUser?: string | null;
   onClose: () => void;
 }) {
   const { user, loading: sessionLoading } = useSession();
@@ -176,21 +240,22 @@ export function CreationEngine({
   const inspectPostingSchema = useServerFn(fetchPostingCapabilities);
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
+  const pickMode = useRef<{ replace: number | null }>({ replace: null });
 
   const [step, setStep] = useState<Step>("hub");
   const [kind, setKind] = useState<Exclude<CreateKind, "more">>("photo");
 
-  // media
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  // multi-photo carousel
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [activePhoto, setActivePhoto] = useState(0);
+  const photo = photos[activePhoto] ?? null;
+  const photoUrl = photoUrls[activePhoto] ?? null;
   const [presetId, setPresetId] = useState("none");
   const [intensity, setIntensity] = useState(100);
-  const [adjust, setAdjust] = useState({
-    brightness: 0,
-    contrast: 0,
-    saturation: 0,
-    temperature: 0,
-  });
+  const [adjust, setAdjust] = useState<PhotoAdjustments>(DEFAULT_ADJUST);
+  const [rotate, setRotate] = useState<0 | 90 | 180 | 270>(0);
+  const [flip, setFlip] = useState<{ h: boolean; v: boolean }>({ h: false, v: false });
   const [camera, setCamera] = useState<null | "photo" | "short">(null);
   const [cropping, setCropping] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -199,18 +264,22 @@ export function CreationEngine({
   const [videoPosterUrl, setVideoPosterUrl] = useState<string | null>(null);
   const videoSelectionRef = useRef(0);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
-  // False while the metadata probe runs: the preview stays optimistic until the
-  // probe *settles* — only a settled failure flips `playable` off.
   const [videoProbeDone, setVideoProbeDone] = useState(false);
   const [trim, setTrim] = useState<[number, number]>([0, 100]);
   const [speed, setSpeed] = useState<number>(1);
   const [muted, setMuted] = useState(false);
+  const [videoAdjust, setVideoAdjust] = useState<VideoAdjust>(DEFAULT_VIDEO_ADJUST);
+  const [origVolume, setOrigVolume] = useState(100);
+  const [musicVolume, setMusicVolume] = useState(80);
+  const [proxyFrameUrl, setProxyFrameUrl] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [stage, setStage] = useState<"trim" | null>(null);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [textBody, setTextBody] = useState("");
   const [textBg, setTextBg] = useState(TEXT_BACKGROUNDS[0]!);
   const [storyOverlays, setStoryOverlays] = useState<string[]>([]);
 
-  // composer
+  // composer fields
   const [caption, setCaption] = useState("");
   const [location, setLocation] = useState("");
   const [tags, setTags] = useState("");
@@ -263,14 +332,20 @@ export function CreationEngine({
     setError(null);
     setStep(initial && initial !== "more" ? mapKind(initial) : "hub");
     if (initial && initial !== "more") setKind(initial);
-    try {
-      const pending = localStorage.getItem("wizz:pending-track");
-      if (pending && TRACKS.some((t) => t.id === pending)) {
-        setTrackId(pending);
-        localStorage.removeItem("wizz:pending-track");
+    // Pre-select a track from the "Use this sound" button on any feed card,
+    // or restore a pending track saved before auth redirect.
+    if (initialTrackId && TRACKS.some((t) => t.id === initialTrackId)) {
+      setTrackId(initialTrackId);
+    } else {
+      try {
+        const pending = localStorage.getItem("wizz:pending-track");
+        if (pending && TRACKS.some((t) => t.id === pending)) {
+          setTrackId(pending);
+          localStorage.removeItem("wizz:pending-track");
+        }
+      } catch {
+        // storage unavailable
       }
-    } catch {
-      // storage unavailable
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -300,15 +375,24 @@ export function CreationEngine({
     };
   }, [step]);
 
-  // Revoke only the URL that actually changed. The old combined cleanup fired
-  // whenever *either* URL changed and revoked both — updating the photo killed
-  // a healthy video preview (revoked blob → broken-image icon before publish).
-  useEffect(
-    () => () => {
-      if (photoUrl) URL.revokeObjectURL(photoUrl);
-    },
-    [photoUrl],
-  );
+  function revokePhotoUrl(index: number) {
+    setPhotoUrls((urls) => {
+      const url = urls[index];
+      if (url) URL.revokeObjectURL(url);
+      return urls;
+    });
+  }
+
+  useEffect(() => {
+    if (open) return;
+    return () => {
+      setPhotoUrls((urls) => {
+        for (const url of urls) URL.revokeObjectURL(url);
+        return urls;
+      });
+    };
+  }, [open]);
+
   useEffect(
     () => () => {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -347,8 +431,7 @@ export function CreationEngine({
     setStep(mapKind(kindNext));
   }
 
-  function attachPhoto(file: File) {
-    // Attach-time diagnosis: untyped Android picks are the recurring failure.
+  function attachPhoto(file: File, replaceIndex?: number) {
     console.log("[attach] photo", file.name, file.type, file.size);
     if (file.size > IMAGE_MAX_BYTES) {
       setError(sizeError("image"));
@@ -358,56 +441,72 @@ export function CreationEngine({
       setError("That file is not an image.");
       return;
     }
-    // Decode test (catches formats this WebView can't render) with a deadline:
-    // some Android builds fire neither onload nor onerror — that used to leave
-    // the picker silently doing nothing. On timeout, attach optimistically:
-    // every format is postable, worst case the local preview renders blank.
-    let settled = false;
-    let timer = 0;
-    const attach = () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      let nextUrl: string;
+    const atCapacity = replaceIndex === undefined && photos.length >= MAX_PHOTO_COUNT;
+    if (atCapacity) {
+      setError(`A post can carry at most ${MAX_PHOTO_COUNT} photos.`);
+      return;
+    }
+
+    // Build the display URL: try createImageBitmap → canvas → JPEG first so that
+    // formats the WebView can decode (HEIF, AVIF, BMP…) are always displayable
+    // even when <img src={blobUrl}> would silently fail.
+    // The original file is always kept for upload regardless of what happens here.
+    void (async () => {
+      let displayUrl: string;
       try {
-        nextUrl = URL.createObjectURL(file);
-      } catch (e) {
-        // Never leave the picker silent: say so instead of doing nothing.
-        console.error("[attach] photo blob url failed", e);
-        setError("Couldn't open that photo on this device. Try a JPEG or PNG.");
+        const bitmap = await Promise.race<ImageBitmap>([
+          createImageBitmap(file),
+          new Promise<never>((_, reject) =>
+            window.setTimeout(() => reject(new Error("bitmap timeout")), 8000),
+          ),
+        ]);
+        const MAX_PX = 2048;
+        const scale = Math.min(1, MAX_PX / Math.max(bitmap.width || 1, bitmap.height || 1));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round((bitmap.width || 800) * scale);
+        canvas.height = Math.round((bitmap.height || 800) * scale);
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          const blob = await new Promise<Blob | null>((res) =>
+            canvas.toBlob(res, "image/jpeg", 0.92),
+          );
+          displayUrl = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file);
+        } else {
+          bitmap.close();
+          displayUrl = URL.createObjectURL(file);
+        }
+      } catch {
+        // createImageBitmap not supported or format can't be decoded — fall back
+        // to a direct blob URL; the <img> onError fallback handles any residual
+        // display failures gracefully.
+        displayUrl = URL.createObjectURL(file);
+      }
+
+      setError(null);
+      if (replaceIndex !== undefined) {
+        revokePhotoUrl(replaceIndex);
+        setPhotos((prev) => {
+          const next = [...prev];
+          next[replaceIndex] = file;
+          return next;
+        });
+        setPhotoUrls((prev) => {
+          const next = [...prev];
+          next[replaceIndex] = displayUrl;
+          return next;
+        });
+        setActivePhoto(replaceIndex);
         return;
       }
-      setError(null);
-      setPhoto(file);
-      setPhotoUrl(nextUrl);
-    };
-    try {
-      const testUrl = URL.createObjectURL(file);
-      const testImg = new Image();
-      timer = window.setTimeout(() => {
-        URL.revokeObjectURL(testUrl);
-        attach();
-      }, 8000);
-      testImg.onload = () => {
-        URL.revokeObjectURL(testUrl);
-        attach();
-      };
-      testImg.onerror = () => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timer);
-        URL.revokeObjectURL(testUrl);
-        setError("This image format isn't supported by your browser. Try a JPEG or PNG.");
-      };
-      testImg.src = testUrl;
-    } catch (e) {
-      console.error("[attach] photo probe failed", e);
-      attach();
-    }
+      setPhotos((prev) => [...prev, file]);
+      setPhotoUrls((prev) => [...prev, displayUrl]);
+      setActivePhoto((prev) => (photos.length === 0 ? 0 : prev));
+    })();
   }
 
   function attachVideo(file: File) {
-    // Attach-time diagnosis: name/type/size show exactly what the picker gave.
     console.log("[attach] video", file.name, file.type, file.size);
     if (file.size > VIDEO_MAX_BYTES) {
       setError(sizeError("video"));
@@ -420,16 +519,23 @@ export function CreationEngine({
     setError(null);
     const selection = ++videoSelectionRef.current;
     setVideoFile(file);
-    setVideoUrl(URL.createObjectURL(file));
+    const blobUrl = URL.createObjectURL(file);
+    setVideoUrl(blobUrl);
     setVideoThumbnail(null);
     setVideoPosterUrl(null);
     setVideoMeta(null);
     setVideoProbeDone(false);
+    setProxyFrameUrl(null);
     setTrim([0, 100]);
     void probeVideoMetadata(file).then((meta) => {
       if (selection !== videoSelectionRef.current) return;
       setVideoMeta(meta);
       setVideoProbeDone(true);
+      // If probe returns null the codec is unsupported — try static frame extraction
+      // so VideoStep can show a real thumbnail instead of a black screen.
+      if (!meta) {
+        void tryExtractPreviewFrame(file).then((url) => setProxyFrameUrl(url));
+      }
     });
     void captureVideoThumbnail(file).then((thumbnail) => {
       if (selection !== videoSelectionRef.current || !thumbnail) return;
@@ -439,16 +545,50 @@ export function CreationEngine({
   }
 
   function clearPhoto() {
-    setPhoto(null);
-    setPhotoUrl(null);
+    for (const url of photoUrls) URL.revokeObjectURL(url);
+    setPhotos([]);
+    setPhotoUrls([]);
+    setActivePhoto(0);
     setPresetId("none");
     setIntensity(100);
-    setAdjust({ brightness: 0, contrast: 0, saturation: 0, temperature: 0 });
+    setAdjust(DEFAULT_ADJUST);
+    setRotate(0);
+    setFlip({ h: false, v: false });
+  }
+
+  function removePhoto(index: number) {
+    revokePhotoUrl(index);
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setPhotoUrls((prev) => prev.filter((_, i) => i !== index));
+    setActivePhoto((prev) => {
+      const after = photos.length - 1;
+      if (after <= 0) return 0;
+      return Math.max(0, Math.min(prev > index ? prev - 1 : prev, after - 1));
+    });
+  }
+
+  function movePhoto(index: number, delta: -1 | 1) {
+    const target = index + delta;
+    if (target < 0 || target >= photos.length) return;
+    setPhotos((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved!);
+      return next;
+    });
+    setPhotoUrls((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved!);
+      return next;
+    });
+    setActivePhoto(target);
   }
 
   function clearVideo() {
     videoSelectionRef.current += 1;
     setVideoFile(null);
+    if (proxyFrameUrl) URL.revokeObjectURL(proxyFrameUrl);
     setVideoUrl(null);
     setVideoThumbnail(null);
     setVideoPosterUrl(null);
@@ -457,7 +597,12 @@ export function CreationEngine({
     setTrim([0, 100]);
     setSpeed(1);
     setMuted(false);
+    setVideoAdjust(DEFAULT_VIDEO_ADJUST);
+    setOrigVolume(100);
+    setMusicVolume(80);
+    setProxyFrameUrl(null);
     setTrackId(null);
+    setCoverFile(null);
   }
 
   const preset = filterPresets.find((p) => p.id === presetId) ?? filterPresets[0]!;
@@ -469,6 +614,15 @@ export function CreationEngine({
         .join(" "),
     [preset, intensity, photoAdjustmentFilter],
   );
+  // CSS transform for live preview (does NOT affect upload — baking uses rotate/flip directly)
+  const photoTransform = useMemo(() => {
+    const parts: string[] = [];
+    if (rotate) parts.push(`rotate(${rotate}deg)`);
+    if (flip.h) parts.push("scaleX(-1)");
+    if (flip.v) parts.push("scaleY(-1)");
+    return parts.join(" ") || undefined;
+  }, [rotate, flip]);
+  const videoAdjustFilter = useMemo(() => videoAdjustCss(videoAdjust), [videoAdjust]);
 
   function goComposer() {
     if (kind === "text" && !textBody.trim() && !caption.trim()) {
@@ -563,7 +717,21 @@ export function CreationEngine({
     const uploadedPaths: string[] = [];
     let postCommitted = false;
     try {
-      const capabilities = await inspectPostingSchema();
+      // Probe capabilities with one retry. On Android the RPC can fail on the
+      // first attempt due to a cold-start network timeout, so retry once before
+      // falling back to cached or assumed-full schema.
+      let capabilities: PostingCapabilities = _capabilitiesCache ?? FULL_CAPABILITIES;
+      if (!_capabilitiesCache) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            capabilities = await inspectPostingSchema();
+            _capabilitiesCache = capabilities;
+            break;
+          } catch {
+            // On last attempt keep the FULL_CAPABILITIES default already set above
+          }
+        }
+      }
       if (videoFile && !capabilities.video) {
         throw new Error("Video posts need the latest media migration in Supabase.");
       }
@@ -583,64 +751,102 @@ export function CreationEngine({
       setProgress(12);
       const stamp = Date.now();
       let imagePath: string | null = null;
+      let imagePaths: string[] = [];
       let videoPath: string | null = null;
+      let thumbnailPath: string | null = null;
       let imageUrl: string | null = null;
       let legacyVideoUrl: string | null = null;
-      let thumbnailPath: string | null = null;
       let legacyThumbnailUrl: string | null = null;
       let probedMeta: VideoMetadata | null = null;
 
-      if (photo && (kind === "photo" || kind === "story")) {
-        const baked = await bakeOrOriginal(photo, (file) =>
-          applyFilterToFile(
-            file,
-            preset.settings,
-            [preset.extra, photoAdjustmentFilter].filter(Boolean).join(" ") || undefined,
-            intensity / 100,
-          ),
-        );
-        const bakedFile = baked instanceof File ? baked : photo;
-        // Never forward an empty or application/* type: canvas output and
-        // Android picks both arrive untyped, and a failed bake hands the
-        // original file straight back with whatever type it had.
-        const photoMime = resolveUploadMime(baked, "image", extOf(photo));
-        const imageExtension = photoMime === "image/jpeg" ? "jpg" : extOf(bakedFile) || "bin";
-        imagePath = `${user.id}/post-${stamp}.${imageExtension}`;
-        uploadedPaths.push(imagePath);
-        setProgress(35);
-        if (capabilities.media) {
-          await uploadStoredObject("post-images", imagePath, baked, { contentType: photoMime });
-        } else {
-          imageUrl = await uploadAndSign("post-images", imagePath, baked, {
-            contentType: photoMime,
-            width: 1280,
-          });
+      if (photos.length > 0 && (kind === "photo" || kind === "story")) {
+        const selection =
+          kind === "story" || !capabilities.imagePaths ? photos.slice(0, 1) : photos;
+        if (selection.length < photos.length) {
+          toast(
+            `This build supports ${selection.length === 1 ? "one photo per post" : `${selection.length} photos`} — extra selections weren't uploaded.`,
+          );
         }
+        const bakedPaths: string[] = [];
+        for (let i = 0; i < selection.length; i++) {
+          const current = selection[i]!;
+          const extraCss =
+            [preset.extra, photoAdjustmentFilter].filter(Boolean).join(" ") || undefined;
+          const baked = await bakeOrOriginal(current, (file) =>
+            applyFilterAndTransformToFile(
+              file,
+              preset.settings,
+              extraCss,
+              intensity / 100,
+              rotate,
+              flip,
+            ),
+          );
+          const bakedFile = baked instanceof File ? baked : current;
+          const photoMime = resolveUploadMime(baked, "image", extOf(current));
+          const imageExtension = photoMime === "image/jpeg" ? "jpg" : extOf(bakedFile) || "bin";
+          const suffix = selection.length > 1 ? `-${i + 1}` : "";
+          const path = `${user.id}/post-${stamp}${suffix}.${imageExtension}`;
+          bakedPaths.push(path);
+          uploadedPaths.push(path);
+          setProgress(20 + Math.round((45 * (i + 1)) / selection.length));
+          if (capabilities.media) {
+            await uploadStoredObject("post-images", path, baked, { contentType: photoMime });
+          } else if (i === 0) {
+            imageUrl = await uploadAndSign("post-images", path, baked, {
+              contentType: photoMime,
+              width: 1280,
+            });
+          }
+        }
+        imagePath = bakedPaths[0] ?? null;
+        imagePaths = bakedPaths;
         setProgress(65);
       }
 
       if (videoFile && (kind === "video" || kind === "story")) {
-        setProgress(35);
-        const extension = extOf(videoFile) || "mp4";
-        // The probe is the authority: tapping Publish before it settles used to
-        // store a row with no content_type/dimensions, so re-probe instead of
-        // trusting whatever state happens to be there.
-        probedMeta = videoMeta ?? (await probeVideoMetadata(videoFile));
+        setProgress(28);
+        const wantsTrim = trim[0] > 0 || trim[1] < 100;
+        const wantsEdit = wantsTrim || speed !== 1 || muted;
+        let uploadFile = videoFile;
+        let videoNote: string | null = null;
+        if (wantsEdit && canReencodeVideo()) {
+          setStage("trim");
+          const edited = await reencodeVideoClip(videoFile, {
+            startFrac: trim[0] / 100,
+            endFrac: trim[1] / 100,
+            speed,
+            muted,
+            onProgress: (frac) => setProgress(28 + Math.round(frac * 24)),
+          });
+          if (edited) {
+            uploadFile = edited;
+          } else {
+            videoNote = "Trim couldn't be applied on this device — posting the full clip.";
+          }
+        } else if (wantsEdit) {
+          videoNote =
+            "Trim, speed and mute aren't supported on this device — posting the full clip.";
+        }
+        if (videoNote) toast.warning(videoNote, { duration: 5000 });
+        setStage(null);
+        setProgress(52);
+        const uploadExt = extOf(uploadFile) || extOf(videoFile) || "mp4";
+        probedMeta =
+          uploadFile === videoFile
+            ? (videoMeta ?? (await probeVideoMetadata(videoFile)))
+            : await probeVideoMetadata(uploadFile);
         if (!videoMeta) setVideoMeta(probedMeta);
-        // Publishing may begin before the optimistic background capture has
-        // settled; make one final best-effort capture so fast taps do not
-        // produce a video row with no poster.
-        const capturedThumbnail = videoThumbnail ?? (await captureVideoThumbnail(videoFile));
-        // `video/mov` is not a real MIME type — resolve from type/extension.
-        const videoMime = resolveUploadMime(videoFile, "video", extension);
-        videoPath = `${user.id}/video-${stamp}.${extension}`;
+        const capturedThumbnail = coverFile ?? videoThumbnail ?? (await captureVideoThumbnail(videoFile));
+        const videoMime = resolveUploadMime(uploadFile, "video", uploadExt);
+        videoPath = `${user.id}/video-${stamp}.${uploadExt}`;
         uploadedPaths.push(videoPath);
         if (capabilities.media) {
-          await uploadStoredObject("post-images", videoPath, videoFile, {
+          await uploadStoredObject("post-images", videoPath, uploadFile, {
             contentType: videoMime,
           });
         } else {
-          const upload = await supabase.storage.from("post-images").upload(videoPath, videoFile, {
+          const upload = await supabase.storage.from("post-images").upload(videoPath, uploadFile, {
             contentType: videoMime,
           });
           if (upload.error) throw upload.error;
@@ -650,23 +856,25 @@ export function CreationEngine({
           if (signed.error) throw signed.error;
           legacyVideoUrl = signed.data.signedUrl;
         }
+        setProgress(62);
         if (capturedThumbnail) {
-          thumbnailPath = `${user.id}/thumbnail-${stamp}.jpg`;
-          uploadedPaths.push(thumbnailPath);
-          if (capabilities.media) {
-            await uploadStoredObject("post-images", thumbnailPath, capturedThumbnail, {
-              contentType: "image/jpeg",
-            });
-          } else {
-            legacyThumbnailUrl = await uploadAndSign(
-              "post-images",
-              thumbnailPath,
-              capturedThumbnail,
-              {
+          try {
+            thumbnailPath = `${user.id}/thumbnail-${stamp}.jpg`;
+            uploadedPaths.push(thumbnailPath);
+            if (capabilities.media) {
+              await uploadStoredObject("post-images", thumbnailPath, capturedThumbnail, {
                 contentType: "image/jpeg",
-                width: 1280,
-              },
-            );
+              });
+            } else {
+              legacyThumbnailUrl = await uploadAndSign(
+                "post-images",
+                thumbnailPath,
+                capturedThumbnail,
+                { contentType: "image/jpeg", width: 1280 },
+              );
+            }
+          } catch {
+            thumbnailPath = null;
           }
         }
         setProgress(65);
@@ -683,12 +891,12 @@ export function CreationEngine({
         category: kind === "story" ? "For You" : category,
         ...(capabilities.media
           ? {
-              // All media columns are NOT NULL DEFAULT '' and their CHECKs
-              // explicitly sanction "" — null would violate NOT NULL, so ""
-              // is the schema's marker for "this post has no image/video".
               image_path: imagePath ?? "",
+              ...(capabilities.imagePaths && imagePaths.length > 0
+                ? { image_paths: imagePaths }
+                : {}),
               ...(videoPath ? { video_path: videoPath, video_url: "" } : {}),
-              ...(thumbnailPath ? { thumbnail_path: thumbnailPath, thumbnail_url: "" } : {}),
+              ...(thumbnailPath ? { thumbnail_path: thumbnailPath } : {}),
             }
           : legacyVideoUrl
             ? {
@@ -739,13 +947,10 @@ export function CreationEngine({
 
       postCommitted = true;
       setProgress(100);
-      // Bust server caches first, then refetch mounted home/profile queries.
-      // A server-cache outage must not skip this browser's invalidations: doing
-      // so would leave a successfully committed post looking unpublished.
       try {
         await bustCache();
       } catch {
-        // Server TTLs remain the fallback; client queries still refresh below.
+        // server TTL stays as fallback
       }
       await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ["home"] }),
@@ -756,8 +961,6 @@ export function CreationEngine({
       ]);
       setStep("success");
     } catch (e) {
-      // On-device debugging: the UI shows friendlyPublishError below, the
-      // console keeps the raw cause.
       console.error("[publish]", e);
       if (!postCommitted) {
         await removeStoredObjects("post-images", uploadedPaths).catch(() => undefined);
@@ -785,80 +988,95 @@ export function CreationEngine({
           step === "hub" ? "Create" : step === "success" && schedule ? "Scheduled" : TITLES[step]
         }
       >
+        {/* Back button for all non-root steps */}
         {step !== "hub" && step !== "publishing" && step !== "success" && (
           <button
             onClick={() => setStep("hub")}
-            className="mb-2 rounded-full bg-secondary px-4 py-1.5 text-xs font-semibold text-foreground"
+            className="mb-3 rounded-full bg-secondary px-4 py-1.5 text-xs font-semibold text-foreground"
           >
             ← All options
           </button>
         )}
 
+        {/* ── HUB ── Instagram/TikTok-style 2×N grid */}
         {step === "hub" && (
-          <div className="flex flex-col gap-0.5">
-            {createActions.map(({ kind: k, label, hint, Icon }) =>
-              k === "more" ? (
-                <button
-                  key={k}
-                  onClick={() => setStep("drafts")}
-                  className="press flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-secondary"
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary">
-                    <Icon className="size-5 text-foreground" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-semibold leading-tight text-foreground">
-                      {label}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">{hint}</span>
-                  </span>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </button>
-              ) : (
-                <button
-                  key={k}
-                  onClick={() => pick(k)}
-                  className="press flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-secondary"
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary">
-                    <Icon className="size-5 text-brand" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-semibold leading-tight text-foreground">
-                      {label}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">{hint}</span>
-                  </span>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </button>
-              ),
-            )}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {createActions
+                .filter(({ kind: k }) => k !== "more")
+                .map(({ kind: k, label, hint, Icon }) => (
+                  <HubCard
+                    key={k}
+                    icon={Icon}
+                    label={label}
+                    hint={hint}
+                    accent={HUB_ACCENTS[k] ?? "#6b7280"}
+                    onClick={() => pick(k as Exclude<CreateKind, "more">)}
+                  />
+                ))}
+            </div>
+            {/* Drafts row */}
+            <button
+              onClick={() => setStep("drafts")}
+              className="press flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-left"
+            >
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted">
+                <FolderOpen className="size-5 text-muted-foreground" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-semibold">Drafts</span>
+                <span className="text-xs text-muted-foreground">Resume unfinished posts</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </button>
           </div>
         )}
 
+        {/* ── PHOTO ── */}
         {step === "photo" && (
           <PhotoStep
             photoUrl={photoUrl}
+            photoUrls={photoUrls}
+            activePhoto={activePhoto}
+            setActivePhoto={setActivePhoto}
+            removePhoto={removePhoto}
+            movePhoto={movePhoto}
+            maxPhotos={MAX_PHOTO_COUNT}
             photoFilter={photoFilter}
+            photoTransform={photoTransform}
+            vignetteStrength={adjust.vignette}
             presetId={presetId}
             setPresetId={setPresetId}
             intensity={intensity}
             setIntensity={setIntensity}
             adjust={adjust}
             setAdjust={setAdjust}
+            rotate={rotate}
+            setRotate={setRotate}
+            flip={flip}
+            setFlip={setFlip}
             onCamera={() => setCamera("photo")}
-            onUpload={() => fileRef.current?.click()}
+            onUpload={() => {
+              pickMode.current = { replace: activePhoto };
+              fileRef.current?.click();
+            }}
+            onAddMore={() => {
+              pickMode.current = { replace: null };
+              fileRef.current?.click();
+            }}
             onContinue={goComposer}
             onCrop={() => setCropping(true)}
             error={error}
           />
         )}
 
+        {/* ── VIDEO ── */}
         {step === "video" && (
           <VideoStep
             videoUrl={videoUrl}
-            posterUrl={videoPosterUrl}
+            proxyFrameUrl={proxyFrameUrl}
             playable={videoFile ? videoMeta !== null || !videoProbeDone : true}
+            duration={videoMeta?.durationSeconds ?? null}
             detectedType={videoMeta?.contentType ?? null}
             trim={trim}
             setTrim={setTrim}
@@ -866,8 +1084,17 @@ export function CreationEngine({
             setSpeed={setSpeed}
             muted={muted}
             setMuted={setMuted}
+            videoAdjust={videoAdjust}
+            setVideoAdjust={setVideoAdjust}
+            origVolume={origVolume}
+            setOrigVolume={setOrigVolume}
+            musicVolume={musicVolume}
+            setMusicVolume={setMusicVolume}
             trackId={trackId}
             setTrackId={setTrackId}
+            coverSet={coverFile !== null}
+            onSetCover={setCoverFile}
+            canTrim={canReencodeVideo()}
             onRecord={() => setCamera("short")}
             onUpload={() => videoRef.current?.click()}
             onContinue={goComposer}
@@ -875,6 +1102,7 @@ export function CreationEngine({
           />
         )}
 
+        {/* ── STORY ── */}
         {step === "story" && (
           <StoryStep
             photoUrl={photoUrl}
@@ -888,8 +1116,19 @@ export function CreationEngine({
                 prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
               )
             }
-            onPhoto={() => fileRef.current?.click()}
-            onVideo={() => videoRef.current?.click()}
+            onClearMedia={() => {
+              clearPhoto();
+              clearVideo();
+            }}
+            onPhoto={() => {
+              // Switching to photo mode — clear text so the image preview wins.
+              setTextBody("");
+              fileRef.current?.click();
+            }}
+            onVideo={() => {
+              setTextBody("");
+              videoRef.current?.click();
+            }}
             onText={() => {
               clearPhoto();
               clearVideo();
@@ -905,6 +1144,7 @@ export function CreationEngine({
           />
         )}
 
+        {/* ── TEXT ── */}
         {step === "text" && (
           <div>
             <div className="grid grid-cols-6 gap-2 px-2 py-2">
@@ -944,6 +1184,7 @@ export function CreationEngine({
           </div>
         )}
 
+        {/* ── LIVE SETUP ── */}
         {step === "live-setup" && (
           <div className="space-y-3 px-1 py-1">
             <label className="block">
@@ -1016,6 +1257,7 @@ export function CreationEngine({
           </div>
         )}
 
+        {/* ── LIVE ROOM ── */}
         {step === "live-room" && (
           <div className="overflow-hidden rounded-2xl bg-media">
             <div className="flex items-center justify-between px-3 py-2">
@@ -1061,8 +1303,10 @@ export function CreationEngine({
           </div>
         )}
 
+        {/* ── COMPOSER ── */}
         {step === "composer" && (
           <div className="space-y-3 pb-2">
+            {/* Media preview chip */}
             {(photoUrl || videoUrl || (kind === "text" && textBody)) && (
               <div className="flex items-center gap-3 rounded-2xl bg-secondary p-2.5">
                 {photoUrl && (
@@ -1074,11 +1318,15 @@ export function CreationEngine({
                   />
                 )}
                 {videoUrl && !photoUrl && (
+                  /* autoPlay + muted so the thumbnail loads on Android without user gesture */
                   <video
                     src={videoUrl}
                     poster={videoPosterUrl ?? undefined}
+                    autoPlay
                     muted
                     playsInline
+                    loop
+                    preload="auto"
                     className="size-14 rounded-xl object-cover"
                   />
                 )}
@@ -1096,8 +1344,20 @@ export function CreationEngine({
                     {kind === "story" ? "Disappears after 24 hours" : `Audience: ${audience}`}
                   </p>
                 </div>
+                {/* Quick edit back */}
+                <button
+                  onClick={() =>
+                    setStep(
+                      kind === "photo" ? "photo" : kind === "video" ? "video" : kind === "text" ? "text" : "story",
+                    )
+                  }
+                  className="ml-auto shrink-0 rounded-full bg-background px-3 py-1.5 text-xs font-semibold"
+                >
+                  Edit
+                </button>
               </div>
             )}
+
             <label className="block">
               <span className="text-xs font-semibold text-muted-foreground">Caption</span>
               <textarea
@@ -1111,6 +1371,7 @@ export function CreationEngine({
                 className="mt-1 w-full resize-none rounded-xl border border-border bg-secondary px-3 py-2.5 text-sm outline-none focus:border-brand"
               />
             </label>
+
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-muted-foreground">Location</span>
@@ -1137,8 +1398,9 @@ export function CreationEngine({
                 </select>
               </label>
             </div>
+
             <label className="block">
-              <span className="text-xs font-semibold text-muted-foreground">Tags & hashtags</span>
+              <span className="text-xs font-semibold text-muted-foreground">Tags &amp; hashtags</span>
               <span className="mt-1 flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3 py-2.5">
                 <AtSign className="size-4 shrink-0 text-muted-foreground" />
                 <input
@@ -1149,6 +1411,47 @@ export function CreationEngine({
                 />
               </span>
             </label>
+
+            {/* ── Music track picker (all post types) ── */}
+            {kind !== "story" && (
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <Music className="size-3.5" /> Add a sound
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  {/* "None" chip */}
+                  <button
+                    onClick={() => setTrackId(null)}
+                    className={cn(
+                      "shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
+                      trackId === null ? "bg-brand text-brand-foreground" : "bg-secondary",
+                    )}
+                  >
+                    No sound
+                  </button>
+                  {TRACKS.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTrackId(trackId === t.id ? null : t.id)}
+                      className={cn(
+                        "shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
+                        trackId === t.id ? "bg-brand text-brand-foreground" : "bg-secondary",
+                      )}
+                    >
+                      {trackId === t.id ? `♪ ${t.title}` : t.title}
+                    </button>
+                  ))}
+                </div>
+                {trackId && (
+                  <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Music className="size-3" />
+                    {TRACKS.find((t) => t.id === trackId)?.title} ·{" "}
+                    {TRACKS.find((t) => t.id === trackId)?.creator}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <span className="text-xs font-semibold text-muted-foreground">Audience</span>
               <div className="mt-1 flex gap-1.5">
@@ -1163,8 +1466,10 @@ export function CreationEngine({
                 ))}
               </div>
             </div>
+
             <ToggleRow title="Allow comments" checked={allowComments} onChange={setAllowComments} />
             <ToggleRow title="Allow sharing" checked={allowSharing} onChange={setAllowSharing} />
+
             {kind !== "story" && (
               <label className="block">
                 <span className="text-xs font-semibold text-muted-foreground">
@@ -1181,6 +1486,7 @@ export function CreationEngine({
                 </span>
               </label>
             )}
+
             {error && !user && !sessionLoading ? (
               <div className="rounded-xl bg-secondary p-3 text-xs">
                 <p className="font-semibold text-live">{error}</p>
@@ -1191,12 +1497,13 @@ export function CreationEngine({
                   }}
                   className="mt-2 rounded-full bg-foreground px-3 py-1.5 font-bold text-background"
                 >
-                  Save draft & sign in
+                  Save draft &amp; sign in
                 </button>
               </div>
             ) : (
               error && <p className="text-xs font-semibold text-live">{error}</p>
             )}
+
             <div className="flex gap-2 pt-1">
               <button
                 onClick={saveDraft}
@@ -1215,6 +1522,7 @@ export function CreationEngine({
           </div>
         )}
 
+        {/* ── PUBLISHING ── */}
         {step === "publishing" && (
           <div className="px-2 py-10 text-center">
             {photoUrl && (
@@ -1232,18 +1540,39 @@ export function CreationEngine({
                 className="mx-auto mb-4 size-20 rounded-2xl object-cover"
               />
             )}
-            {/* CSS transform-only spinner: cheap on slow/low-end devices, no layout jank */}
             <Loader2
               className="mx-auto size-8 animate-spin [animation-duration:0.9s] text-brand"
               strokeWidth={2.5}
             />
             <p className="mt-3 text-[15px] font-semibold">Publishing your {kind}…</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Please wait — you'll stay on this screen until it's done.
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              aria-label="Publish progress"
+              className="mx-auto mt-4 h-1.5 w-56 overflow-hidden rounded-full bg-secondary"
+            >
+              <div
+                className="h-full rounded-full bg-brand transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+              {stage === "trim"
+                ? "Re-encoding clip (trim/speed)…"
+                : progress >= 100
+                  ? "Published — refreshing your feed…"
+                  : progress >= 82
+                    ? "Saving post…"
+                    : progress >= 65
+                      ? "Upload complete — processing media…"
+                      : `Uploading media · ${progress}%`}
             </p>
           </div>
         )}
 
+        {/* ── SUCCESS ── */}
         {step === "success" && (
           <div className="px-2 py-8 text-center">
             <span className="animate-scale-in mx-auto grid size-14 place-items-center rounded-full bg-brand">
@@ -1294,6 +1623,7 @@ export function CreationEngine({
           </div>
         )}
 
+        {/* ── DRAFTS ── */}
         {step === "drafts" && (
           <div>
             {drafts.length === 0 ? (
@@ -1378,16 +1708,24 @@ export function CreationEngine({
           </div>
         )}
 
+        {/* ── Hidden file pickers ── */}
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) {
+              const replaceIndex = pickMode.current.replace;
+              pickMode.current = { replace: null };
               if (step === "story") clearVideo();
-              attachPhoto(f);
+              if (replaceIndex !== null) {
+                attachPhoto(files[0]!, replaceIndex);
+              } else {
+                for (const f of files) attachPhoto(f);
+              }
               if (step === "hub") {
                 setKind("photo");
                 setStep("photo");
@@ -1421,21 +1759,20 @@ export function CreationEngine({
         mode={camera === "short" ? "short" : "photo"}
         onClose={() => setCamera(null)}
         onCapture={(f) => {
-          // Empty MIME (some camera builds) and application/* labels both
-          // defer to the extension; only a MIME naming the other kind decides.
           const looksVideo = mimeMismatch(f, "image") && !mimeMismatch(f, "video");
           if (looksVideo) attachVideo(f);
-          else attachPhoto(f);
+          else attachPhoto(f, step === "photo" && photos.length > 0 ? activePhoto : undefined);
           setCamera(null);
         }}
       />
+
       {cropping && photoUrl && (
         <CropSheet
           open
           onClose={() => setCropping(false)}
           imageSrc={photoUrl}
           onDone={(f) => {
-            attachPhoto(f);
+            attachPhoto(f, activePhoto);
             setCropping(false);
           }}
         />
@@ -1444,5 +1781,4 @@ export function CreationEngine({
   );
 }
 
-// Re-exported so tree-shaken icon imports stay referenced in one place.
 export { AtSign, Clock, FolderOpen, Link2, MapPin, Mic, Music, RefreshCw, Users };
