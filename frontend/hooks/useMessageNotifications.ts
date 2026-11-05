@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,6 +6,20 @@ import { supabase } from "@/integrations/supabase/client";
 let permissionGranted: boolean | null = null;
 let channelCreated = false;
 let notifId = 1000;
+
+// Module-level so both AppShell (hook) and MessagesScreen (setActiveConv) share it,
+// and usePushNotifications can read it to suppress duplicate foreground FCM alerts.
+let _activeConvId: string | null = null;
+
+/** Call this whenever the user opens or closes a conversation. */
+export function setActiveConv(id: string | null) {
+  _activeConvId = id;
+}
+
+/** Read by usePushNotifications to avoid a double heads-up for the open conversation. */
+export function getActiveConvId(): string | null {
+  return _activeConvId;
+}
 
 async function ensurePermission(): Promise<boolean> {
   if (permissionGranted !== null) return permissionGranted;
@@ -31,7 +45,6 @@ async function ensureChannel() {
       name: "Messages",
       description: "New message notifications",
       importance: 4,
-      sound: "default",
       vibration: true,
     });
   } catch { /* already exists */ }
@@ -46,17 +59,19 @@ async function showNotif(title: string, body: string) {
   } catch { /* non-fatal */ }
 }
 
+/**
+ * Subscribe to incoming DMs via Supabase Realtime and show a local heads-up.
+ * Call once globally (AppShell) so it runs on every screen, not just MessagesScreen.
+ */
 export function useMessageNotifications(userId: string | null) {
-  const activeConvRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!userId) return;
 
     void ensureChannel();
     void ensurePermission();
 
-    // Use a unique channel name per mount to avoid the Supabase
-    // "cannot add callbacks after subscribe()" error on re-mount
+    // Unique channel name per mount to avoid the Supabase
+    // "cannot add callbacks after subscribe()" error on re-mount.
     const channelName = `notif:${userId}:${Date.now()}`;
     const channel = supabase
       .channel(channelName)
@@ -65,7 +80,7 @@ export function useMessageNotifications(userId: string | null) {
         { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${userId}` },
         async (payload) => {
           const row = payload.new as { conversation_id: string; sender_id: string; body: string };
-          if (activeConvRef.current === row.conversation_id) return;
+          if (_activeConvId === row.conversation_id) return;
           const { data } = await supabase
             .from("profiles")
             .select("display_name, username")
@@ -79,8 +94,4 @@ export function useMessageNotifications(userId: string | null) {
 
     return () => { void supabase.removeChannel(channel); };
   }, [userId]);
-
-  return {
-    setActiveConv: (id: string | null) => { activeConvRef.current = id; },
-  };
 }

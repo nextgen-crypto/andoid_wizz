@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
+import { sendMessage as sendMessageFn } from "@/backend/api/sendMessage.functions";
 
 export interface Peer {
   id: string;
@@ -182,12 +183,7 @@ export function useMessages(conversationId: string | null, userId: string | null
       const text = body.trim().slice(0, 1000);
       if (!text) throw new Error("Empty message.");
       if (!conversationId || !userId) throw new Error("Sign in to chat.");
-      const { error } = await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: userId,
-        body: text,
-      });
-      if (error) throw error;
+      await sendMessageFn({ data: { conversationId, body: text } });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: key });

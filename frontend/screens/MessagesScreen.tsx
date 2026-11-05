@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, SendHorizonal } from "lucide-react";
 import { AppShell } from "@/frontend/components/AppShell";
 import { useSession } from "@/frontend/hooks/useSession";
 import { useConversations, useMessages } from "@/frontend/hooks/useMessages";
-import { useMessageNotifications } from "@/frontend/hooks/useMessageNotifications";
+import { setActiveConv } from "@/frontend/hooks/useMessageNotifications";
 import { cn } from "@/lib/utils";
 import { timeAgoCompact } from "@/frontend/lib/format";
 
@@ -43,8 +43,6 @@ export function MessagesScreen() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const chatHeight = useChatHeight();
-  const { setActiveConv } = useMessageNotifications(userId);
-
   useEffect(() => {
     if (c) setSelected(c);
   }, [c]);

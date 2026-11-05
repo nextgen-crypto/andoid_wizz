@@ -1,8 +1,45 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
 import { timeAgoCompact } from "@/frontend/lib/format";
+
+let _notifChannelReady = false;
+let _notifPermGranted: boolean | null = null;
+let _notifId = 2000;
+
+async function fireHeadsUp(title: string, body: string) {
+  if (!Capacitor.isNativePlatform()) return;
+  if (_notifPermGranted === null) {
+    const { display } = await LocalNotifications.checkPermissions();
+    if (display !== "granted") {
+      const { display: after } = await LocalNotifications.requestPermissions();
+      _notifPermGranted = after === "granted";
+    } else {
+      _notifPermGranted = true;
+    }
+  }
+  if (!_notifPermGranted) return;
+  if (!_notifChannelReady) {
+    _notifChannelReady = true;
+    try {
+      await LocalNotifications.createChannel({
+        id: "activity",
+        name: "Activity",
+        description: "Likes, follows, and other activity",
+        importance: 4,
+        vibration: true,
+      });
+    } catch { /* already exists */ }
+  }
+  try {
+    await LocalNotifications.schedule({
+      notifications: [{ id: _notifId++, title, body, channelId: "activity", smallIcon: "ic_notification" }],
+    });
+  } catch { /* non-fatal */ }
+}
 
 export interface AppNotification {
   id: string;
@@ -70,8 +107,13 @@ export function useNotifications(userId: string | null) {
         table: "notifications",
         filter: `user_id=eq.${userId}`,
       },
-      () => {
+      (payload) => {
         void queryClient.invalidateQueries({ queryKey: key });
+        const row = payload.new as { kind: string; text: string };
+        const title = row.kind === "follow" ? "New follower" :
+                      row.kind === "like"   ? "Someone liked your post" :
+                      row.kind === "blend_invite" ? "Blend invite" : "New activity";
+        void fireHeadsUp(title, row.text.slice(0, 100));
       },
     );
   });

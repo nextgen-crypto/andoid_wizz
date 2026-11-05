@@ -44,13 +44,23 @@ export const notifyBlendInvite = createServerFn({ method: "POST" })
       0,
       40,
     );
+    const notifText = `invited you to watch together${data.shortId ? " (short)" : ""} — ${name}`;
     const { error } = await supabaseAdmin.from("notifications").insert({
       user_id: data.toUserId,
       kind: "blend_invite",
       actor_id: fromId,
       ref_id: data.roomId,
-      text: `invited you to watch together${data.shortId ? " (short)" : ""} — ${name}`,
+      text: notifText,
     });
     if (error) throw error;
+
+    // Send FCM push (non-blocking)
+    void import("@/backend/lib/fcm").then(({ sendFCMToUser }) =>
+      sendFCMToUser(supabaseAdmin, data.toUserId, "Blend invite", notifText, {
+        type: "notification",
+        kind: "blend_invite",
+      }).catch(() => {}),
+    );
+
     return { ok: true };
   });
