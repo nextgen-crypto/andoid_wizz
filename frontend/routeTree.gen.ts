@@ -24,6 +24,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ShortsRouteImport } from './routes/shorts'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VideosRouteImport } from './routes/videos'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as NewsIndexRouteImport } from './routes/news.index'
@@ -111,6 +112,11 @@ const ShortsRoute = ShortsRouteImport.update({
   path: '/shorts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VideosRoute = VideosRouteImport.update({
   id: '/videos',
   path: '/videos',
@@ -183,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/shorts': typeof ShortsRoute
+  '/terms': typeof TermsRoute
   '/videos': typeof VideosRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/news/$articleId': typeof NewsArticleIdRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/shorts': typeof ShortsRoute
+  '/terms': typeof TermsRoute
   '/videos': typeof VideosRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/news/$articleId': typeof NewsArticleIdRoute
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/shorts': typeof ShortsRoute
+  '/terms': typeof TermsRoute
   '/videos': typeof VideosRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/news/$articleId': typeof NewsArticleIdRoute
@@ -269,6 +278,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/shorts'
+    | '/terms'
     | '/videos'
     | '/welcome'
     | '/news/$articleId'
@@ -296,6 +306,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/shorts'
+    | '/terms'
     | '/videos'
     | '/welcome'
     | '/news/$articleId'
@@ -324,6 +335,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/shorts'
+    | '/terms'
     | '/videos'
     | '/welcome'
     | '/news/$articleId'
@@ -353,6 +365,7 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ShortsRoute: typeof ShortsRoute
+  TermsRoute: typeof TermsRoute
   VideosRoute: typeof VideosRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
   PostPostIdRoute: typeof PostPostIdRoute
@@ -468,6 +481,13 @@ declare module '@tanstack/react-router' {
       path: '/shorts'
       fullPath: '/shorts'
       preLoaderRoute: typeof ShortsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/videos': {
@@ -589,6 +609,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ShortsRoute: ShortsRoute,
+  TermsRoute: TermsRoute,
   VideosRoute: VideosRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
   PostPostIdRoute: PostPostIdRoute,
