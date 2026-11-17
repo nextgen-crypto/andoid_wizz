@@ -1,3 +1,5 @@
+/// <reference types="@capawesome/capacitor-live-update" />
+
 import type { CapacitorConfig } from "@capacitor/cli";
 
 // The native shell ships its web assets inside the APK: there is no
@@ -24,6 +26,16 @@ const config: CapacitorConfig = {
     backgroundColor: "#0a0a0d",
   },
   plugins: {
+    // Web bundles are downloaded from our own Supabase bucket (see
+    // scripts/publish-live-update.mjs). No Capawesome Cloud account required.
+    LiveUpdate: {
+      autoBlockRolledBackBundles: true,
+      autoDeleteBundles: true,
+      // We drive self-hosted checks from LiveUpdateManager, so the plugin's
+      // cloud-based automatic strategy stays off.
+      autoUpdateStrategy: "none",
+      readyTimeout: 10_000,
+    },
     SplashScreen: {
       launchAutoHide: false,
       backgroundColor: "#0a0a0d",

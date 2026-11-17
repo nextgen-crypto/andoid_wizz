@@ -13,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 import { NativeStartup } from "@/frontend/components/NativeStartup";
+import { LiveUpdateManager } from "@/frontend/components/LiveUpdateManager";
 import { OfflineCacheManager } from "@/frontend/components/OfflineCacheManager";
 import { CommentsProvider } from "@/frontend/components/comments/CommentsContext";
 import { queryPersistenceOptions } from "@/frontend/lib/offlineStorage";
@@ -134,6 +135,8 @@ function RootComponent() {
       {/* No-op on the web; dismisses the splash screen and wires the Android
           back button inside the Capacitor shell. */}
       <NativeStartup />
+      {/* Downloads web bundles in the background; applies them on next launch. */}
+      <LiveUpdateManager />
       {/* Restores/downloads content for offline viewing and shows offline state. */}
       <OfflineCacheManager />
       {/* Global single comments sheet + its open-state context (see CommentsContext). */}
