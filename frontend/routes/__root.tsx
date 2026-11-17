@@ -86,7 +86,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+        content:
+          "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
       },
       { title: "WIZZ" },
       { name: "description", content: "WIZZ — create, watch, and discover." },
@@ -128,16 +129,13 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={queryPersistenceOptions}
-    >
+    <PersistQueryClientProvider client={queryClient} persistOptions={queryPersistenceOptions}>
       {/* No-op on the web; dismisses the splash screen and wires the Android
           back button inside the Capacitor shell. */}
       <NativeStartup />
       {/* Downloads web bundles in the background; applies them on next launch. */}
       <LiveUpdateManager />
-      {/* Restores/downloads content for offline viewing and shows offline state. */}
+      {/* Restores/downloads content quietly; offline use should feel normal. */}
       <OfflineCacheManager />
       {/* Global single comments sheet + its open-state context (see CommentsContext). */}
       <CommentsProvider>

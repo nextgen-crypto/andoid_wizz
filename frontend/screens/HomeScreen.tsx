@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
-import { useSuspenseQuery, useQuery } from "@tanstack/react-query";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type TouchEvent,
+} from "react";
+import { onlineManager, useSuspenseQuery, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2 } from "lucide-react";
 import { fetchFeedPage } from "@/backend/api/home.functions";
@@ -21,6 +29,8 @@ import { useSavedPosts } from "@/frontend/hooks/useSavedPosts";
 import { useFollowList } from "@/frontend/hooks/usePublicProfile";
 import { buildInterestProfile, useFeedPrefs } from "@/frontend/hooks/useFeedPrefs";
 import { useEventTracker } from "@/frontend/hooks/useEventTracker";
+import { loadFeedSnapshot, saveFeedSnapshot, type FeedSnapshot } from "@/frontend/lib/feedSnapshot";
+import { warmMediaValue } from "@/frontend/lib/offlineStorage";
 import { cn } from "@/frontend/lib/utils";
 import { toast } from "sonner";
 
@@ -29,6 +39,11 @@ type FeedMode = "all" | "following";
 export function HomeScreen() {
   const { data: base } = useSuspenseQuery(homeQueryOptions);
   const loadPage = useServerFn(fetchFeedPage);
+  const online = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+    () => true,
+  );
 
   const { user, loading: sessionLoading } = useSession();
   const userId = user?.id ?? null;
@@ -73,6 +88,7 @@ export function HomeScreen() {
   // ---- Feed state (declared before mode/refresh callbacks that mutate it) ----
   const [storyRail, setStoryRail] = useState(base.stories);
   const [storyViewerId, setStoryViewerId] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<FeedSnapshot | null>(null);
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
   const [feedViewerId, setFeedViewerId] = useState<string | null>(null);
   /** Which tab the current `feed` pages belong to — guards cross-tab bleed. */
@@ -85,6 +101,8 @@ export function HomeScreen() {
   const [feedError, setFeedError] = useState<"page" | "refresh" | null>(null);
   const sentinel = useRef<HTMLDivElement | null>(null);
   const feedRequestVersion = useRef(0);
+  const snapshotLoaded = useRef(false);
+  const autoPages = useRef(0);
 
   const mode: FeedMode = "all";
   useEffect(() => {
@@ -105,6 +123,9 @@ export function HomeScreen() {
 
   useEffect(() => {
     feedRequestVersion.current += 1;
+    snapshotLoaded.current = false;
+    autoPages.current = 0;
+    setSnapshot(null);
     setLoading(false);
   }, [userId]);
 
@@ -120,7 +141,25 @@ export function HomeScreen() {
     setHasMore(personal.feed.hasMore);
     setExtra([]);
     setFeedError(null);
+    warmMediaValue(personal.feed.items);
   }, [personal, mode, userId]);
+
+  // Cold offline start: the persisted query cache only has the first page, so
+  // restore the multi-page snapshot saved on an earlier online visit. While
+  // offline this snapshot wins over the one-page cached personal query.
+  useEffect(() => {
+    if (!mounted || sessionLoading || snapshotLoaded.current) return;
+    snapshotLoaded.current = true;
+    let cancelled = false;
+    void loadFeedSnapshot(userId, mode).then((saved) => {
+      if (cancelled || !saved || saved.items.length === 0) return;
+      setSnapshot(saved);
+      warmMediaValue(saved.items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, sessionLoading, userId, mode]);
 
   // ---- Pull-to-refresh: refetch the personalized page (stories ride along)
   // without resetting the base suspense query, which would suspend the screen. ----
@@ -130,8 +169,9 @@ export function HomeScreen() {
   const refreshingRef = useRef(false);
 
   const refreshFeed = useCallback(async () => {
-    if (refreshingRef.current) return;
+    if (refreshingRef.current || !online) return;
     refreshingRef.current = true;
+    autoPages.current = 0;
     setRefreshing(true);
     setFeedError(null);
     try {
@@ -149,7 +189,7 @@ export function HomeScreen() {
       setPullDist(0);
       pullStart.current = null;
     }
-  }, [refetchPersonal]);
+  }, [online, refetchPersonal]);
 
   const onPullStart = (e: TouchEvent) => {
     if (refreshingRef.current || window.scrollY > 0) return;
@@ -174,7 +214,7 @@ export function HomeScreen() {
   };
 
   const loadMore = useCallback(async () => {
-    if (feedViewerId !== userId || feedMode !== mode) return;
+    if (!online || feedViewerId !== userId || feedMode !== mode) return;
     if (loading || !hasMore || !cursor) return;
     const requestVersion = ++feedRequestVersion.current;
     setLoading(true);
@@ -182,6 +222,7 @@ export function HomeScreen() {
     try {
       const page = await loadPage({ data: { cursor, profile, mode } });
       if (requestVersion !== feedRequestVersion.current || feedViewerId !== userId) return;
+      warmMediaValue(page.items);
       // Keyset pages can repeat an id at lane boundaries — drop duplicates so
       // pagination never renders the same post twice.
       setExtra((prev) => {
@@ -198,7 +239,7 @@ export function HomeScreen() {
     } finally {
       if (requestVersion === feedRequestVersion.current) setLoading(false);
     }
-  }, [cursor, feedMode, feedViewerId, hasMore, loading, loadPage, mode, profile, userId]);
+  }, [cursor, feedMode, feedViewerId, hasMore, loading, loadPage, mode, online, profile, userId]);
 
   useEffect(() => {
     const node = sentinel.current;
@@ -216,19 +257,52 @@ export function HomeScreen() {
   function removePost(postId: string) {
     setFeed((prev) => (prev ? prev.filter((i) => i.post.id !== postId) : prev));
     setExtra((prev) => prev.filter((i) => i.post.id !== postId));
+    setSnapshot((prev) =>
+      prev ? { ...prev, items: prev.items.filter((i) => i.post.id !== postId) } : prev,
+    );
   }
 
   function removeAuthor(authorId: string) {
     setFeed((prev) => (prev ? prev.filter((i) => i.author.id !== authorId) : prev));
     setExtra((prev) => prev.filter((i) => i.author.id !== authorId));
+    setSnapshot((prev) =>
+      prev ? { ...prev, items: prev.items.filter((i) => i.author.id !== authorId) } : prev,
+    );
   }
 
   // Data for the selected tab: personalized pages when they match the tab,
   // otherwise the instant SSR fallback — but only for "all" (the SSR page is a
   // mixed feed, never a valid Following result).
-  const feedMatchesTab = feedViewerId === userId && feedMode === mode;
-  const paged = feed !== null ? [...feed, ...extra] : [];
+  const offlineSnapshot =
+    !online && snapshot !== null && snapshot.items.length > 0 ? snapshot : null;
+  const feedMatchesTab = offlineSnapshot !== null || (feedViewerId === userId && feedMode === mode);
+
+  // Keep the offline snapshot in sync with whatever has actually been loaded.
+  useEffect(() => {
+    if (offlineSnapshot || !feedMatchesTab || feed === null || feed.length === 0) return;
+    void saveFeedSnapshot({
+      viewerId: userId,
+      mode,
+      items: [...feed, ...extra],
+      cursor,
+      hasMore,
+    });
+  }, [offlineSnapshot, feed, extra, cursor, hasMore, feedMatchesTab, userId, mode]);
+
+  // Quietly download a couple more pages so the next cold start can scroll
+  // without a connection. The user never sees an offline/sync notice.
+  useEffect(() => {
+    if (!online || !feedMatchesTab || loading || feedError || !hasMore || !cursor) {
+      return;
+    }
+    if (autoPages.current >= 2) return;
+    autoPages.current += 1;
+    void loadMore();
+  }, [online, feedMatchesTab, loading, feedError, hasMore, cursor, loadMore]);
+
+  const paged = offlineSnapshot ? offlineSnapshot.items : feed !== null ? [...feed, ...extra] : [];
   const items: FeedItem[] = feedMatchesTab ? paged : mode === "all" ? base.feed.items : [];
+  const activeHasMore = offlineSnapshot ? offlineSnapshot.hasMore : hasMore;
   const showSkeleton = !feedMatchesTab && personalPending && items.length === 0;
 
   const visibleStoryRail = storyViewerId === userId ? storyRail : base.stories;
@@ -390,7 +464,7 @@ export function HomeScreen() {
               Couldn&apos;t load more — Retry
             </button>
           )}
-          {!hasMore && !loading && !feedError && items.length > 0 && (
+          {!activeHasMore && !loading && !feedError && items.length > 0 && (
             <p className="text-xs text-muted-foreground">You&apos;re all caught up</p>
           )}
         </div>

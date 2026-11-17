@@ -77,22 +77,31 @@ export async function clearPersistedQueryCache(): Promise<void> {
   await del(PERSISTED_CACHE_KEY);
 }
 
-export async function registerMediaServiceWorker(): Promise<void> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-  // Dev servers should never serve stale cached assets; APK/web prod builds do.
-  if (!import.meta.env.PROD) return;
-  try {
-    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-    await Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise((resolve) => setTimeout(resolve, 3000)),
-    ]);
-  } catch {
-    // Service workers are an enhancement. Persisted JSON still works without one.
-  }
+let mediaWorkerReady: Promise<void> | null = null;
+/** URLs already requested this session, so screen changes don't re-download. */
+const warmedUrls = new Set<string>();
+
+export function registerMediaServiceWorker(): Promise<void> {
+  if (mediaWorkerReady) return mediaWorkerReady;
+  mediaWorkerReady = (async () => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    // Dev servers should never serve stale cached assets; APK/web prod builds do.
+    if (!import.meta.env.PROD) return;
+    try {
+      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    } catch {
+      // Service workers are an enhancement. Persisted JSON still works without one.
+    }
+  })();
+  return mediaWorkerReady;
 }
 
 export async function clearMediaCache(): Promise<void> {
+  warmedUrls.clear();
   if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     try {
       const registration = await navigator.serviceWorker.getRegistration();
@@ -105,9 +114,7 @@ export async function clearMediaCache(): Promise<void> {
     try {
       const names = await caches.keys();
       await Promise.all(
-        names
-          .filter((name) => name.startsWith("wizz-media-"))
-          .map((name) => caches.delete(name)),
+        names.filter((name) => name.startsWith("wizz-media-")).map((name) => caches.delete(name)),
       );
     } catch {
       // non-fatal
@@ -115,51 +122,109 @@ export async function clearMediaCache(): Promise<void> {
   }
 }
 
-const MEDIA_URL_PATTERN =
-  /\.(?:jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)(?:\?|$)|(?:\/storage\/v1\/object\/)/i;
+const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)(?:\?|$)/i;
+const VIDEO_URL_PATTERN = /\.(?:mp4|m4v|webm|mov|ogv|m3u8)(?:\?|$)/i;
+const IMAGE_KEY_PATTERN = /(?:image|img|photo|thumb|poster|avatar|cover|preview)/i;
+const VIDEO_KEY_PATTERN = /(?:video|clip|movie|audio)/i;
+const MAX_COLLECT_URLS = 240;
+const MAX_WARM_URLS = 60;
+const WARM_CONCURRENCY = 3;
 
-/** Walk cached query data and collect image/media URLs to warm on app open. */
-export function collectMediaUrls(value: unknown, output: string[] = [], depth = 0): string[] {
-  if (depth > 7 || output.length >= 120) return output;
+function isImageCandidate(url: string, key: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  if (VIDEO_URL_PATTERN.test(url)) return false;
+  if (VIDEO_KEY_PATTERN.test(key)) return false;
+  if (IMAGE_URL_PATTERN.test(url)) return true;
+  // Supabase storage paths are often extensionless. Only trust them when the
+  // field name itself says image/poster/avatar, never a generic `src`/`url`.
+  return IMAGE_KEY_PATTERN.test(key);
+}
+
+/**
+ * Walk cached query data and collect image URLs to warm on app open.
+ *
+ * This intentionally ignores video URLs and ambiguous `src`/`url` fields: a
+ * previous version warmed everything under `/storage/v1/object/`, which could
+ * download video bytes and decode them as images. That was enough to push the
+ * Android WebView renderer over its memory limit and kill the app.
+ */
+export function collectMediaUrls(
+  value: unknown,
+  output: string[] = [],
+  depth = 0,
+  key = "",
+): string[] {
+  if (depth > 7 || output.length >= MAX_COLLECT_URLS) return output;
   if (typeof value === "string") {
-    if (/^https?:\/\//i.test(value) && MEDIA_URL_PATTERN.test(value) && !output.includes(value)) {
-      output.push(value);
-    }
+    if (isImageCandidate(value, key) && !output.includes(value)) output.push(value);
     return output;
   }
   if (Array.isArray(value)) {
-    for (const item of value) collectMediaUrls(item, output, depth + 1);
+    for (const item of value) collectMediaUrls(item, output, depth + 1, key);
     return output;
   }
   if (value && typeof value === "object") {
-    for (const item of Object.values(value)) collectMediaUrls(item, output, depth + 1);
+    const mediaType = (value as { mediaType?: unknown }).mediaType;
+    for (const [childKey, item] of Object.entries(value)) {
+      if (childKey === "mediaUrl" && mediaType === "video") continue;
+      const nextKey = childKey === "mediaUrl" && mediaType === "image" ? "image" : childKey;
+      collectMediaUrls(item, output, depth + 1, nextKey);
+    }
   }
   return output;
 }
 
 /**
- * Images load through the service worker when created, so a plain `new Image()`
- * is enough to download signed media into the persistent Cache Storage while
- * the user still has a connection.
+ * Download image bytes through the service worker without decoding them into
+ * the renderer's image cache. Draining the body guarantees the response is
+ * fully fetched while keeping memory flat even when warming many posters.
  */
-export function warmMediaUrls(urls: string[]): void {
+export async function warmMediaUrls(urls: string[]): Promise<void> {
   if (typeof window === "undefined") return;
-  for (const url of urls.slice(0, 80)) {
-    try {
-      const image = new Image();
-      image.decoding = "async";
-      image.src = url;
-    } catch {
-      // Ignore invalid/unreachable media; offline UI degrades to text previews.
+  const unique = [...new Set(urls)].filter((url) => !warmedUrls.has(url)).slice(0, MAX_WARM_URLS);
+  if (unique.length === 0) return;
+  await registerMediaServiceWorker();
+  for (const url of unique) warmedUrls.add(url);
+
+  let next = 0;
+  const worker = async () => {
+    while (next < unique.length) {
+      const url = unique[next++]!;
+      try {
+        const response = await fetch(url, {
+          cache: "force-cache",
+          credentials: "omit",
+        });
+        if (response.body) {
+          // Discard chunks immediately; the service worker caches its own clone.
+          const reader = response.body.getReader();
+          try {
+            while (!(await reader.read()).done) {
+              // Drain without retaining image bytes in the renderer heap.
+            }
+          } finally {
+            reader.releaseLock();
+          }
+        }
+      } catch {
+        // Ignore invalid/unreachable media; offline UI degrades to text previews.
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: WARM_CONCURRENCY }, () => worker()));
+}
+
+export function warmMediaValue(value: unknown): void {
+  const urls: string[] = [];
+  collectMediaUrls(value, urls);
+  void warmMediaUrls(urls);
 }
 
 export function warmMediaFromCache(queryClient: QueryClient): void {
   const urls: string[] = [];
   for (const query of queryClient.getQueryCache().getAll()) {
     collectMediaUrls(query.state.data, urls);
-    if (urls.length >= 120) break;
+    if (urls.length >= MAX_COLLECT_URLS) break;
   }
-  warmMediaUrls(urls);
+  void warmMediaUrls(urls);
 }

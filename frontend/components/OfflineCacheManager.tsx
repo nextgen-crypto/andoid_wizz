@@ -1,9 +1,14 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { onlineManager, useIsRestoring, useQueryClient } from "@tanstack/react-query";
+import {
+  onlineManager,
+  useIsRestoring,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
 import { Network } from "@capacitor/network";
 
-import { homeQueryOptions } from "@/frontend/queries/home";
+import { homeQueryOptions, loadFeedPage } from "@/frontend/queries/home";
 import {
   newsQueryOptions,
   newsTopicsQueryOptions,
@@ -14,20 +19,25 @@ import {
 import { newsStoriesQueryOptions } from "@/frontend/hooks/useNewsStories";
 import { trendingTopicsQueryOptions } from "@/frontend/hooks/useTrendingTopics";
 import { myProfileQueryOptions } from "@/frontend/hooks/useMyProfile";
-import {
-  conversationsQueryOptions,
-  messagesQueryOptions,
-} from "@/frontend/hooks/useMessages";
+import { conversationsQueryOptions, messagesQueryOptions } from "@/frontend/hooks/useMessages";
 import { notificationsQueryOptions } from "@/frontend/hooks/useNotifications";
 import { useSession } from "@/frontend/hooks/useSession";
+import {
+  clearFeedSnapshots,
+  loadFeedSnapshot,
+  saveFeedSnapshot,
+} from "@/frontend/lib/feedSnapshot";
 import {
   clearMediaCache,
   clearPersistedQueryCache,
   registerMediaServiceWorker,
   warmMediaFromCache,
+  warmMediaValue,
 } from "@/frontend/lib/offlineStorage";
 
 const OWNER_KEY = "wizz:cache-owner";
+const HOME_PREFETCH_EXTRA_PAGES = 2;
+const FEED_SNAPSHOT_FRESH_MS = 30 * 60 * 1000;
 
 const PUBLIC_PREFETCHES = [
   homeQueryOptions,
@@ -48,14 +58,40 @@ function useOnline(): boolean {
   );
 }
 
-function OfflineBanner() {
-  const online = useOnline();
-  if (online) return null;
-  return (
-    <div className="pointer-events-none fixed left-1/2 top-2 z-[10000] -translate-x-1/2 rounded-full bg-amber-400/95 px-3 py-1 text-[11px] font-semibold text-amber-950 shadow-lg">
-      Offline — showing saved content
-    </div>
-  );
+/**
+ * Download a few home-feed pages while the app is open so a later cold start
+ * can scroll without a connection. HomeScreen saves its own richer snapshot as
+ * the viewer pages, but this public snapshot is what makes a fresh install
+ * useful before the first signed-in visit.
+ */
+async function prefetchHomeFeed(queryClient: QueryClient): Promise<void> {
+  const existing = await loadFeedSnapshot(null, "all");
+  if (existing && Date.now() - existing.savedAt < FEED_SNAPSHOT_FRESH_MS) {
+    warmMediaValue(existing.items);
+    return;
+  }
+
+  const first = await queryClient.ensureQueryData(homeQueryOptions);
+  let items = first.feed.items;
+  let cursor = first.feed.nextCursor;
+  let hasMore = first.feed.hasMore;
+
+  for (let page = 0; page < HOME_PREFETCH_EXTRA_PAGES && hasMore && cursor; page += 1) {
+    const next = await loadFeedPage(cursor);
+    const seen = new Set(items.map((item) => item.post.id));
+    items = [...items, ...next.items.filter((item) => !seen.has(item.post.id))];
+    cursor = next.nextCursor;
+    hasMore = next.hasMore;
+  }
+
+  await saveFeedSnapshot({
+    viewerId: null,
+    mode: "all",
+    items,
+    cursor,
+    hasMore,
+  });
+  warmMediaValue(items);
 }
 
 /**
@@ -117,6 +153,7 @@ export function OfflineCacheManager() {
         queryClient.clear();
         void clearPersistedQueryCache();
         void clearMediaCache();
+        void clearFeedSnapshots();
       }
       localStorage.setItem(OWNER_KEY, current);
     } catch {
@@ -135,13 +172,22 @@ export function OfflineCacheManager() {
     if (isRestoring || !online || publicStarted.current) return;
     publicStarted.current = true;
     void (async () => {
-      await Promise.allSettled(
-        PUBLIC_PREFETCHES.map((options) =>
-          queryClient.prefetchQuery(
+      // Sequential instead of a burst: loading every section at once spiked
+      // WebView memory on Android before the first screen had even settled.
+      for (const options of PUBLIC_PREFETCHES) {
+        try {
+          await queryClient.prefetchQuery(
             options as unknown as Parameters<typeof queryClient.prefetchQuery>[0],
-          ),
-        ),
-      );
+          );
+        } catch {
+          // One failed section must not stop the rest from being cached.
+        }
+      }
+      try {
+        await prefetchHomeFeed(queryClient);
+      } catch {
+        // The first page is already cached; extra pages are best-effort.
+      }
       warmMediaFromCache(queryClient);
     })();
   }, [isRestoring, online, queryClient]);
@@ -158,15 +204,13 @@ export function OfflineCacheManager() {
         queryClient.prefetchQuery(myProfileQueryOptions(userId)),
         queryClient.prefetchQuery(notificationsQueryOptions(userId)),
         (async () => {
-          const conversations = await queryClient.fetchQuery(
-            conversationsQueryOptions(userId),
-          );
+          const conversations = await queryClient.fetchQuery(conversationsQueryOptions(userId));
           await Promise.allSettled(
-            conversations.slice(0, 6).map((conversation) =>
-              queryClient.prefetchQuery(
-                messagesQueryOptions(conversation.id, userId),
+            conversations
+              .slice(0, 6)
+              .map((conversation) =>
+                queryClient.prefetchQuery(messagesQueryOptions(conversation.id, userId)),
               ),
-            ),
           );
         })(),
       ]);
@@ -174,5 +218,5 @@ export function OfflineCacheManager() {
     })();
   }, [isRestoring, online, user?.id, queryClient]);
 
-  return <OfflineBanner />;
+  return null;
 }

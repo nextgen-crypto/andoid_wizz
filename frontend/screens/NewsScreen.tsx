@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
-import { useQuery, useSuspenseQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { onlineManager, useQuery, useSuspenseQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { MoreHorizontal, Loader2, Newspaper } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { creators, explorePhotos } from "@/backend/database/seed";
@@ -19,6 +19,7 @@ import {
 import { trendingTopicsQueryOptions } from "@/frontend/hooks/useTrendingTopics";
 import { useNewsPrefs } from "@/frontend/hooks/useNewsPrefs";
 import { useSession } from "@/frontend/hooks/useSession";
+import { warmMediaValue } from "@/frontend/lib/offlineStorage";
 import { cn } from "@/lib/utils";
 
 const TABS = ["For You", "Following", "Latest"] as const;
@@ -57,6 +58,7 @@ export function NewsScreen() {
   const [viewing, setViewing] = useState<(typeof explorePhotos)[number] | null>(null);
   const [firstPostPromptDismissed, setFirstPostPromptDismissed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const autoPages = useRef(0);
   useEffect(() => {
     setMounted(true);
     setFirstPostPromptDismissed(localStorage.getItem(FIRST_POST_PROMPT_KEY) === "1");
@@ -135,6 +137,35 @@ export function NewsScreen() {
     },
     getNextPageParam: (last) => last.next,
   });
+
+  useEffect(() => {
+    autoPages.current = 0;
+  }, [tab, user?.id, q]);
+
+  // Download two extra pages quietly, and warm their photos for offline use.
+  useEffect(() => {
+    if (
+      !onlineManager.isOnline() ||
+      !postsQuery.hasNextPage ||
+      postsQuery.isFetchingNextPage ||
+      autoPages.current >= 2
+    ) {
+      return;
+    }
+    autoPages.current += 1;
+    void postsQuery.fetchNextPage();
+  }, [
+    postsQuery.hasNextPage,
+    postsQuery.isFetchingNextPage,
+    postsQuery.fetchNextPage,
+    tab,
+    user?.id,
+    q,
+  ]);
+
+  useEffect(() => {
+    if (postsQuery.data) warmMediaValue(postsQuery.data.pages);
+  }, [postsQuery.data]);
 
   const feedPosts = (postsQuery.data?.pages ?? []).flatMap((p) => p.items);
 
