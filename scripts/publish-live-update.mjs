@@ -52,8 +52,11 @@ async function ensureBucket() {
     body,
   });
   if (create.ok) return;
-  if (create.status !== 409) {
-    throw new Error(`Could not create ${BUCKET} bucket: ${await create.text()}`);
+  const createBody = await create.text();
+  const alreadyExists =
+    create.status === 409 || createBody.includes("BucketAlreadyExists");
+  if (!alreadyExists) {
+    throw new Error(`Could not create ${BUCKET} bucket: ${createBody}`);
   }
   // Bucket already exists — make sure it stayed public.
   const update = await fetch(`${supabaseUrl}/storage/v1/bucket/${BUCKET}`, {
