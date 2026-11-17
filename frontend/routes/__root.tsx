@@ -16,6 +16,9 @@ import { NativeStartup } from "@/frontend/components/NativeStartup";
 import { LiveUpdateManager } from "@/frontend/components/LiveUpdateManager";
 import { OfflineCacheManager } from "@/frontend/components/OfflineCacheManager";
 import { CommentsProvider } from "@/frontend/components/comments/CommentsContext";
+import { useSession } from "@/frontend/hooks/useSession";
+import { usePushNotifications } from "@/frontend/hooks/usePushNotifications";
+import { useMessageNotifications } from "@/frontend/hooks/useMessageNotifications";
 import { queryPersistenceOptions } from "@/frontend/lib/offlineStorage";
 import appCss from "../styles.css?url";
 import { reportAppError } from "../lib/error-reporting";
@@ -125,6 +128,14 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Native notification bridges live at the root so navigation never re-registers them. */
+function GlobalNotifications() {
+  const { user } = useSession();
+  usePushNotifications(user?.id ?? null);
+  useMessageNotifications(user?.id ?? null);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -133,6 +144,8 @@ function RootComponent() {
       {/* No-op on the web; dismisses the splash screen and wires the Android
           back button inside the Capacitor shell. */}
       <NativeStartup />
+      {/* Global push + DM notification bridges (no-op when FCM is unconfigured). */}
+      <GlobalNotifications />
       {/* Downloads web bundles in the background; applies them on next launch. */}
       <LiveUpdateManager />
       {/* Restores/downloads content quietly; offline use should feel normal. */}

@@ -3,8 +3,6 @@ import { BottomNav } from "@/frontend/components/home/BottomNav";
 import { NavigationRail } from "@/frontend/components/home/NavigationRail";
 import { TopBar } from "@/frontend/components/home/TopBar";
 import { useSession } from "@/frontend/hooks/useSession";
-import { usePushNotifications } from "@/frontend/hooks/usePushNotifications";
-import { useMessageNotifications } from "@/frontend/hooks/useMessageNotifications";
 import { fetchAppConfig } from "@/frontend/lib/appConfig";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,8 +39,6 @@ export function AppShell({
 }) {
   const maintenance = useMaintenance();
   const { user } = useSession();
-  usePushNotifications(user?.id ?? null);
-  useMessageNotifications(user?.id ?? null);
   const [warnings, setWarnings] = useState<{ id: string; message: string }[]>([]);
   const [announcement, setAnnouncement] = useState<{
     id: string;

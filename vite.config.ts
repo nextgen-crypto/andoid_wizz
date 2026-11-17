@@ -23,6 +23,15 @@ import tsConfigPaths from "vite-tsconfig-paths";
 // for the web deploy; its static assets are what the WebView loads.
 const isNativeApp = process.env["WIZZ_TARGET"] === "app";
 
+// Firebase Cloud Messaging only has a default FirebaseApp when the native
+// build applied the Google Services Gradle plugin, which in turn only happens
+// when android/app/google-services.json exists. Calling
+// PushNotifications.register() without it throws inside the native plugin;
+// Capacitor rethrows that on the main thread and the process dies. Bake the
+// file's presence into the JS bundle so the hook can stay off when FCM is not
+// configured.
+const fcmConfigured = existsSync(resolve(process.cwd(), "android/app/google-services.json"));
+
 // The SPA-shell build writes every artifact (index.html + assets) and logs
 // "[prerender] Prerendered 1 pages", but the process can then sit forever on
 // a lingering handle from the prerender pipeline and never exit — which
@@ -59,6 +68,9 @@ function exitAppBuild(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    __WIZZ_FCM_CONFIGURED__: JSON.stringify(fcmConfigured),
+  },
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
