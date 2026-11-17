@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type MyProfile = {
@@ -13,10 +13,10 @@ export type MyProfile = {
   is_private: boolean;
 };
 
-/** The signed-in user's editable profile row; null while signed out. */
-export function useMyProfile(userId: string | null) {
-  return useQuery({
-    queryKey: ["my-profile", userId],
+/** Shared query options so the offline cache can prefetch the same data. */
+export const myProfileQueryOptions = (userId: string | null) =>
+  queryOptions({
+    queryKey: ["my-profile", userId] as const,
     enabled: Boolean(userId),
     staleTime: 30_000,
     queryFn: async (): Promise<MyProfile | null> => {
@@ -30,4 +30,8 @@ export function useMyProfile(userId: string | null) {
       return data as MyProfile | null;
     },
   });
+
+/** The signed-in user's editable profile row; null while signed out. */
+export function useMyProfile(userId: string | null) {
+  return useQuery(myProfileQueryOptions(userId));
 }

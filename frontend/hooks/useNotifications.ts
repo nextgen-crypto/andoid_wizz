@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,13 +53,10 @@ export interface AppNotification {
   created_at: string;
 }
 
-/** Real inbox: own notifications + actor names, live INSERT stream. */
-export function useNotifications(userId: string | null) {
-  const queryClient = useQueryClient();
-  const key = useMemo(() => ["notifications", userId] as const, [userId]);
-
-  const query = useQuery({
-    queryKey: key,
+/** Shared options so the offline cache can prefetch the same notification list. */
+export const notificationsQueryOptions = (userId: string | null) =>
+  queryOptions({
+    queryKey: ["notifications", userId] as const,
     enabled: Boolean(userId),
     staleTime: 15_000,
     queryFn: async (): Promise<AppNotification[]> => {
@@ -97,6 +94,12 @@ export function useNotifications(userId: string | null) {
       }));
     },
   });
+
+/** Real inbox: own notifications + actor names, live INSERT stream. */
+export function useNotifications(userId: string | null) {
+  const queryClient = useQueryClient();
+  const key = useMemo(() => ["notifications", userId] as const, [userId]);
+  const query = useQuery(notificationsQueryOptions(userId));
 
   useSharedRealtimeChannel(userId ? `notif:${userId}` : null, (channel) => {
     channel.on(

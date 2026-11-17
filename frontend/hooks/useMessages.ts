@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
 import { sendMessage as sendMessageFn } from "@/backend/api/sendMessage.functions";
@@ -51,9 +51,9 @@ export async function getOrCreateConversation(me: string, peer: string): Promise
   return (data as { id: string }).id;
 }
 
-export function useConversations(userId: string | null) {
-  const query = useQuery({
-    queryKey: ["conversations", userId],
+export const conversationsQueryOptions = (userId: string | null) =>
+  queryOptions({
+    queryKey: ["conversations", userId] as const,
     enabled: Boolean(userId),
     staleTime: 10_000,
     queryFn: async (): Promise<Conversation[]> => {
@@ -129,6 +129,9 @@ export function useConversations(userId: string | null) {
     },
   });
 
+export function useConversations(userId: string | null) {
+  const query = useQuery(conversationsQueryOptions(userId));
+
   useSharedRealtimeChannel(userId ? `convos:${userId}` : null, (channel) => {
     channel.on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () =>
       query.refetch(),
@@ -138,12 +141,12 @@ export function useConversations(userId: string | null) {
   return query;
 }
 
-export function useMessages(conversationId: string | null, userId: string | null) {
-  const queryClient = useQueryClient();
-  const key = useMemo(() => ["messages", conversationId] as const, [conversationId]);
-
-  const query = useQuery({
-    queryKey: key,
+export const messagesQueryOptions = (
+  conversationId: string | null,
+  userId: string | null,
+) =>
+  queryOptions({
+    queryKey: ["messages", conversationId] as const,
     enabled: Boolean(conversationId && userId),
     staleTime: 5_000,
     queryFn: async (): Promise<ChatMessage[]> => {
@@ -161,6 +164,11 @@ export function useMessages(conversationId: string | null, userId: string | null
       }));
     },
   });
+
+export function useMessages(conversationId: string | null, userId: string | null) {
+  const queryClient = useQueryClient();
+  const key = useMemo(() => ["messages", conversationId] as const, [conversationId]);
+  const query = useQuery(messagesQueryOptions(conversationId, userId));
 
   useSharedRealtimeChannel(conversationId ? `chat:${conversationId}` : null, (channel) => {
     channel.on(

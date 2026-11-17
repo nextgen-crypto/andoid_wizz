@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import {
   Outlet,
   Link,
@@ -12,7 +13,9 @@ import { useEffect, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 import { NativeStartup } from "@/frontend/components/NativeStartup";
+import { OfflineCacheManager } from "@/frontend/components/OfflineCacheManager";
 import { CommentsProvider } from "@/frontend/components/comments/CommentsContext";
+import { queryPersistenceOptions } from "@/frontend/lib/offlineStorage";
 import appCss from "../styles.css?url";
 import { reportAppError } from "../lib/error-reporting";
 
@@ -124,16 +127,21 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={queryPersistenceOptions}
+    >
       {/* No-op on the web; dismisses the splash screen and wires the Android
           back button inside the Capacitor shell. */}
       <NativeStartup />
+      {/* Restores/downloads content for offline viewing and shows offline state. */}
+      <OfflineCacheManager />
       {/* Global single comments sheet + its open-state context (see CommentsContext). */}
       <CommentsProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
       </CommentsProvider>
       <Toaster position="top-center" />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }
