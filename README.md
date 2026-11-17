@@ -105,14 +105,31 @@ pagination everywhere (no `OFFSET`).
 ## Android
 
 Capacitor shell in `android/` (not committed — local tooling only). The APK
-bundles its web assets, so the app boots from local files and never depends on
-the Vercel deployment being reachable:
+bundles its web assets, so the app always boots from local files and never
+depends on the Vercel deployment being reachable:
 
 ```sh
 npm run app:sync   # build the native bundle + cap sync android
 npm run app:open   # same, then open in Android Studio
 npm run app:run    # same, then install + launch on a connected device
 ```
+
+Web changes do not need a new APK. `@capawesome/capacitor-live-update` checks
+the manifest in the public Supabase `app-bundles` bucket, downloads a newer
+bundle in the background, and applies it on the next launch. A production
+Vercel build publishes the bundle automatically after `npm run build`; to do it
+manually:
+
+```sh
+npm run app:publish   # build app-dist + upload bundle/manifest to Supabase
+```
+
+The manifest URL is derived from `VITE_SUPABASE_URL` (override with
+`VITE_APP_UPDATE_MANIFEST_URL`). Native changes still require a store/APK
+release; bump `versionCode` and `live-update.config.json`'s
+`minNativeVersionCode` together so older shells do not download incompatible
+web code. Rollback protection is enabled: if a downloaded bundle does not call
+`LiveUpdate.ready()` within 10 seconds, the plugin restores the bundled shell.
 
 `npm run build:app` is what makes bundling possible. The production build is
 SSR and writes no `index.html` — nitro's Build Output API emits static assets
@@ -139,6 +156,7 @@ redirects pointed at the public web origin rather than the WebView's
 | `npm run preview`                           | Preview the build                     |
 | `npm run lint` / `npm run format`           | ESLint / Prettier                     |
 | `npm run build:app`                         | Static shell for the APK              |
+| `npm run app:publish`                       | Publish a live web bundle for APKs    |
 | `npm run app:sync` / `app:run` / `app:open` | Build, then sync / run / open Android |
 
 ## Working agreements

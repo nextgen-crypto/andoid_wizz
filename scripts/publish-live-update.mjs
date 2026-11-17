@@ -93,6 +93,9 @@ async function uploadObject(path, body, contentType, cacheControl) {
 }
 
 function bundleId() {
+  const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (vercelSha) return vercelSha.slice(0, 7);
+
   const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
     encoding: "utf8",
   }).trim();
