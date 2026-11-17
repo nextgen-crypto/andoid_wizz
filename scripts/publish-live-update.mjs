@@ -112,6 +112,14 @@ function minNativeVersionCode() {
   if (process.env.LIVE_UPDATE_MIN_NATIVE_VERSION_CODE) {
     return Number(process.env.LIVE_UPDATE_MIN_NATIVE_VERSION_CODE);
   }
+  // Tracked so Vercel (which has no android/ directory) publishes the same
+  // compatibility floor as local APK builds.
+  try {
+    const config = JSON.parse(readFileSync(resolve("live-update.config.json"), "utf8"));
+    if (config.minNativeVersionCode) return Number(config.minNativeVersionCode);
+  } catch {
+    // Fall through to the local Android build file.
+  }
   try {
     const gradle = readFileSync(resolve("android/app/build.gradle"), "utf8");
     const match = gradle.match(/versionCode\s+(\d+)/);
@@ -142,7 +150,9 @@ async function zipAppBundle(id) {
 
 const id = bundleId();
 const { zip, checksum } = await zipAppBundle(id);
-const zipName = `wizz-${id}.zip`;
+// Content-address the object so two publishers of the same commit (local and
+// Vercel) cannot overwrite each other's bytes while a device is downloading.
+const zipName = `wizz-${id}-${checksum.slice(0, 12)}.zip`;
 const downloadUrl = `${supabaseUrl}/storage/v1/object/public/${BUCKET}/${zipName}`;
 const manifest = {
   bundleId: id,
