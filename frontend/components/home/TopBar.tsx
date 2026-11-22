@@ -420,7 +420,7 @@ export function TopBar() {
           <Link
             to="/"
             aria-label="WIZZ home"
-            className="min-w-0 truncate text-xl font-black text-title"
+            className="min-w-0 truncate text-[28px] font-black tracking-tight text-title"
           >
             WIZZ
           </Link>

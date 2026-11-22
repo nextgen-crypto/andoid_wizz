@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, BadgeCheck, Users } from "lucide-react";
+
 import { AppShell } from "@/frontend/components/AppShell";
 import {
   useFollowList,
@@ -7,6 +9,47 @@ import {
   type FollowListKind,
 } from "@/frontend/hooks/usePublicProfile";
 import { useSession } from "@/frontend/hooks/useSession";
+
+function PersonAvatar({ src, name }: { src: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = name.slice(0, 1).toUpperCase() || "?";
+  if (!src || failed) {
+    return (
+      <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand text-sm font-bold text-brand-foreground">
+        {initial}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="size-11 shrink-0 rounded-2xl object-cover"
+    />
+  );
+}
+
+function PersonAvatar({ src, name }: { src: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = (name ?? "").trim().slice(0, 1).toUpperCase() || "?";
+  if (!src || failed) {
+    return (
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-brand-foreground">
+        {initial}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      onError={() => setFailed(true)}
+      className="size-9 shrink-0 rounded-full object-cover"
+    />
+  );
+}
 
 export function FollowListScreen({ username, kind }: { username: string; kind: FollowListKind }) {
   const { user } = useSession();
@@ -60,18 +103,7 @@ export function FollowListScreen({ username, kind }: { username: string; kind: F
                 params={{ username: person.username }}
                 className="flex items-center gap-3 px-4 py-3"
               >
-                {person.avatar_url ? (
-                  <img
-                    src={person.avatar_url}
-                    alt={person.display_name}
-                    loading="lazy"
-                    className="size-11 rounded-2xl object-cover"
-                  />
-                ) : (
-                  <span className="grid size-11 place-items-center rounded-2xl bg-brand text-sm font-bold text-brand-foreground">
-                    {person.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                )}
+                <PersonAvatar src={person.avatar_url} name={person.display_name} />
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
                     {person.display_name}

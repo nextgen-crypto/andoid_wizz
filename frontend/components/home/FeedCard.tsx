@@ -7,11 +7,13 @@ import {
   EyeOff,
   Flag,
   Heart,
+  Link2,
   MessageCircle,
   MoreHorizontal,
   Music,
   Play,
   RotateCcw,
+  Settings2,
   Share2,
   UserX,
   Volume2,
@@ -23,6 +25,8 @@ import { imageSrcSet, imageUrl, placeholderUrl, videoUrl } from "@/backend/domai
 import type { FeedItem } from "@/backend/services/feedService";
 import { ShareSheet } from "@/frontend/components/overlays/ShareSheet";
 import { ReportDialog, type ReportTarget } from "@/frontend/components/moderation/ReportDialog";
+import { PostManageSheet } from "@/frontend/components/profile/PostManageSheet";
+import type { ProfilePost } from "@/frontend/hooks/useMyProfileData";
 import { ImageViewer } from "@/frontend/components/media/ImageViewer";
 import { claimPlayback, releasePlayback } from "@/frontend/hooks/useSinglePlayer";
 import { useSession } from "@/frontend/hooks/useSession";
@@ -49,6 +53,40 @@ const SEED_SELF_ID = "u-alex";
 
 function isUuid(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+function feedItemToProfilePost(item: FeedItem, commentCount: number): ProfilePost {
+  const { post, clipObjectKey } = item;
+  const img = item.post.media.find((m) => m.kind === "image");
+  return {
+    id: post.id,
+    caption: post.caption,
+    image_url: img ? imageUrl(img.objectKey, "large", img.width / img.height) : null,
+    image_path: "",
+    video_url: item.videoSrc ?? (clipObjectKey ? videoUrl(clipObjectKey) : null) ?? null,
+    video_path: "",
+    thumbnail_url: null,
+    thumbnail_path: "",
+    created_at: post.createdAt,
+    hashtags: post.hashtags ?? [],
+    category: post.category ?? "",
+    visibility: "public",
+    status: "published",
+    is_edited: false,
+    comments_enabled: post.commentsEnabled !== false,
+    comments_count: commentCount,
+    is_pinned: false,
+    allow_downloads: true,
+    allow_remix: true,
+    allow_duet: false,
+    allow_sharing: post.allowSharing !== false,
+    content_kind: "",
+    scheduled_at: null,
+    story_expires_at: null,
+    content_type: "",
+    video_width: 0,
+    video_height: 0,
+  };
 }
 
 // Timestamps use Date.now() so they reflect the actual current time on-device.
@@ -87,6 +125,7 @@ export function FeedCard({
   const [carouselPage, setCarouselPage] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [burst, setBurst] = useState(0);
@@ -330,7 +369,13 @@ export function FeedCard({
           <button
             aria-label="More options"
             aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => {
+              if (isSelf && userId !== null) {
+                setManaging(true);
+              } else {
+                setMenuOpen((v) => !v);
+              }
+            }}
             className="-mr-1 rounded-full p-1 hover:bg-secondary"
           >
             <MoreHorizontal className="size-5 text-muted-foreground" />
@@ -343,53 +388,79 @@ export function FeedCard({
                 className="fixed inset-0 z-10 cursor-default"
               />
               <div className="absolute right-0 top-8 z-20 w-52 overflow-hidden rounded-2xl border border-border bg-card shadow-raise">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onNotInterested?.(post.id);
-                    toast("We'll show you less like this");
-                  }}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
-                >
-                  <EyeOff className="size-4 text-muted-foreground" /> Not interested
-                </button>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setDismissed(true);
-                    onHidePost?.(post.id);
-                  }}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
-                >
-                  <X className="size-4 text-muted-foreground" /> Hide this post
-                </button>
-                {!isSelf && (
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setDismissed(true);
-                      onMuteAuthor?.(author.id, author.username);
-                      toast(`Muted @${author.username}`);
-                    }}
-                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
-                  >
-                    <UserX className="size-4 text-muted-foreground" /> Mute @{author.username}
-                  </button>
+                {isSelf ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        try { void navigator.clipboard.writeText(shareUrl); toast("Link copied"); } catch { toast.error("Could not copy link"); }
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <Link2 className="size-4 text-muted-foreground" /> Copy link
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); setSharing(true); }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <Share2 className="size-4 text-muted-foreground" /> Share
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); setManaging(true); }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <Settings2 className="size-4 text-muted-foreground" /> Manage post
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onNotInterested?.(post.id);
+                        toast("We'll show you less like this");
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <EyeOff className="size-4 text-muted-foreground" /> Not interested
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setDismissed(true);
+                        onHidePost?.(post.id);
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <X className="size-4 text-muted-foreground" /> Hide this post
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setDismissed(true);
+                        onMuteAuthor?.(author.id, author.username);
+                        toast(`Muted @${author.username}`);
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <UserX className="size-4 text-muted-foreground" /> Mute @{author.username}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setReportTarget({
+                          kind: "post",
+                          refId: post.id,
+                          refTitle: post.caption || "Photo post",
+                          targetUserId: author.id,
+                        });
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
+                    >
+                      <Flag className="size-4 text-muted-foreground" /> Report
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setReportTarget({
-                      kind: "post",
-                      refId: post.id,
-                      refTitle: post.caption || "Photo post",
-                      targetUserId: author.id,
-                    });
-                  }}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-secondary"
-                >
-                  <Flag className="size-4 text-muted-foreground" /> Report
-                </button>
               </div>
             </>
           )}
@@ -727,6 +798,15 @@ export function FeedCard({
       />
       {reportTarget && (
         <ReportDialog open onClose={() => setReportTarget(null)} target={reportTarget} />
+      )}
+      {managing && userId !== null && (
+        <PostManageSheet
+          open={managing}
+          onClose={() => setManaging(false)}
+          userId={userId}
+          username={author.username}
+          post={feedItemToProfilePost(item, totalComments)}
+        />
       )}
       {viewerOpen && images.length > 0 && (
         <ImageViewer

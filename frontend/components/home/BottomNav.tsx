@@ -25,10 +25,10 @@ function Tab({
       {({ isActive }) => (
         <span className="relative">
           <Icon
-            className={isActive ? "animate-pop size-6 text-brand" : "size-6 text-muted-foreground"}
+            className={isActive ? "animate-pop size-[26px] text-brand" : "size-[26px] text-muted-foreground"}
           />
           {isActive && (
-            <span className="animate-scale-in absolute -bottom-2 left-1/2 size-1 -translate-x-1/2 rounded-full bg-brand" />
+            <span className="animate-scale-in absolute -bottom-2 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-brand" />
           )}
         </span>
       )}

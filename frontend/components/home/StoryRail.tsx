@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { imageUrl } from "@/backend/domain/media";
+import { neutralizeBrokenImage } from "@/frontend/lib/mediaFormat";
 import type { StoryItem } from "@/backend/services/feedService";
 import type { Creator } from "@/backend/domain/types";
 import { openCreate } from "@/frontend/components/home/nav-items";
@@ -269,6 +270,7 @@ export function StoryRail({
                     src={imageUrl(firstItem.author.avatarKey, "thumbnail")}
                     alt={firstItem.author.displayName}
                     loading="lazy"
+                    onError={neutralizeBrokenImage}
                     className="size-[58px] rounded-full border-2 border-background object-cover transition-transform duration-200 group-hover:scale-105 group-active:scale-95"
                   />
                   {!allViewed && (
