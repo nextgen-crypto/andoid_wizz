@@ -157,17 +157,7 @@ export function ShareSheet({
         <ul className="divide-y divide-border">
           {people.map((person) => (
             <li key={person.id} className="flex items-center gap-3 py-2.5">
-              {person.avatar_url ? (
-                <img
-                  src={person.avatar_url}
-                  alt={person.display_name}
-                  className="size-10 rounded-full object-cover"
-                />
-              ) : (
-                <span className="grid size-10 place-items-center rounded-full bg-brand text-xs font-bold text-brand-foreground">
-                  {person.display_name.slice(0, 1).toUpperCase()}
-                </span>
-              )}
+              <PersonAvatar src={person.avatar_url} name={person.display_name ?? "?"} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">
                   {person.display_name}
@@ -191,5 +181,25 @@ export function ShareSheet({
         </ul>
       )}
     </Sheet>
+  );
+}
+
+function PersonAvatar({ src, name }: { src: string | null | undefined; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = (name ?? "").trim().slice(0, 1).toUpperCase() || "?";
+  if (!src || failed) {
+    return (
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-brand-foreground">
+        {initial}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      onError={() => setFailed(true)}
+      className="size-10 shrink-0 rounded-full object-cover"
+    />
   );
 }

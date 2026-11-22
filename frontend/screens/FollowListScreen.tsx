@@ -31,26 +31,6 @@ function PersonAvatar({ src, name }: { src: string | null; name: string }) {
   );
 }
 
-function PersonAvatar({ src, name }: { src: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const initial = (name ?? "").trim().slice(0, 1).toUpperCase() || "?";
-  if (!src || failed) {
-    return (
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-brand-foreground">
-        {initial}
-      </span>
-    );
-  }
-  return (
-    <img
-      src={src}
-      alt={name}
-      onError={() => setFailed(true)}
-      className="size-9 shrink-0 rounded-full object-cover"
-    />
-  );
-}
-
 export function FollowListScreen({ username, kind }: { username: string; kind: FollowListKind }) {
   const { user } = useSession();
   const viewerId = user?.id ?? null;

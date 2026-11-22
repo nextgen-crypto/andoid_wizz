@@ -60,6 +60,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
   const [mutedTick, setMutedTick] = useState(0);
   const [viewing, setViewing] = useState<ProfilePost | null>(null);
   const [hiddenTick, setHiddenTick] = useState(0);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   void mutedTick;
   void hiddenTick;
 
@@ -193,10 +194,11 @@ export function PublicProfileScreen({ username }: { username: string }) {
 
       <div className="px-4">
         <div className="-mt-10 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
-          {profile.avatar_url ? (
+          {profile.avatar_url && !avatarFailed ? (
             <img
               src={profile.avatar_url}
               alt={profile.display_name}
+              onError={() => setAvatarFailed(true)}
               className="size-20 rounded-2xl border-4 border-background object-cover"
             />
           ) : (
@@ -441,6 +443,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
                         src={p.thumbnail_url || p.image_url!}
                         alt={p.caption || "Post"}
                         loading="lazy"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                         className="aspect-square w-full bg-surface-strong object-cover"
                       />
                     ) : (

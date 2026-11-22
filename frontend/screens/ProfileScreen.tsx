@@ -62,6 +62,7 @@ export function ProfileScreen() {
   const [managing, setManaging] = useState<ProfilePost | null>(null);
   const [viewing, setViewing] = useState<ProfilePost | null>(null);
   const [, setHiddenTick] = useState(0);
+  const [ownAvatarFailed, setOwnAvatarFailed] = useState(false);
   const { requests, respond } = useFollowRequests(userId);
 
   const shownName = myProfile?.display_name ?? displayName ?? "Your profile";
@@ -185,10 +186,11 @@ export function ProfileScreen() {
       <div className="animate-fade-up px-4">
         <div className="-mt-10 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
           <span className="relative">
-            {shownAvatar ? (
+            {shownAvatar && !ownAvatarFailed ? (
               <img
                 src={shownAvatar}
                 alt={shownName}
+                onError={() => setOwnAvatarFailed(true)}
                 className="animate-scale-in size-20 rounded-2xl border-4 border-background object-cover"
               />
             ) : (
@@ -302,17 +304,7 @@ export function ProfileScreen() {
           <ul className="mt-2 divide-y divide-border">
             {requests.map((r) => (
               <li key={r.requester_id} className="flex items-center gap-2.5 py-2">
-                {r.avatar_url ? (
-                  <img
-                    src={r.avatar_url}
-                    alt={r.display_name}
-                    className="size-9 rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="grid size-9 place-items-center rounded-full bg-secondary text-xs font-bold">
-                    {r.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                )}
+                <FollowRequestAvatar src={r.avatar_url} name={r.display_name} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{r.display_name}</span>
                   <span className="block truncate text-xs text-muted-foreground">
@@ -555,5 +547,25 @@ export function ProfileScreen() {
         />
       )}
     </AppShell>
+  );
+}
+
+function FollowRequestAvatar({ src, name }: { src: string | null | undefined; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = (name ?? "").trim().slice(0, 1).toUpperCase() || "?";
+  if (!src || failed) {
+    return (
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold">
+        {initial}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      onError={() => setFailed(true)}
+      className="size-9 shrink-0 rounded-full object-cover"
+    />
   );
 }
