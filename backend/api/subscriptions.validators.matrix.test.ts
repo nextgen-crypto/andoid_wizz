@@ -214,7 +214,7 @@ type StateResult = {
 describe("fetchMySubscription", () => {
   it("returns a live, verified member whose subscription is active", async () => {
     db.profiles = {
-      data: { verified: true, premium_until: "2026-11-19T12:00:00.000Z" },
+      data: { verified: true, premium_until: "2027-01-19T12:00:00.000Z" },
       error: null,
     };
     const res = (await invoke(subs.fetchMySubscription)) as StateResult;
@@ -243,7 +243,7 @@ describe("fetchMySubscription", () => {
 
   it("grants the badge when the subscription is active but the flag lagged", async () => {
     db.profiles = {
-      data: { verified: false, premium_until: "2026-11-19T12:00:00.000Z" },
+      data: { verified: false, premium_until: "2027-01-19T12:00:00.000Z" },
       error: null,
     };
     const res = (await invoke(subs.fetchMySubscription)) as StateResult;
@@ -287,12 +287,12 @@ describe("activatePremium", () => {
 
   it("extends an active period from its current expiry", async () => {
     db.profiles = {
-      data: { verified: true, premium_until: "2026-11-19T12:00:00.000Z" },
+      data: { verified: true, premium_until: "2027-01-19T12:00:00.000Z" },
       error: null,
     };
     await invoke(subs.activatePremium);
     const writes = callsTo("profiles", "update") as { premium_until: string; verified: boolean }[];
-    expect(writes[0]?.premium_until).toBe("2026-12-19T12:00:00.000Z");
+    expect(writes[0]?.premium_until).toBe("2027-02-18T12:00:00.000Z");
     expect(writes[0]?.verified).toBe(true);
   });
 

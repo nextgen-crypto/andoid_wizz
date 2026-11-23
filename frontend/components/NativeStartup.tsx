@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { App as NativeApp } from "@capacitor/app";
 import { SplashScreen } from "@capacitor/splash-screen";
+import { StatusBar, Style } from "@capacitor/status-bar";
 
 import { isNativePlatform } from "@/frontend/lib/native";
 import { closeTopOverlay } from "@/frontend/components/media/overlayStack";
@@ -36,6 +37,11 @@ export function NativeStartup() {
 
   useEffect(() => {
     if (!isNativePlatform()) return;
+
+    // Edge-to-edge: WebView sits behind the transparent status bar.
+    // CSS env(safe-area-inset-top) then supplies every screen's correct offset.
+    void StatusBar.setOverlaysWebView({ overlay: true }).catch(() => undefined);
+    void StatusBar.setStyle({ style: Style.Light }).catch(() => undefined);
 
     const frame = requestAnimationFrame(() => {
       void SplashScreen.hide();

@@ -12,7 +12,8 @@ type DragInfo = { kind: "text" | "sticker"; id: string; ox: number; oy: number }
 
 export function PreviewCanvas({ className }: { className?: string }) {
   const { project, playhead, playing, selectedClipId } = useEditorStore();
-  const { clips, textLayers, stickers, globalFilter, globalAdjust } = project;
+  const { clips, textLayers, stickers, globalFilter, globalAdjust, bgColor } = project;
+  const updateClip = useEditorStore((s) => s.updateClip);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef    = useRef<HTMLVideoElement | null>(null);
@@ -89,15 +90,23 @@ export function PreviewCanvas({ className }: { className?: string }) {
     else                                    updateSticker  (dragRef.current.id, { x, y });
   }
 
+  const isTransparent = bgColor === "transparent";
+
   return (
     <div
       ref={containerRef}
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-black",
+        "relative overflow-hidden rounded-2xl",
         selectedClip && "ring-[3px] ring-white",
         className,
       )}
-      style={{ aspectRatio: "9/16" }}
+      style={{
+        aspectRatio: "9/16",
+        backgroundColor: isTransparent ? undefined : (bgColor || "#000000"),
+        backgroundImage: isTransparent
+          ? "repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0 0 / 20px 20px"
+          : undefined,
+      }}
       onPointerMove={moveDrag}
       onPointerUp={() => { dragRef.current = null; }}
     >
@@ -115,6 +124,17 @@ export function PreviewCanvas({ className }: { className?: string }) {
           onLoadedMetadata={(e) => {
             const v = e.currentTarget;
             console.log("[preview] loadedmetadata OK src:", v.src.slice(-60), "dur:", v.duration);
+            // If the probe returned a fallback duration (60 s placeholder), fix
+            // the clip with the real duration now that the browser can read it.
+            if (activeClip && Number.isFinite(v.duration) && v.duration > 0) {
+              const realDur = v.duration;
+              if (Math.abs(activeClip.nativeDuration - realDur) > 0.5) {
+                updateClip(activeClip.id, {
+                  nativeDuration: realDur,
+                  trimEnd: Math.min(activeClip.trimEnd, realDur),
+                });
+              }
+            }
             // Seek to playhead after metadata loads (currentTime=0 by default)
             const target = resolved?.clipTime ?? 0;
             if (target > 0.05) v.currentTime = target;
@@ -126,7 +146,7 @@ export function PreviewCanvas({ className }: { className?: string }) {
           }}
         />
       ) : (
-        <div className="grid size-full place-items-center bg-black">
+        <div className="grid size-full place-items-center">
           <p className="text-[11px] text-white/30">No clip</p>
         </div>
       )}

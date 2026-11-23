@@ -327,6 +327,8 @@ function PhotoPreview({
   error: string | null;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
+  // Reset error state when the photo URL is upgraded (preliminary → canvas JPEG).
+  useEffect(() => { setImgFailed(false); }, [photoUrl]);
   // Overlay drag state
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; ox: number; oy: number } | null>(null);
@@ -361,8 +363,11 @@ function PhotoPreview({
           style={{ filter: photoFilter, transform: photoTransform, display: imgFailed ? "none" : undefined }}
           className="size-full object-cover transition-transform"
           draggable={false}
+          onLoad={() => {
+            console.log("[photo-preview] img onLoad ✓ src:", photoUrl?.slice(-60));
+          }}
           onError={() => {
-            console.log("[photo-preview] img onError src:", photoUrl?.slice(-60));
+            console.log("[photo-preview] img onError ✗ src:", photoUrl?.slice(-60));
             setImgFailed(true);
           }}
         />
@@ -1874,16 +1879,30 @@ export function HubCard({
   return (
     <button
       onClick={onClick}
-      className="press flex flex-col items-center gap-2 rounded-2xl bg-secondary p-5 text-center"
+      className="press relative flex flex-col items-start gap-3 overflow-hidden rounded-3xl p-5 text-left"
+      style={{
+        background: `linear-gradient(145deg, ${accent}1a 0%, ${accent}08 100%)`,
+        border: `1.5px solid ${accent}30`,
+      }}
     >
+      {/* Soft glow blob */}
       <span
-        className="grid size-12 place-items-center rounded-full"
-        style={{ backgroundColor: `${accent}20` }}
+        className="pointer-events-none absolute -right-4 -top-4 size-20 rounded-full blur-2xl"
+        style={{ backgroundColor: `${accent}55` }}
+        aria-hidden
+      />
+      {/* Icon badge */}
+      <span
+        className="relative grid size-11 place-items-center rounded-2xl"
+        style={{ backgroundColor: `${accent}22` }}
       >
-        <Icon className="size-6" style={{ color: accent }} />
+        <Icon className="size-5" style={{ color: accent }} />
       </span>
-      <span className="block text-[15px] font-bold leading-tight">{label}</span>
-      <span className="block text-[11px] leading-tight text-muted-foreground">{hint}</span>
+      {/* Text */}
+      <span className="relative min-w-0">
+        <span className="block text-[15px] font-bold leading-tight">{label}</span>
+        <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{hint}</span>
+      </span>
     </button>
   );
 }

@@ -3,6 +3,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 import { supabase } from "@/integrations/supabase/client";
 import { useSharedRealtimeChannel } from "@/frontend/hooks/realtime";
 import { sendMessage as sendMessageFn } from "@/backend/api/sendMessage.functions";
+import { Capacitor } from "@capacitor/core";
 
 export interface Peer {
   id: string;
@@ -191,6 +192,17 @@ export function useMessages(conversationId: string | null, userId: string | null
       const text = body.trim().slice(0, 1000);
       if (!text) throw new Error("Empty message.");
       if (!conversationId || !userId) throw new Error("Sign in to chat.");
+      // On Android the JWT auto-refresh timer pauses in background, so the
+      // token can be expired by the time the user sends a message. The server
+      // middleware validates the JWT and returns Unauthorized if it's stale.
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && (session.expires_at ?? 0) - Math.floor(Date.now() / 1000) < 60) {
+            await supabase.auth.refreshSession();
+          }
+        } catch { /* non-fatal */ }
+      }
       await sendMessageFn({ data: { conversationId, body: text } });
     },
     onSuccess: () => {

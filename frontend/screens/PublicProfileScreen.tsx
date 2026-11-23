@@ -181,7 +181,11 @@ export function PublicProfileScreen({ username }: { username: string }) {
       <button
         onClick={() => toggle.mutate(!isFollowing)}
         disabled={!canFollow || toggle.isPending}
-        className="rounded-full bg-secondary px-5 py-2 text-sm font-bold text-foreground disabled:opacity-60"
+        className={
+          isFollowing
+            ? "rounded-full border border-brand/30 bg-brand/10 px-5 py-2 text-sm font-bold text-brand disabled:opacity-60"
+            : "rounded-full bg-foreground px-5 py-2 text-sm font-bold text-background disabled:opacity-60"
+        }
       >
         {isFollowing ? "Following" : "Follow"}
       </button>
@@ -190,19 +194,19 @@ export function PublicProfileScreen({ username }: { username: string }) {
 
   return (
     <AppShell title={`${profile.display_name} on WIZZ`}>
-      <div className="h-28 bg-gradient-to-b from-brand to-brand/70 sm:h-36" />
+      <div className="h-32 bg-gradient-to-b from-brand to-brand/70 sm:h-40" />
 
       <div className="px-4">
-        <div className="-mt-10 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
+        <div className="-mt-12 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
           {profile.avatar_url && !avatarFailed ? (
             <img
               src={profile.avatar_url}
               alt={profile.display_name}
               onError={() => setAvatarFailed(true)}
-              className="size-20 rounded-2xl border-4 border-background object-cover"
+              className="size-24 rounded-2xl border-4 border-background object-cover object-top"
             />
           ) : (
-            <span className="grid size-20 place-items-center rounded-2xl border-4 border-background bg-brand text-2xl font-bold text-brand-foreground">
+            <span className="grid size-24 place-items-center rounded-2xl border-4 border-background bg-brand text-3xl font-bold text-brand-foreground">
               {profile.display_name.slice(0, 1).toUpperCase()}
             </span>
           )}
@@ -327,7 +331,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
         </div>
 
         <div className="mt-3 flex items-center gap-1.5">
-          <h2 className="min-w-0 break-words text-xl font-bold tracking-tight text-foreground">
+          <h2 className="min-w-0 break-words text-2xl font-bold tracking-tight text-foreground">
             {profile.display_name}
           </h2>
           {(profile.verified || isPremiumActive(profile.premium_until)) && (
@@ -363,20 +367,20 @@ export function PublicProfileScreen({ username }: { username: string }) {
         ) : (
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-secondary py-3 text-center">
-              <p className="text-base font-bold text-foreground">
+              <p className="text-lg font-bold text-foreground">
                 {compact.format(stats?.posts ?? 0)}
               </p>
-              <p className="text-[10px] font-medium tracking-wider text-muted-foreground">POSTS</p>
+              <p className="text-xs font-medium tracking-wider text-muted-foreground">POSTS</p>
             </div>
             <Link
               to="/u/$username/followers"
               params={{ username: profile.username }}
               className="rounded-2xl bg-secondary py-3 text-center"
             >
-              <p className="text-base font-bold text-foreground">
+              <p className="text-lg font-bold text-foreground">
                 {compact.format(stats?.followers ?? 0)}
               </p>
-              <p className="text-[10px] font-medium tracking-wider text-muted-foreground">
+              <p className="text-xs font-medium tracking-wider text-muted-foreground">
                 FOLLOWERS
               </p>
             </Link>
@@ -385,10 +389,10 @@ export function PublicProfileScreen({ username }: { username: string }) {
               params={{ username: profile.username }}
               className="rounded-2xl bg-secondary py-3 text-center"
             >
-              <p className="text-base font-bold text-foreground">
+              <p className="text-lg font-bold text-foreground">
                 {compact.format(stats?.following ?? 0)}
               </p>
-              <p className="text-[10px] font-medium tracking-wider text-muted-foreground">
+              <p className="text-xs font-medium tracking-wider text-muted-foreground">
                 FOLLOWING
               </p>
             </Link>
@@ -398,14 +402,14 @@ export function PublicProfileScreen({ username }: { username: string }) {
 
       {!blockedByMe &&
         (locked ? (
-          <div className="mt-8 flex flex-col items-center px-6 text-center">
+          <div className="mb-24 mt-8 flex flex-col items-center px-6 text-center">
             <p className="text-sm font-bold text-foreground">This account is private</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Follow @{profile.username} to see their posts.
             </p>
           </div>
         ) : posts.length > 0 ? (
-          <div className="mt-4 grid grid-cols-3 gap-0.5 sm:grid-cols-4">
+          <div className="mb-24 mt-4 grid grid-cols-3 gap-0.5 sm:grid-cols-4">
             {posts
               .filter((p) => !hiddenPostIds().includes(p.id))
               .map((p) => (
@@ -456,7 +460,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
               ))}
           </div>
         ) : (
-          <div className="mt-8 flex flex-col items-center px-6 text-center">
+          <div className="mb-24 mt-8 flex flex-col items-center px-6 text-center">
             <span className="grid size-14 place-items-center rounded-2xl bg-secondary">
               <ImagePlus className="size-6 text-muted-foreground" />
             </span>

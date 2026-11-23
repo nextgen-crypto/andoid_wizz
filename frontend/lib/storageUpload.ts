@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveStoredMime } from "@/frontend/lib/mediaFormat";
 
@@ -12,6 +13,80 @@ export const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
 type UploadOptions = { contentType?: string; width?: number; upsert?: boolean };
 
+/**
+ * Native (Android) upload path. The WebView's fetch implementation cannot
+ * reliably stream binary blobs inside multipart/form-data bodies — the SDK's
+ * default approach. We read the file into an ArrayBuffer and POST it as the
+ * raw request body instead, which the native HTTP stack handles without issue.
+ * Supabase Storage v1 accepts raw binary when Content-Type is a real file MIME.
+ */
+async function nativeUpload(
+  bucket: string,
+  path: string,
+  file: File | Blob,
+  contentType: string | null | undefined,
+  opts?: UploadOptions,
+): Promise<void> {
+  const buffer = await file.arrayBuffer();
+
+  // On Android/Capacitor the JS auto-refresh timer pauses when the app is
+  // backgrounded, so the access token can silently expire while the app sits
+  // in the background. getSession() reads from localStorage and returns whatever
+  // is there — including stale tokens. When we detect an expired (or soon-to-
+  // expire) token we force a refresh before attempting the upload; otherwise
+  // Supabase falls back to the anon role, the authenticated-only INSERT policy
+  // does not apply, and the response is "permission denied for table objects".
+  let session = (await supabase.auth.getSession()).data.session;
+  if (session) {
+    const expiresAt = session.expires_at ?? 0;
+    if (expiresAt - Math.floor(Date.now() / 1000) < 30) {
+      const { data } = await supabase.auth.refreshSession().catch(() => ({ data: { session: null } }));
+      if (data.session) session = data.session;
+    }
+  }
+  const accessToken = session?.access_token;
+  const projectUrl = (
+    (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ?? ""
+  ).replace(/\/$/, "");
+  const publishableKey =
+    (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ?? "";
+
+  const uploadUrl = `${projectUrl}/storage/v1/object/${bucket}/${path}`;
+  const mimeType = contentType ?? "application/octet-stream";
+
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => window.setTimeout(r, 1000 * 2 ** (attempt - 1)));
+    }
+    try {
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          apikey: publishableKey,
+          "Content-Type": mimeType,
+          "x-upsert": opts?.upsert ? "true" : "false",
+          "cache-control": "3600",
+        },
+        body: buffer,
+      });
+      if (response.ok) return;
+      const msg = await response.text().catch(() => `HTTP ${response.status}`);
+      const statusCode = String(response.status);
+      const err = Object.assign(new Error(msg), { statusCode });
+      const isTransient = response.status >= 500;
+      lastError = err;
+      if (!isTransient) throw err;
+    } catch (err) {
+      if (err === lastError) throw err;
+      lastError = err instanceof Error ? err : new Error("Failed to fetch");
+    }
+  }
+  throw lastError;
+}
+
 async function uploadObject(
   bucket: string,
   path: string,
@@ -19,6 +94,13 @@ async function uploadObject(
   opts?: UploadOptions,
 ): Promise<void> {
   const contentType = resolveStoredMime(path, file, opts?.contentType);
+
+  // On Android WebView, sending binary data via FormData in fetch is unreliable
+  // (a known Capacitor/WebView limitation). Use a raw ArrayBuffer POST instead.
+  if (Capacitor.isNativePlatform()) {
+    return nativeUpload(bucket, path, file, contentType, opts);
+  }
+
   const uploadOptions =
     contentType || opts?.upsert !== undefined
       ? {

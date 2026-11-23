@@ -55,10 +55,33 @@ async function isCompatible(manifest: LiveUpdateManifest): Promise<boolean> {
   }
 }
 
-/** Must be called on every native start, before any bundle-changing method. */
+const NATIVE_VC_KEY = "wizz:native-version-code";
+
+/**
+ * Must be called on every native start, before any bundle-changing method.
+ *
+ * Also guards against a stale live-update bundle masking a freshly installed
+ * APK: when the native versionCode changes (new APK installed) we reset the
+ * plugin back to the built-in assets so the user immediately sees the latest
+ * code. The next checkForLiveUpdate() will re-download a matching bundle.
+ */
 export async function markLiveUpdateReady(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   try {
+    // Detect new APK install by comparing stored vs current versionCode.
+    const { versionCode } = await LiveUpdate.getVersionCode();
+    const storedVc = localStorage.getItem(NATIVE_VC_KEY);
+    if (storedVc !== String(versionCode)) {
+      // New APK installed — reset to built-in bundle.
+      await LiveUpdate.reset();
+      localStorage.setItem(NATIVE_VC_KEY, String(versionCode));
+      // reset() only marks the built-in bundle as "next"; it does NOT take
+      // effect until reload() is called. Without reload() the old OTA bundle
+      // stays active for the entire session and changes appear only on the
+      // next cold start (which users often don't do).
+      await LiveUpdate.reload();
+      return; // WebView is restarting — nothing further needed this session.
+    }
     await LiveUpdate.ready();
   } catch (error) {
     reportAppError(error, { boundary: "live_update_ready" });

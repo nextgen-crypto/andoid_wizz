@@ -63,7 +63,7 @@ export function WelcomeScreen() {
 
   return (
     <div
-      className="relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col overflow-hidden bg-background px-5 pb-8 pt-6 sm:px-8 sm:pt-8 md:border-x md:border-border"
+      className="relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col overflow-hidden bg-background px-5 pb-8 pt-safe sm:px-8 md:border-x md:border-border"
       onTouchStart={(e) => setTouchX(e.touches[0]?.clientX ?? null)}
       onTouchEnd={(e) => {
         if (touchX === null) return;

@@ -105,6 +105,7 @@ export function HomeScreen() {
   const autoPages = useRef(0);
 
   const mode: FeedMode = "all";
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -301,7 +302,7 @@ export function HomeScreen() {
   }, [online, feedMatchesTab, loading, feedError, hasMore, cursor, loadMore]);
 
   const paged = offlineSnapshot ? offlineSnapshot.items : feed !== null ? [...feed, ...extra] : [];
-  const items: FeedItem[] = feedMatchesTab ? paged : mode === "all" ? base.feed.items : [];
+  const items: FeedItem[] = feedMatchesTab ? paged : base.feed.items;
   const activeHasMore = offlineSnapshot ? offlineSnapshot.hasMore : hasMore;
   const showSkeleton = !feedMatchesTab && personalPending && items.length === 0;
 
@@ -312,8 +313,6 @@ export function HomeScreen() {
   const [hiddenPromos, setHiddenPromos] = useState<string[]>([]);
   const livePromos = promotions.filter((p) => !hiddenPromos.includes(p.campaignId));
 
-  const followingEmpty = false;
-  const followingError = false;
 
   return (
     <div
@@ -362,39 +361,7 @@ export function HomeScreen() {
 
         {showSkeleton && <FeedSkeleton />}
 
-        {followingError && (
-          <div className="px-6 py-12 text-center">
-            <p className="text-sm font-semibold text-foreground">Couldn&apos;t load this feed</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Check your connection and try again.
-            </p>
-            <button
-              onClick={() => void refetchPersonal()}
-              className="mt-4 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {followingEmpty && (
-          <div className="px-6 py-12 text-center">
-            <p className="text-sm font-semibold text-foreground">
-              No posts from people you follow yet
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              When you follow creators, their posts show up here.
-            </p>
-            <button
-              onClick={() => void refreshFeed()}
-              className="mt-4 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
-            >
-              Refresh
-            </button>
-          </div>
-        )}
-
-        {!showSkeleton && items.length === 0 && mode === "all" && (
+        {!showSkeleton && items.length === 0 && !personalPending && (
           <div className="px-6 py-12 text-center">
             <p className="text-sm font-semibold text-foreground">No posts yet</p>
             <p className="mt-1 text-xs text-muted-foreground">

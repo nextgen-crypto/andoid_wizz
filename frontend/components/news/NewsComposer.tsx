@@ -7,7 +7,8 @@ import { useAuthGate } from "@/frontend/hooks/useAuthGate";
 import { useServerFn } from "@tanstack/react-start";
 import { fetchPostingCapabilities } from "@/backend/api/posts.functions";
 import { uploadStoredObject, uploadAndSign } from "@/frontend/lib/storageUpload";
-import { extOf, friendlyPublishError, MEDIA_EXTS, mimeMismatch } from "@/frontend/lib/mediaFormat";
+import { extOf, friendlyPublishError, MEDIA_EXTS, mimeMismatch, typedBlobUrl } from "@/frontend/lib/mediaFormat";
+import { Capacitor } from "@capacitor/core";
 import { cn } from "@/lib/utils";
 
 /** Extract #hashtags from the draft, lowercased and de-duplicated. */
@@ -52,6 +53,14 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
     if (!requireAuth()) return;
     setPosting(true);
     try {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && (session.expires_at ?? 0) - Math.floor(Date.now() / 1000) < 60) {
+            await supabase.auth.refreshSession();
+          }
+        } catch { /* non-fatal */ }
+      }
       const uploaded = await uploadPhoto();
       const hashtags = extractHashtags(text);
       const { error } = await supabase.from("posts").insert({
@@ -93,7 +102,32 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
       return;
     }
     setPhoto(file);
-    setImagePreview(URL.createObjectURL(file));
+    const prelimUrl = typedBlobUrl(file);
+    setImagePreview(prelimUrl);
+    void (async () => {
+      try {
+        const bitmap = await Promise.race<ImageBitmap>([
+          createImageBitmap(file),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 3000)),
+        ]);
+        const scale = Math.min(1, 2048 / Math.max(bitmap.width || 1, bitmap.height || 1));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round((bitmap.width || 800) * scale);
+        canvas.height = Math.round((bitmap.height || 800) * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { bitmap.close(); return; }
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.92));
+        if (!blob) return;
+        const upgradedUrl = URL.createObjectURL(blob);
+        setImagePreview((cur) => {
+          if (cur !== prelimUrl) { URL.revokeObjectURL(upgradedUrl); return cur; }
+          URL.revokeObjectURL(prelimUrl);
+          return upgradedUrl;
+        });
+      } catch { /* keep prelimUrl */ }
+    })();
   }
 
   return (
@@ -121,7 +155,9 @@ export function NewsComposer({ onPosted }: { onPosted?: () => void }) {
               <button
                 onClick={() => {
                   setPhoto(null);
-                  setImagePreview(null);
+                  // Revoke via functional setter so we always get the current
+                  // URL even if the background canvas upgrade already swapped it.
+                  setImagePreview((cur) => { if (cur) URL.revokeObjectURL(cur); return null; });
                   if (fileRef.current) fileRef.current.value = "";
                 }}
                 aria-label="Remove image"

@@ -43,9 +43,11 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      // Light icons, because the app background is dark.
+      // Overlay the WebView so content extends edge-to-edge behind the
+      // transparent status bar. CSS env(safe-area-inset-top) then gives
+      // every screen header its correct offset. Light icons on dark bg.
       style: "LIGHT",
-      backgroundColor: "#0a0a0d",
+      overlaysWebView: true,
     },
   },
 };

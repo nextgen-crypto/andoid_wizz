@@ -10,6 +10,8 @@
  * than the speakers.
  */
 
+import { typedBlobUrl } from "@/frontend/lib/mediaFormat";
+
 /** Cheap support probe for the whole re-encode path. */
 export function canReencodeVideo(): boolean {
   if (typeof window === "undefined") return false;
@@ -75,7 +77,7 @@ export async function reencodeVideoClip(
   { startFrac, endFrac, speed, muted, onProgress }: ReencodeOptions,
 ): Promise<File | null> {
   if (!canReencodeVideo()) return null;
-  const url = URL.createObjectURL(file);
+  const url = typedBlobUrl(file);
   const video = document.createElement("video");
   video.src = url;
   video.playsInline = true;
@@ -84,6 +86,9 @@ export async function reencodeVideoClip(
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
       video.onerror = () => reject(new Error("metadata"));
+      // Android WebView can silently drop both events; cap the wait so the
+      // publish flow never hangs waiting for a video that will never load.
+      window.setTimeout(() => reject(new Error("metadata timeout")), 10_000);
     });
     const duration = video.duration;
     if (!Number.isFinite(duration) || duration <= 0) return null;
@@ -145,9 +150,19 @@ export async function reencodeVideoClip(
     recorder.start(250);
     await video.play();
 
+    // Wall-clock guard: 2× real playback time + 15 s buffer.
+    // If the video stalls on Android and currentTime stops advancing, the
+    // rAF loop would spin forever without this.
+    const encodeMs = Math.round((keep / rate) * 1000 * 2 + 15_000);
+    let encodeTimedOut = false;
+    const encodeGuard = window.setTimeout(() => {
+      encodeTimedOut = true;
+      video.pause();
+    }, encodeMs);
+
     await new Promise<void>((resolve) => {
       const tick = () => {
-        if (video.currentTime >= end || video.ended) {
+        if (encodeTimedOut || video.currentTime >= end || video.ended) {
           resolve();
           return;
         }
@@ -158,6 +173,7 @@ export async function reencodeVideoClip(
       requestAnimationFrame(tick);
     });
 
+    window.clearTimeout(encodeGuard);
     video.pause();
     recorder.stop();
     await stopped;
@@ -186,7 +202,7 @@ export async function reencodeVideoClip(
 export function tryExtractPreviewFrame(file: File): Promise<string | null> {
   return new Promise((resolve) => {
     if (typeof document === "undefined") return resolve(null);
-    const url = URL.createObjectURL(file);
+    const url = typedBlobUrl(file);
     const video = document.createElement("video");
     video.preload = "metadata";
     video.muted = true;
@@ -200,7 +216,7 @@ export function tryExtractPreviewFrame(file: File): Promise<string | null> {
       URL.revokeObjectURL(url);
       resolve(result);
     };
-    const timer = window.setTimeout(() => done(null), 10_000);
+    const timer = window.setTimeout(() => done(null), 4_000);
 
     const tryDraw = () => {
       const w = video.videoWidth || 0;
@@ -247,7 +263,7 @@ export function tryExtractPreviewFrame(file: File): Promise<string | null> {
 export function generateVideoThumbnails(file: File, count: number): Promise<string[]> {
   return new Promise((resolve) => {
     if (typeof document === "undefined") return resolve([]);
-    const url = URL.createObjectURL(file);
+    const url = typedBlobUrl(file);
     const video = document.createElement("video");
     video.preload = "metadata";
     video.muted = true;
@@ -283,15 +299,13 @@ export function generateVideoThumbnails(file: File, count: number): Promise<stri
         if (settled) break;
         const target = step * i;
         await new Promise<void>((res) => {
-          const onSeeked = async () => {
-            video.removeEventListener("seeked", onSeeked);
+          const guard = window.setTimeout(() => res(), 3000);
+          video.onseeked = async () => {
+            window.clearTimeout(guard);
             const thumb = await drawFrame();
             if (thumb) results.push(thumb);
             res();
           };
-          video.addEventListener("seeked", onSeeked);
-          const guard = window.setTimeout(() => { video.removeEventListener("seeked", onSeeked); res(); }, 3000);
-          video.onseeked = () => { window.clearTimeout(guard); onSeeked(); };
           video.currentTime = target;
         });
       }

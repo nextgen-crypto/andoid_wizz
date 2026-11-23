@@ -13,10 +13,12 @@ import { FiltersSheet } from "@/frontend/components/editor/FiltersSheet";
 import { SpeedSheet } from "@/frontend/components/editor/SpeedSheet";
 import { TextSheet } from "@/frontend/components/editor/TextSheet";
 import { ExportSheet } from "@/frontend/components/editor/ExportSheet";
+import { BackgroundSheet } from "@/frontend/components/editor/BackgroundSheet";
 import {
   type EditorClip,
 } from "@/frontend/lib/editorTypes";
 import { generateVideoThumbnails } from "@/frontend/lib/videoEdit";
+import { typedBlobUrl } from "@/frontend/lib/mediaFormat";
 import { cn } from "@/lib/utils";
 
 /* ─── Sheet overlay wrapper ─────────────────────────────────────────────── */
@@ -155,7 +157,7 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
       for (const clip of useEditorStore.getState().project.clips) {
         if (clip.src.startsWith("blob:")) URL.revokeObjectURL(clip.src);
         for (const thumb of clip.thumbnails) {
-          if (thumb.startsWith("blob:")) URL.revokeObjectURL(thumb);
+          if (thumb !== clip.src && thumb.startsWith("blob:")) URL.revokeObjectURL(thumb);
         }
       }
     };
@@ -252,9 +254,6 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
       <SheetOverlay open={activeSheet === "text"} onDismiss={closeSheet}>
         <TextSheet onClose={closeSheet} />
       </SheetOverlay>
-      <SheetOverlay open={activeSheet === "stickers"} onDismiss={closeSheet}>
-        <StickerSheet onClose={closeSheet} />
-      </SheetOverlay>
       <SheetOverlay open={activeSheet === "export"} onDismiss={closeSheet}>
         <ExportSheet
           onClose={closeSheet}
@@ -264,6 +263,9 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
             void router.navigate({ to: "/" });
           }}
         />
+      </SheetOverlay>
+      <SheetOverlay open={activeSheet === "background"} onDismiss={closeSheet}>
+        <BackgroundSheet onClose={closeSheet} />
       </SheetOverlay>
       {/* Stub sheets for AI tools */}
       {(["magic","captions","overlay","effects","crop","volume","mask","opacity","voiceEffect","retouch"] as const).map(
@@ -280,47 +282,6 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
         onKeep={() => setShowDiscard(false)}
         onDiscard={() => { resetProject(); router.history.back(); }}
       />
-    </div>
-  );
-}
-
-/* ─── Sticker picker sheet ───────────────────────────────────────────────── */
-const EMOJI_GRID = [
-  "😍","🥰","😂","🤩","😎","🥳","😅","💀","🤣","😜",
-  "❤️","💕","💯","🔥","✨","🌟","💫","⭐","💥","🎯",
-  "🎉","🎵","🎶","💃","🕺","👑","🌈","🦋","🎊","🏆",
-  "💪","👏","🙌","🫶","💬","📸","🌊","🏄","🚀","💎",
-];
-
-function StickerSheet({ onClose }: { onClose: () => void }) {
-  const { playhead, project, addSticker } = useEditorStore();
-  const dur = project.clips.reduce((s, c) => s + (c.trimEnd - c.trimStart) / c.speed, 0);
-  return (
-    <div className="rounded-t-[28px] bg-[#1C1C1E] px-4 pb-safe pt-4">
-      <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-      <p className="mb-3 font-bold text-white">Stickers</p>
-      <div className="grid grid-cols-10 gap-1.5 pb-4">
-        {EMOJI_GRID.map((emoji) => (
-          <button
-            key={emoji}
-            onClick={() => {
-              addSticker({
-                id: `sk-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-                emoji,
-                x: 0.5, y: 0.5,
-                scale: 1,
-                rotation: 0,
-                startTime: playhead,
-                endTime: Math.min(playhead + 5, dur || 10),
-              });
-              onClose();
-            }}
-            className="flex aspect-square items-center justify-center text-2xl"
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -424,15 +385,16 @@ function StubSheet({ name, onClose }: { name: string; onClose: () => void }) {
 async function loadFileAsClip(file: File): Promise<EditorClip | null> {
   // The main src blob URL — kept alive for the entire editor session.
   // NEVER revoke this until the editor unmounts.
-  const src = URL.createObjectURL(file);
+  const src = typedBlobUrl(file);
   console.log("[editor] loadFileAsClip", file.name, file.type, `${(file.size / 1024).toFixed(0)} KB`, src.slice(-30));
 
   let duration = 0;
 
-  if (file.type.startsWith("video/")) {
+  const isVideo = file.type.startsWith("video/") || /\.(mp4|m4v|mov|webm|ogv|3gp|mkv|avi|ts)$/i.test(file.name);
+  if (isVideo) {
     // Use a SEPARATE URL for the metadata probe so revoking the probe URL
     // never kills the main src that the <video> player will use.
-    const probeUrl = URL.createObjectURL(file);
+    const probeUrl = typedBlobUrl(file);
     duration = await new Promise<number>((resolve) => {
       const v = document.createElement("video");
       v.preload = "metadata";
@@ -457,6 +419,10 @@ async function loadFileAsClip(file: File): Promise<EditorClip | null> {
       v.src = probeUrl;
     });
     URL.revokeObjectURL(probeUrl);  // Safe: only revokes the probe copy
+    // If probe returned 0 (codec can't be detected), use a large fallback so
+    // the clip is still editable; PreviewCanvas will fix the real duration
+    // once loadedmetadata fires on the display video element.
+    if (duration === 0) duration = 60;
   } else {
     duration = 5; // still images shown for 5 s
   }

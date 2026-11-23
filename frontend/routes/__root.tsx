@@ -16,6 +16,7 @@ import { NativeStartup } from "@/frontend/components/NativeStartup";
 import { LiveUpdateManager } from "@/frontend/components/LiveUpdateManager";
 import { OfflineCacheManager } from "@/frontend/components/OfflineCacheManager";
 import { CommentsProvider } from "@/frontend/components/comments/CommentsContext";
+import { AppBootSkeleton } from "@/frontend/components/AppBootSkeleton";
 import { useSession } from "@/frontend/hooks/useSession";
 import { usePushNotifications } from "@/frontend/hooks/usePushNotifications";
 import { useMessageNotifications } from "@/frontend/hooks/useMessageNotifications";
@@ -138,6 +139,7 @@ function GlobalNotifications() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const { loading: sessionLoading } = useSession();
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={queryPersistenceOptions}>
@@ -152,8 +154,8 @@ function RootComponent() {
       <OfflineCacheManager />
       {/* Global single comments sheet + its open-state context (see CommentsContext). */}
       <CommentsProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
+        {/* Show skeleton while auth session is resolving to avoid white flash. */}
+        {sessionLoading ? <AppBootSkeleton /> : <Outlet />}
       </CommentsProvider>
       <Toaster position="top-center" />
     </PersistQueryClientProvider>

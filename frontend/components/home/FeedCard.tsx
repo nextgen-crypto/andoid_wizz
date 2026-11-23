@@ -131,6 +131,7 @@ export function FeedCard({
   const [burst, setBurst] = useState(0);
   const mediaRef = useRef<HTMLVideoElement | null>(null);
   const tapTimer = useRef<number | null>(null);
+  const carouselSwiped = useRef(false);
   const completedRef = useRef(false);
   const playCountRef = useRef(0);
   const progressRef = useRef<Set<number>>(new Set());
@@ -467,13 +468,6 @@ export function FeedCard({
         </span>
       </header>
 
-      <p className="break-words px-3 py-3 text-[15px] leading-snug text-foreground sm:px-5">
-        {post.caption}
-        {appendedHashtags.length > 0 && (
-          <span className="text-brand"> {appendedHashtags.map((h) => `#${h}`).join(" ")}</span>
-        )}
-      </p>
-
       {clipSrc ? (
         <div
           className="relative bg-surface-strong"
@@ -594,17 +588,111 @@ export function FeedCard({
               style={{ width: `${Math.min(100, progressPct)}%` }}
             />
           </div>
+          {/* TikTok-style right-side action column */}
+          <div
+            className="absolute bottom-10 right-2 z-10 flex flex-col items-center gap-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              key={liked ? "liked" : "unliked"}
+              aria-label="Like"
+              aria-pressed={liked}
+              onClick={likeWithBurst}
+              className="press flex flex-col items-center gap-1"
+            >
+              <Heart
+                className={cn(
+                  "size-6 drop-shadow",
+                  liked ? "animate-pop fill-live text-live" : "text-white",
+                )}
+              />
+              <span className="text-[11px] font-semibold text-white drop-shadow">
+                {compact.format(likeCount)}
+              </span>
+            </button>
+            {commentsEnabled && (
+              <button
+                aria-label="Comment"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openCardComments();
+                }}
+                className="press flex flex-col items-center gap-1"
+              >
+                <MessageCircle className="size-6 text-white drop-shadow" />
+                <span className="text-[11px] font-semibold text-white drop-shadow">
+                  {compact.format(totalComments)}
+                </span>
+              </button>
+            )}
+            <button
+              key={saved ? "saved-v" : "unsaved-v"}
+              aria-label="Save"
+              aria-pressed={saved}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSavePost();
+              }}
+              className="press flex flex-col items-center gap-1"
+            >
+              <Bookmark
+                className={cn(
+                  "size-6 drop-shadow",
+                  saved ? "animate-pop fill-brand text-brand" : "text-white",
+                )}
+              />
+            </button>
+            {sharingEnabled && (
+              <button
+                aria-label="Share"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSharing(true);
+                  track?.("video_share", post.id, { authorId: author.id });
+                }}
+                className="press flex flex-col items-center gap-1"
+              >
+                <Share2 className="size-6 text-white drop-shadow" />
+              </button>
+            )}
+          </div>
+          {/* Bottom scrim + author info overlay */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="pointer-events-none absolute bottom-2 left-0 right-14 z-10 px-3 pb-1">
+            <p className="truncate text-sm font-bold text-white drop-shadow">
+              @{author.username}
+            </p>
+            {post.caption ? (
+              <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-white/90 drop-shadow">
+                {post.caption}
+              </p>
+            ) : null}
+          </div>
+          {/* Double-tap burst */}
+          {burst > 0 && (
+            <span
+              key={`v-${burst}`}
+              className="pointer-events-none absolute inset-0 z-20 grid place-items-center"
+            >
+              <Heart className="animate-heart-burst size-20 fill-white text-white drop-shadow-lg" />
+            </span>
+          )}
         </div>
       ) : images.length > 1 ? (
         <div
           className="relative select-none"
           style={{ touchAction: "manipulation" }}
-          onClick={handleMediaTap}
+          onClick={() => {
+            if (carouselSwiped.current) { carouselSwiped.current = false; return; }
+            handleMediaTap();
+          }}
         >
           {/* Multi-photo carousel: horizontal snap paging + page dots. */}
           <div
             className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain no-scrollbar"
+            onTouchStart={() => { carouselSwiped.current = false; }}
             onScroll={(e) => {
+              carouselSwiped.current = true;
               const el = e.currentTarget;
               const page = Math.round(el.scrollLeft / Math.max(el.clientWidth, 1));
               setCarouselPage(Math.min(page, images.length - 1));
@@ -706,69 +794,110 @@ export function FeedCard({
         </div>
       )}
 
-      {clipSrc && burst > 0 && (
-        <span
-          key={`v-${burst}`}
-          className="pointer-events-none relative -mt-24 grid place-items-center"
-        >
-          <Heart className="animate-heart-burst size-20 fill-white text-white drop-shadow-lg" />
-        </span>
-      )}
-
-      <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-5">
-        <button
-          key={liked ? "liked" : "unliked"}
-          onClick={likeWithBurst}
-          aria-pressed={liked}
-          aria-label="Like"
-          className="press flex items-center gap-2"
-        >
-          <Heart
-            className={cn("size-5", liked ? "animate-pop fill-live text-live" : "text-foreground")}
-          />
-          <span className="text-sm text-foreground">{compact.format(likeCount)}</span>
-        </button>
-        {commentsEnabled && (
+      {/* Photo action bar — not shown for video (actions overlaid on video) */}
+      {!clipSrc && (
+      <div className="flex items-center px-3 py-2 sm:px-4">
+        <div className="flex items-center gap-4">
           <button
-            aria-label="Comment"
-            onClick={openCardComments}
-            className="press flex items-center gap-2"
+            key={liked ? "liked" : "unliked"}
+            onClick={likeWithBurst}
+            aria-pressed={liked}
+            aria-label="Like"
+            className="press flex items-center gap-1.5"
           >
-            <MessageCircle className="size-5 text-foreground" />
-            <span className="text-sm text-foreground">{compact.format(totalComments)}</span>
+            <Heart
+              className={cn(
+                "size-[22px]",
+                liked ? "animate-pop fill-live text-live" : "text-foreground",
+              )}
+            />
+            <span className="text-sm text-foreground">{compact.format(likeCount)}</span>
           </button>
-        )}
-        {sharingEnabled && (
-          <button
-            aria-label="Share"
-            onClick={() => {
-              setSharing(true);
-              track?.("video_share", post.id, { authorId: author.id });
-            }}
-            className="flex items-center gap-2"
-          >
-            <Share2 className="size-5 text-foreground" />
-            <span className="text-sm text-foreground">{compact.format(post.metrics.shares)}</span>
-          </button>
-        )}
+          {commentsEnabled && (
+            <button
+              aria-label="Comment"
+              onClick={openCardComments}
+              className="press flex items-center gap-1.5"
+            >
+              <MessageCircle className="size-[22px] text-foreground" />
+              <span className="text-sm text-foreground">{compact.format(totalComments)}</span>
+            </button>
+          )}
+          {sharingEnabled && (
+            <button
+              aria-label="Share"
+              onClick={() => {
+                setSharing(true);
+                track?.("video_share", post.id, { authorId: author.id });
+              }}
+              className="flex items-center gap-1.5"
+            >
+              <Share2 className="size-[22px] text-foreground" />
+              <span className="text-sm text-foreground">{compact.format(post.metrics.shares)}</span>
+            </button>
+          )}
+        </div>
         <button
           key={saved ? "saved" : "unsaved"}
           onClick={toggleSavePost}
           aria-pressed={saved}
           aria-label="Save"
-          className="press"
+          className="press ml-auto"
         >
           <Bookmark
             className={cn(
-              "size-5",
+              "size-[22px]",
               saved ? "animate-pop fill-brand text-brand" : "text-foreground",
             )}
           />
         </button>
       </div>
+      )}
+
+      {/* Like count (Instagram-style bold text, photo posts only) */}
+      {!clipSrc && likeCount > 0 && (
+        <p className="px-3 pb-0.5 text-sm font-bold text-foreground sm:px-4">
+          {compact.format(likeCount)} {likeCount === 1 ? "like" : "likes"}
+        </p>
+      )}
+
+      {/* Caption — Instagram style: bold @username prefix + caption text */}
+      {(post.caption || appendedHashtags.length > 0) && (
+        <p className="break-words px-3 pb-1 text-[14px] leading-snug text-foreground sm:px-4">
+          <Link
+            to="/u/$username"
+            params={{ username: author.username }}
+            className="mr-1 font-bold"
+          >
+            {author.username}
+          </Link>
+          {post.caption}
+          {appendedHashtags.length > 0 && (
+            <span className="text-brand">
+              {" "}
+              {appendedHashtags.map((h) => `#${h}`).join(" ")}
+            </span>
+          )}
+        </p>
+      )}
+
+      {/* Timestamp */}
+      {isUuid(post.id) ? (
+        <Link
+          to="/post/$postId"
+          params={{ postId: post.id }}
+          className="block px-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground hover:underline sm:px-4"
+        >
+          {timeAgoCompact(post.createdAt)}
+        </Link>
+      ) : (
+        <p className="px-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground sm:px-4">
+          {timeAgoCompact(post.createdAt)}
+        </p>
+      )}
 
       {commentsEnabled && preview && (
-        <div className="px-3 pb-3 sm:px-5">
+        <div className="px-3 pb-3 sm:px-4">
           <button
             onClick={openCardComments}
             aria-label="Open comments"

@@ -14,37 +14,49 @@ const ASPECTS: { id: AspectId; label: string; ratio: number | null }[] = [
 ];
 
 /**
- * Crop any post image before publishing: drag to position, slider to zoom,
- * aspect presets (or free). Outputs a fresh JPEG File — the original picked
- * file is replaced, never modified in place.
+ * Crop any image before uploading: drag to position, slider to zoom,
+ * aspect presets (or free). Outputs a fresh JPEG File.
+ *
+ * Extra props for profile-photo use:
+ *   forcedAspect     — locks the aspect ratio and hides the preset buttons
+ *   circularPreview  — shows a circular mask so the user sees the final avatar shape
+ *   initialTargetNorm — normalized (0–1) image point to auto-center the crop on (face, etc.)
  */
 export function CropSheet({
   open,
   onClose,
   imageSrc,
   onDone,
+  forcedAspect,
+  circularPreview = false,
+  initialTargetNorm,
 }: {
   open: boolean;
   onClose: () => void;
   imageSrc: string;
   onDone: (file: File) => void;
+  forcedAspect?: AspectId;
+  circularPreview?: boolean;
+  initialTargetNorm?: { x: number; y: number };
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
-  const [aspect, setAspect] = useState<AspectId>("free");
+  const [aspect, setAspect] = useState<AspectId>(forcedAspect ?? "free");
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [autoApplied, setAutoApplied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setAspect("free");
+    setAspect(forcedAspect ?? "free");
     setZoom(1);
     setOffset({ x: 0, y: 0 });
+    setAutoApplied(false);
     setNatural(null);
     setError(null);
     const img = new Image();
@@ -56,9 +68,6 @@ export function CropSheet({
       if (naturalSize) setNatural(naturalSize);
       else setError(message ?? "Could not load that image.");
     };
-    // Same Android quirk as the pickers: some builds fire neither onload nor
-    // onerror. Fail with a visible message instead of an eternal "Loading…",
-    // but first give a silently-decoded image the benefit of the doubt.
     const timer = window.setTimeout(() => {
       finish(
         img.naturalWidth > 0 && img.naturalHeight > 0
@@ -70,13 +79,12 @@ export function CropSheet({
     img.onerror = () => finish(null);
     img.src = imageSrc;
     return () => {
-      // Deps changed or closed: the orphaned load must not touch the new one.
       settled = true;
       window.clearTimeout(timer);
       img.onload = null;
       img.onerror = null;
     };
-  }, [open, imageSrc]);
+  }, [open, imageSrc, forcedAspect]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -88,12 +96,34 @@ export function CropSheet({
     return () => ro.disconnect();
   }, [open]);
 
+  // Once we have natural dimensions + stage size + a target point, auto-position.
+  useEffect(() => {
+    if (!natural || !stage.w || !initialTargetNorm || autoApplied) return;
+    setAutoApplied(true);
+    const activeAspect = forcedAspect ?? aspect;
+    const r = ASPECTS.find((a) => a.id === activeAspect)?.ratio ?? (natural.w / natural.h);
+    let boxW = stage.w;
+    let boxH = stage.w / r;
+    if (boxH > stage.h) { boxH = stage.h; boxW = stage.h * r; }
+    const base = Math.max(boxW / natural.w, boxH / natural.h);
+    const dw = natural.w * base;
+    const dh = natural.h * base;
+    const maxX = Math.max(0, (dw - boxW) / 2);
+    const maxY = Math.max(0, (dh - boxH) / 2);
+    // Shift to center the target point inside the crop box
+    const ox = dw * (0.5 - initialTargetNorm.x);
+    const oy = dh * (0.5 - initialTargetNorm.y);
+    setOffset({
+      x: Math.min(maxX, Math.max(-maxX, ox)),
+      y: Math.min(maxY, Math.max(-maxY, oy)),
+    });
+  }, [natural, stage.w, stage.h, initialTargetNorm, autoApplied, forcedAspect, aspect]);
+
   if (!open) return null;
 
   const ratio =
     ASPECTS.find((a) => a.id === aspect)?.ratio ?? (natural ? natural.w / natural.h : 4 / 5);
 
-  // Largest centered box of `ratio` that fits the stage.
   let boxW = stage.w;
   let boxH = stage.w / ratio;
   if (boxH > stage.h) {
@@ -158,8 +188,6 @@ export function CropSheet({
           window.clearTimeout(timer);
           reject(new Error("Could not load that image."));
         };
-        // Deadline: a WebView that fires neither event used to hang "Cropping…"
-        // forever with no error.
         const timer = window.setTimeout(() => {
           if (el.naturalWidth > 0) finishOk();
           else finishErr();
@@ -186,8 +214,17 @@ export function CropSheet({
     }
   }
 
+  // For circular preview the crop overlay is a circle, not a rectangle
+  const cropBoxStyle: React.CSSProperties = {
+    width: boxW,
+    height: boxH,
+    left: (stage.w - boxW) / 2,
+    top: (stage.h - boxH) / 2,
+    boxShadow: "0 0 0 999px rgba(0,0,0,0.55)",
+  };
+
   return (
-    <Sheet open={open} onClose={onClose} title="Crop photo">
+    <Sheet open={open} onClose={onClose} title={circularPreview ? "Crop profile photo" : "Crop photo"}>
       <div className="space-y-3 pb-2">
         <div
           ref={stageRef}
@@ -212,20 +249,19 @@ export function CropSheet({
                   top: stage.h / 2 + oy - dh / 2,
                 }}
               />
+              {/* Crop overlay: circular for profile photos, rectangular for posts */}
               <div
-                className="absolute border-2 border-white"
-                style={{
-                  width: boxW,
-                  height: boxH,
-                  left: (stage.w - boxW) / 2,
-                  top: (stage.h - boxH) / 2,
-                  boxShadow: "0 0 0 999px rgba(0,0,0,0.55)",
-                }}
+                className={cn("absolute border-2 border-white", circularPreview && "rounded-full")}
+                style={cropBoxStyle}
               >
-                <span className="absolute inset-y-0 left-1/3 w-px bg-white/60" />
-                <span className="absolute inset-y-0 left-2/3 w-px bg-white/60" />
-                <span className="absolute inset-x-0 top-1/3 h-px bg-white/60" />
-                <span className="absolute inset-x-0 top-2/3 h-px bg-white/60" />
+                {!circularPreview && (
+                  <>
+                    <span className="absolute inset-y-0 left-1/3 w-px bg-white/60" />
+                    <span className="absolute inset-y-0 left-2/3 w-px bg-white/60" />
+                    <span className="absolute inset-x-0 top-1/3 h-px bg-white/60" />
+                    <span className="absolute inset-x-0 top-2/3 h-px bg-white/60" />
+                  </>
+                )}
               </div>
             </>
           )}
@@ -234,26 +270,36 @@ export function CropSheet({
               Loading…
             </p>
           )}
+          {error && (
+            <p className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-live">
+              {error}
+            </p>
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          {ASPECTS.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => {
-                setAspect(a.id);
-                setZoom(1);
-                setOffset({ x: 0, y: 0 });
-              }}
-              className={cn(
-                "rounded-full px-4 py-1.5 text-xs font-bold",
-                aspect === a.id ? "bg-foreground text-background" : "bg-secondary text-foreground",
-              )}
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
+        {/* Only show aspect buttons when no forced aspect */}
+        {!forcedAspect && (
+          <div className="flex flex-wrap gap-1.5">
+            {ASPECTS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  setAspect(a.id);
+                  setZoom(1);
+                  setOffset({ x: 0, y: 0 });
+                }}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-xs font-bold",
+                  aspect === a.id
+                    ? "bg-foreground text-background"
+                    : "bg-secondary text-foreground",
+                )}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <label className="flex items-center gap-3 px-1">
           <CropIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -269,7 +315,7 @@ export function CropSheet({
           <button
             onClick={() => {
               setZoom(1);
-              setOffset({ x: 0, y: 0 });
+              setAutoApplied(false);
             }}
             aria-label="Reset crop"
             className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary"
@@ -284,10 +330,12 @@ export function CropSheet({
           disabled={saving || !natural}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-foreground py-2.5 text-sm font-bold text-background disabled:opacity-60"
         >
-          <Check className="size-4" /> {saving ? "Cropping…" : "Apply crop"}
+          <Check className="size-4" /> {saving ? "Cropping…" : "Apply"}
         </button>
         <p className="text-center text-[11px] text-muted-foreground">
-          Drag to position · cropping saves a still JPEG (GIFs become stills).
+          {circularPreview
+            ? "Drag to reposition · scroll or slide to zoom"
+            : "Drag to position · cropping saves a still JPEG (GIFs become stills)."}
         </p>
       </div>
     </Sheet>

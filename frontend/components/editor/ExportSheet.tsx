@@ -88,7 +88,7 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
       if (!outputUrl) {
         // Offline fallback stub (real ffmpeg.wasm would go here)
         await new Promise((r) => setTimeout(r, 800));
-        outputUrl = project.clips[0]?.src ?? "";
+        outputUrl = project.clips[0]?.src ?? null;
       }
 
       setProgress(100);
@@ -158,7 +158,7 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
         </div>
       )}
 
-      {state === "done" && resultUrl && (
+      {state === "done" && resultUrl !== null && (
         <div className="w-full space-y-3 text-center">
           <CheckCircle className="mx-auto size-12 text-emerald-400" />
           <p className="font-semibold text-white">Export complete!</p>

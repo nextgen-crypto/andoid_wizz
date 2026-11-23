@@ -1033,7 +1033,7 @@ async function fetchRealStories(
         mediaType: videoUrl ? "video" : imageUrl ? "image" : "text",
         caption: row.caption,
         background: row.story_background ?? "#111827",
-        overlays: row.story_overlays ?? [],
+        overlays: (row.story_overlays ?? []).filter((o) => !o.startsWith("__meta__:")),
         createdAt: row.created_at,
         expiresAt: row.story_expires_at,
         viewed: viewedIds.has(row.id),

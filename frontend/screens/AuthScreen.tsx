@@ -197,7 +197,7 @@ export function AuthScreen() {
   // Recovery is its own screen so the sign-in form's hooks stay untouched.
   if (resetting) {
     return (
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col bg-background px-5 pb-10 pt-6 sm:px-8 sm:pt-8 md:justify-center md:border-x md:border-border">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col bg-background px-5 pb-10 pt-safe sm:px-8 md:justify-center md:border-x md:border-border">
         <Link
           to="/welcome"
           className="mb-6 inline-flex size-9 items-center justify-center rounded-full bg-secondary"
@@ -226,7 +226,7 @@ export function AuthScreen() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col bg-background px-5 pb-10 pt-6 sm:px-8 sm:pt-8 md:justify-center md:border-x md:border-border">
+    <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col bg-background px-5 pb-10 pt-safe sm:px-8 md:justify-center md:border-x md:border-border">
       <Link
         to="/welcome"
         className="mb-6 inline-flex size-9 items-center justify-center rounded-full bg-secondary"

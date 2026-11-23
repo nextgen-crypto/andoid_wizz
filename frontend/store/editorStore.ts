@@ -36,7 +36,6 @@ export type ActiveSheet =
   | "sound"
   | "speed"
   | "text"
-  | "stickers"
   | "overlay"
   | "effects"
   | "captions"
@@ -47,7 +46,8 @@ export type ActiveSheet =
   | "voiceEffect"
   | "retouch"
   | "magic"
-  | "export";
+  | "export"
+  | "background";
 
 /* ─── Actions ────────────────────────────────────────────────────────────── */
 
@@ -68,6 +68,7 @@ interface EditorActions {
   removeSticker: (id: string) => void;
   setGlobalFilter: (f: FilterPreset) => void;
   setGlobalAdjust: (a: AdjustValues) => void;
+  setBgColor: (color: string) => void;
 
   // Playback
   setPlayhead: (t: number) => void;
@@ -222,6 +223,9 @@ export const useEditorStore = create<EditorState & EditorActions>()((set, get) =
 
   setGlobalAdjust: (globalAdjust) =>
     set((s) => pushHistory(s, { ...s.project, globalAdjust })),
+
+  setBgColor: (bgColor) =>
+    set((s) => pushHistory(s, { ...s.project, bgColor })),
 
   /* ── Playback ── */
 

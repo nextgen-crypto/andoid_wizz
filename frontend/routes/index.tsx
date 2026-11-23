@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { homeQueryOptions } from "@/frontend/queries/home";
 import { HomeScreen } from "@/frontend/screens/HomeScreen";
+import { AppBootSkeleton } from "@/frontend/components/AppBootSkeleton";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,6 +23,8 @@ export const Route = createFileRoute("/")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(homeQueryOptions),
+  pendingComponent: AppBootSkeleton,
+  pendingMs: 0,
   component: HomeScreen,
   errorComponent: HomeError,
 });

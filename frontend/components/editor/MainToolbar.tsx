@@ -1,7 +1,7 @@
 import {
   Music, Type, Sparkles, WandSparkles, Captions, Layers,
-  Sticker, Sliders, Filter, SlidersHorizontal, Zap,
-  Scissors,
+  Sliders, Filter, SlidersHorizontal, Zap,
+  Scissors, PaintBucket,
 } from "lucide-react";
 import type { ActiveSheet } from "@/frontend/store/editorStore";
 import { useEditorStore } from "@/frontend/store/editorStore";
@@ -13,6 +13,7 @@ const TOOLS: {
   icon: React.ComponentType<{ className?: string }>;
   needsSound?: boolean;
 }[] = [
+  { id: "background", label: "Background", icon: PaintBucket },
   { id: "filters",   label: "Filters",    icon: Filter },
   { id: "adjust",    label: "Adjust",     icon: Sliders },
   { id: "sound",     label: "Sound",      icon: Music },
@@ -21,7 +22,6 @@ const TOOLS: {
   { id: "magic",     label: "Magic",      icon: WandSparkles },
   { id: "captions",  label: "Captions",   icon: Captions },
   { id: "overlay",   label: "Overlay",    icon: Layers },
-  { id: "stickers",  label: "Stickers",   icon: Sticker },
   // "Edit" opens clip toolbar by selecting clip under playhead
 ];
 

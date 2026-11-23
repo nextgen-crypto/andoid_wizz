@@ -142,7 +142,7 @@ export function AdminScreen() {
     <>
       {/* ── Mobile header + tab strip ── */}
       <div className="sticky top-0 z-30 border-b border-border bg-background lg:hidden">
-        <div className="flex items-center justify-between px-4 pb-2 pt-3">
+        <div className="flex items-center justify-between px-4 pb-2 pt-safe">
           <span className="text-lg font-black text-title">WIZZ Admin</span>
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold">

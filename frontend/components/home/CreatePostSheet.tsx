@@ -14,7 +14,9 @@ import {
   mimeMismatch,
   resolveUploadMime,
   sizeError,
+  typedBlobUrl,
 } from "@/frontend/lib/mediaFormat";
+import { Capacitor } from "@capacitor/core";
 import { BeautyCameraSheet } from "@/frontend/components/camera/BeautyCameraSheet";
 import {
   applyFilterToFile,
@@ -60,19 +62,40 @@ export function CreatePostSheet({ open, onClose }: { open: boolean; onClose: () 
   }, [open]);
 
   function pickImage(file: File) {
-    if (file.size > IMAGE_MAX_BYTES) {
-      setError(sizeError("image"));
-      return;
-    }
-    // Same gate as the creation engine: only a MIME that positively names
-    // another kind rejects — empty/application/* Android picks preview fine.
-    if (mimeMismatch(file, "image")) {
-      setError("That file is not an image.");
-      return;
-    }
+    if (file.size > IMAGE_MAX_BYTES) { setError(sizeError("image")); return; }
+    if (mimeMismatch(file, "image")) { setError("That file is not an image."); return; }
     setError(null);
     setPhoto(file);
-    setPreview(URL.createObjectURL(file));
+    // Show preview immediately so the UI is never blank while canvas decode runs.
+    const prelimUrl = typedBlobUrl(file);
+    setPreview(prelimUrl);
+    // Upgrade to a canvas-decoded JPEG in background (guaranteed renderable on Android).
+    void (async () => {
+      try {
+        const bitmap = await Promise.race<ImageBitmap>([
+          createImageBitmap(file),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 3000)),
+        ]);
+        const scale = Math.min(1, 2048 / Math.max(bitmap.width || 1, bitmap.height || 1));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round((bitmap.width || 800) * scale);
+        canvas.height = Math.round((bitmap.height || 800) * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { bitmap.close(); return; }
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.92));
+        if (!blob) return;
+        const upgradedUrl = URL.createObjectURL(blob);
+        setPreview((cur) => {
+          if (cur !== prelimUrl) { URL.revokeObjectURL(upgradedUrl); return cur; }
+          URL.revokeObjectURL(prelimUrl);
+          return upgradedUrl;
+        });
+      } catch {
+        // keep prelimUrl as-is
+      }
+    })();
   }
 
   async function uploadPhoto(): Promise<{ path: string; url: string | null } | null> {
@@ -111,6 +134,14 @@ export function CreatePostSheet({ open, onClose }: { open: boolean; onClose: () 
     try {
       const text = caption.trim();
       if (!text) throw new Error("Write a caption first.");
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && (session.expires_at ?? 0) - Math.floor(Date.now() / 1000) < 60) {
+            await supabase.auth.refreshSession();
+          }
+        } catch { /* non-fatal */ }
+      }
       const hashtags = [
         ...new Set(
           tags
@@ -187,7 +218,9 @@ export function CreatePostSheet({ open, onClose }: { open: boolean; onClose: () 
                   aria-label="Remove photo"
                   onClick={() => {
                     setPhoto(null);
-                    setPreview(null);
+                    // Revoke via functional setter so we always catch the current
+                    // URL even if the background canvas upgrade has already swapped it.
+                    setPreview((cur) => { if (cur) URL.revokeObjectURL(cur); return null; });
                   }}
                   className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-scrim"
                 >

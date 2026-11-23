@@ -129,6 +129,63 @@ const MIME_BY_EXT: Record<string, string> = {
   svg: "image/svg+xml",
 };
 
+/**
+ * Android gallery picks often arrive with an empty file.type. Without a MIME
+ * type the browser cannot render the blob URL in <img> or <video> tags.
+ * This helper infers the type from the file extension and wraps the bytes in a
+ * correctly-typed Blob before creating the object URL.
+ */
+export function typedBlobUrl(file: File): string {
+  if (file.type) return URL.createObjectURL(file);
+  const ext = extOf(file);
+  const mime = MIME_BY_EXT[ext];
+  if (!mime) return URL.createObjectURL(file);
+  return URL.createObjectURL(new Blob([file], { type: mime }));
+}
+
+/**
+ * Synchronous magic-byte MIME detection from an already-loaded Uint8Array.
+ * Requires at least 16 bytes for reliable HEIC/AVIF detection.
+ * Returns null when the signature is not recognised (not "assume JPEG").
+ */
+export function sniffMimeFromBytes(b: Uint8Array): string | null {
+  if (b.length < 4) return null;
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return "image/jpeg";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return "image/png";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif";
+  if (b.length >= 12 &&
+      b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  if (b[0] === 0x42 && b[1] === 0x4D) return "image/bmp";
+  if ((b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2A && b[3] === 0x00) ||
+      (b[0] === 0x4D && b[1] === 0x4D && b[2] === 0x00 && b[3] === 0x2A)) return "image/tiff";
+  if (b.length >= 12 &&
+      b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    const brand = String.fromCharCode(b[8] ?? 0, b[9] ?? 0, b[10] ?? 0, b[11] ?? 0).toLowerCase();
+    if (["heic","heis","heim","hevm","hevs","mif1","msf1"].includes(brand)) return "image/heic";
+    if (["avif","avis"].includes(brand)) return "image/avif";
+  }
+  return null;
+}
+
+/**
+ * Async wrapper: reads up to 16 bytes from a File and delegates to sniffMimeFromBytes.
+ * Times out after 2 s — content:// URI byte access on some Android devices is slow.
+ */
+export async function sniffImageMime(file: File): Promise<string | null> {
+  try {
+    const ab = await Promise.race<ArrayBuffer>([
+      file.slice(0, 16).arrayBuffer(),
+      new Promise<never>((_, reject) =>
+        window.setTimeout(() => reject(new Error("sniff timeout")), 2000),
+      ),
+    ]);
+    return sniffMimeFromBytes(new Uint8Array(ab));
+  } catch {
+    return null;
+  }
+}
+
 /** Which media kind an object-path extension stands for; null if neither. */
 export function mediaKindForExt(ext: string): "image" | "video" | null {
   const mime = MIME_BY_EXT[ext.toLowerCase()];
@@ -205,7 +262,16 @@ export function friendlyPublishError(
   e: unknown,
   fallback = "Could not publish. Try again.",
 ): string {
-  const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  // PostgrestError is a plain object { message, code, details, hint } — not an
+  // Error instance. Extract its message so the classifiers below still fire.
+  const msg =
+    e instanceof Error
+      ? e.message
+      : typeof e === "string"
+        ? e
+        : e != null && typeof (e as Record<string, unknown>)["message"] === "string"
+          ? ((e as Record<string, unknown>)["message"] as string)
+          : "";
   const lower = msg.toLowerCase();
   if (lower.includes("row-level security") || lower.includes("permission")) {
     return "You don't have permission to publish this.";
@@ -271,7 +337,7 @@ export interface VideoMetadata {
 export function captureVideoThumbnail(file: File): Promise<Blob | null> {
   return new Promise((resolve) => {
     if (typeof document === "undefined") return resolve(null);
-    const url = URL.createObjectURL(file);
+    const url = typedBlobUrl(file);
     const video = document.createElement("video");
     let settled = false;
     let seekFallback = 0;
@@ -280,10 +346,14 @@ export function captureVideoThumbnail(file: File): Promise<Blob | null> {
       settled = true;
       window.clearTimeout(timer);
       window.clearTimeout(seekFallback);
+      // Detach src before revoking so Android WebView releases the decoded
+      // frame buffer tied to the blob URL immediately.
+      video.removeAttribute("src");
+      video.load();
       URL.revokeObjectURL(url);
       resolve(thumbnail);
     };
-    const timer = window.setTimeout(() => finish(null), 12_000);
+    const timer = window.setTimeout(() => finish(null), 5_000);
     const draw = () => {
       // A fallback may fire before metadata is ready; leave the final deadline
       // to decide rather than treating "not decoded yet" as a failure.
@@ -329,7 +399,7 @@ export function captureVideoThumbnail(file: File): Promise<Blob | null> {
 export function probeVideoMetadata(file: File): Promise<VideoMetadata | null> {
   return new Promise((resolve) => {
     if (typeof document === "undefined") return resolve(null);
-    const url = URL.createObjectURL(file);
+    const url = typedBlobUrl(file);
     const video = document.createElement("video");
     let settled = false;
     const done = (meta: VideoMetadata | null) => {

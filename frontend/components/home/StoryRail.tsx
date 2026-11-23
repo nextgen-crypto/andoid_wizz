@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  ChevronLeft,
-  ChevronRight,
   Eye,
+  Loader2,
   MessageCircle,
   Plus,
   Trash2,
@@ -58,6 +57,8 @@ export function StoryRail({
   const [progress, setProgress] = useState(0);
   const [viewerCount, setViewerCount] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [mediaError, setMediaError] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const holdRef = useRef(false);
 
@@ -67,12 +68,13 @@ export function StoryRail({
   const visibleStories = stories.filter((s) => !deletedLocal.has(s.id));
 
   // Group by author — one circle per person (Instagram-style).
-  // The rail shows a single avatar per author; tapping it opens at that
-  // author's first story and the viewer advances through all stories linearly.
+  // The current user's stories are shown via the "You" button, not a separate
+  // circle, so we skip their ID here to avoid a duplicate ring.
   const authorOrder: string[] = [];
   const authorFirstIndex: Record<string, number> = {};
   for (let i = 0; i < visibleStories.length; i++) {
     const aid = visibleStories[i]!.author.id;
+    if (aid === userId) continue;
     if (!(aid in authorFirstIndex)) {
       authorFirstIndex[aid] = i;
       authorOrder.push(aid);
@@ -85,6 +87,11 @@ export function StoryRail({
   // Local seen overlay: the server row lands asynchronously, but the ring must
   // gray out the moment the story opens.
   const isViewed = (item: StoryItem) => item.viewed || seenLocal.has(item.id);
+
+  // Gradient ring on "Your Story" when the current user has active stories.
+  const myStories = visibleStories.filter((s) => s.author.id === userId);
+  const hasMyStories = myStories.length > 0;
+  const myStoriesAllViewed = !hasMyStories || myStories.every((s) => isViewed(s));
 
   const markSeen = useCallback(
     (item: StoryItem) => {
@@ -131,6 +138,12 @@ export function StoryRail({
     setActive((index) => (index === null ? null : Math.max(0, index - 1)));
     setProgress(0);
   }, []);
+
+  // Reset media load state each time the story changes.
+  useEffect(() => {
+    setMediaLoaded(false);
+    setMediaError(false);
+  }, [story?.id]);
 
   // Mark the opened story as viewed (server + local ring state).
   useEffect(() => {
@@ -225,11 +238,26 @@ export function StoryRail({
       <section aria-label="Stories" className="bg-background">
         <div className="rail flex gap-4 px-4 py-3">
           <button
-            onClick={() => openCreate("story")}
-            aria-label="Add to your story"
+            onClick={() => {
+              if (hasMyStories) {
+                const firstMyIdx = visibleStories.findIndex((s) => s.author.id === userId);
+                if (firstMyIdx !== -1) { setActive(firstMyIdx); markSeen(visibleStories[firstMyIdx]!); return; }
+              }
+              openCreate("story");
+            }}
+            aria-label={hasMyStories ? "View your story" : "Add to your story"}
             className="press animate-fade-up flex w-16 shrink-0 flex-col items-center gap-1.5"
           >
-            <span className="relative block rounded-full">
+            <span
+              className={cn(
+                "relative block rounded-full p-[2.5px]",
+                hasMyStories
+                  ? myStoriesAllViewed
+                    ? "bg-border"
+                    : "story-ring"
+                  : "bg-transparent",
+              )}
+            >
               <img
                 src={currentUserAvatar || imageUrl(currentUser.avatarKey, "thumbnail")}
                 alt="Your story"
@@ -293,59 +321,67 @@ export function StoryRail({
           aria-label={`${story.author.displayName}'s story`}
           className="fixed inset-0 z-[70] mx-auto flex max-w-md bg-black text-white"
         >
-          {/* Segment progress: completed segments full, current one animating. */}
-          <div className="absolute inset-x-0 top-0 z-20 flex gap-1.5 p-3">
-            {visibleStories.map((item, i) => (
-              <span key={item.id} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/35">
-                <span
-                  className="block h-full origin-left bg-white"
-                  style={{
-                    transform: `scaleX(${i < active ? 1 : i === active ? progress : 0})`,
-                  }}
-                />
-              </span>
-            ))}
-          </div>
-
-          <div className="absolute inset-x-0 top-3 z-20 flex items-center gap-2 px-3 pt-2">
-            <img
-              src={imageUrl(story.author.avatarKey, "thumbnail")}
-              alt=""
-              className="size-8 rounded-full object-cover"
-            />
-            <span className="text-sm font-bold">{story.author.displayName}</span>
-            <span className="text-xs text-white/65">{relativeTime(story.createdAt)}</span>
-            <span className="ml-auto flex items-center gap-1.5">
-              {isOwner && viewerCount !== null && (
-                <span
-                  className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs"
-                  title="Viewers"
-                >
-                  <Eye className="size-3.5" /> {viewerCount}
+          {/* Top chrome: progress bar + header — pushed below the status bar. */}
+          <div
+            className="absolute inset-x-0 top-0 z-20 flex flex-col"
+            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+          >
+            {/* Segment progress bars */}
+            <div className="flex gap-1.5 px-3 pt-2 pb-1">
+              {visibleStories.map((item, i) => (
+                <span key={item.id} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/35">
+                  <span
+                    className="block h-full origin-left bg-white transition-transform"
+                    style={{
+                      transform: `scaleX(${i < active ? 1 : i === active ? progress : 0})`,
+                    }}
+                  />
                 </span>
-              )}
-              {story.mediaType === "video" && (
+              ))}
+            </div>
+
+            {/* Author row */}
+            <div className="flex items-center gap-2 px-3 pb-2 pt-1">
+              <img
+                src={imageUrl(story.author.avatarKey, "thumbnail")}
+                alt=""
+                className="size-8 rounded-full object-cover"
+              />
+              <span className="text-sm font-bold">{story.author.displayName}</span>
+              <span className="text-xs text-white/65">{relativeTime(story.createdAt)}</span>
+              <span className="ml-auto flex items-center gap-1.5">
+                {isOwner && viewerCount !== null && (
+                  <span
+                    className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs"
+                    title="Viewers"
+                  >
+                    <Eye className="size-3.5" /> {viewerCount}
+                  </span>
+                )}
+                {story.mediaType === "video" && (
+                  <button
+                    type="button"
+                    onClick={() => setMuted((m) => !m)}
+                    aria-label={muted ? "Unmute story" : "Mute story"}
+                    aria-pressed={muted}
+                    className="grid size-8 place-items-center rounded-full bg-black/35"
+                  >
+                    {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setMuted((m) => !m)}
-                  aria-label={muted ? "Unmute story" : "Mute story"}
-                  aria-pressed={muted}
+                  onClick={close}
+                  aria-label="Close story"
                   className="grid size-8 place-items-center rounded-full bg-black/35"
                 >
-                  {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                  <X className="size-5" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={close}
-                aria-label="Close story"
-                className="grid size-8 place-items-center rounded-full bg-black/35"
-              >
-                <X className="size-5" />
-              </button>
-            </span>
+              </span>
+            </div>
           </div>
 
+          {/* Left/right tap zones for navigation */}
           <button
             type="button"
             aria-label="Previous story"
@@ -354,7 +390,18 @@ export function StoryRail({
           >
             <span className="sr-only">Previous story</span>
           </button>
+          {active < visibleStories.length - 1 && (
+            <button
+              type="button"
+              aria-label="Next story"
+              onClick={goNext}
+              className="absolute inset-y-0 right-0 z-10 w-1/3 cursor-e-resize"
+            >
+              <span className="sr-only">Next story</span>
+            </button>
+          )}
 
+          {/* Media area */}
           <div
             className="relative grid min-h-full w-full place-items-center overflow-hidden"
             onPointerDown={startHold}
@@ -362,11 +409,28 @@ export function StoryRail({
             onPointerCancel={endHold}
             onPointerLeave={endHold}
           >
+            {/* Loading spinner — shown until media reports loaded or errors */}
+            {!mediaLoaded && !mediaError && story.mediaType !== "text" && (
+              <span className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/60">
+                <Loader2 className="size-10 animate-spin text-white/60" />
+              </span>
+            )}
+
+            {/* Error / no-URL fallback */}
+            {(mediaError || (!story.mediaUrl && story.mediaType !== "text")) && (
+              <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+                <p className="text-sm text-white/50">Could not load story</p>
+              </div>
+            )}
+
             {story.mediaType === "image" && story.mediaUrl ? (
               <img
+                key={story.id}
                 src={story.mediaUrl}
                 alt={story.caption || `${story.author.displayName}'s story`}
                 className="size-full object-cover"
+                onLoad={() => setMediaLoaded(true)}
+                onError={() => { setMediaError(true); setMediaLoaded(true); }}
               />
             ) : story.mediaType === "video" && story.mediaUrl ? (
               <video
@@ -377,20 +441,22 @@ export function StoryRail({
                 playsInline
                 muted={muted}
                 className="size-full object-contain"
+                onLoadedData={() => setMediaLoaded(true)}
+                onError={() => { setMediaError(true); setMediaLoaded(true); }}
                 onTimeUpdate={(e) => {
                   const v = e.currentTarget;
                   if (v.duration > 0) setProgress(v.currentTime / v.duration);
                 }}
                 onEnded={goNext}
               />
-            ) : (
+            ) : story.mediaType === "text" ? (
               <div
                 className="grid size-full place-items-center p-10 text-center"
                 style={{ backgroundColor: story.background }}
               >
                 <p className="text-xl font-bold leading-relaxed">{story.caption}</p>
               </div>
-            )}
+            ) : null}
 
             {hold && (
               <span className="pointer-events-none absolute inset-0 grid place-items-center">
@@ -400,18 +466,21 @@ export function StoryRail({
               </span>
             )}
 
+            {/* Caption + text overlays (chips) */}
             {story.mediaType !== "text" && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-5 pt-20">
-                {story.overlays.length > 0 && (
+                {story.overlays.filter((o) => !o.startsWith("__meta__:")).length > 0 && (
                   <div className="mb-3 flex flex-wrap gap-1.5">
-                    {story.overlays.map((overlay) => (
-                      <span
-                        key={overlay}
-                        className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur"
-                      >
-                        {overlay}
-                      </span>
-                    ))}
+                    {story.overlays
+                      .filter((o) => !o.startsWith("__meta__:"))
+                      .map((overlay) => (
+                        <span
+                          key={overlay}
+                          className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur"
+                        >
+                          {overlay}
+                        </span>
+                      ))}
                   </div>
                 )}
                 {story.caption && <p className="text-sm leading-snug">{story.caption}</p>}
@@ -419,23 +488,11 @@ export function StoryRail({
             )}
           </div>
 
-          {active < visibleStories.length - 1 && (
-            <button
-              type="button"
-              aria-label="Next story"
-              onClick={goNext}
-              className="absolute inset-y-0 right-0 z-10 w-1/3 cursor-e-resize"
-            >
-              <ChevronRight className="absolute right-2 top-1/2 size-6 opacity-0" />
-              <span className="sr-only">Next story</span>
-            </button>
-          )}
-          {active > 0 && (
-            <ChevronLeft className="pointer-events-none absolute left-2 top-1/2 z-10 size-6 opacity-0" />
-          )}
-
-          {/* Reply (opens the DM thread) + owner delete live above the tap zones. */}
-          <div className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 p-4">
+          {/* Reply + owner delete — above system gesture bar */}
+          <div
+            className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 px-4 pt-3"
+            style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}
+          >
             <Link
               to="/messages"
               className="flex flex-1 items-center gap-2 rounded-full border border-white/30 bg-black/30 px-4 py-2 text-sm text-white/85 backdrop-blur"

@@ -30,7 +30,7 @@ function TimeRuler({ zoom, offset }: { zoom: number; offset: number }) {
   return (
     <div
       className="relative overflow-hidden select-none"
-      style={{ height: RULER_H, background: "transparent" }}
+      style={{ height: RULER_H, background: "#0d0d0d" }}
     >
       {Array.from({ length: count }, (_, i) => {
         const t = startTick + i * tickInterval;

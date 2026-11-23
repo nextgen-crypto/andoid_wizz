@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { setPendingEditorFile } from "@/frontend/lib/editorPendingFile";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,6 +44,9 @@ import {
   probeVideoMetadata,
   resolveUploadMime,
   sizeError,
+  sniffImageMime,
+  sniffMimeFromBytes,
+  typedBlobUrl,
   type VideoMetadata,
 } from "@/frontend/lib/mediaFormat";
 import { canReencodeVideo, reencodeVideoClip, tryExtractPreviewFrame } from "@/frontend/lib/videoEdit";
@@ -68,6 +71,7 @@ import {
   filterCss,
   filterPresets,
 } from "@/frontend/components/camera/beautyFilters";
+import { Capacitor } from "@capacitor/core";
 import { useSession } from "@/frontend/hooks/useSession";
 import { supabase } from "@/integrations/supabase/client";
 import type { CreateKind } from "@/frontend/components/home/nav-items";
@@ -81,6 +85,15 @@ const DRAFT_KEY_PREFIX = "wizz:create:drafts";
 
 function draftKey(userId: string | null): string {
   return `${DRAFT_KEY_PREFIX}:${userId ?? "anonymous"}`;
+}
+
+/** Canvas bakes return Blob; the overlay/compression helpers need a named File. */
+function asUploadFile(blob: Blob, fallback: File): File {
+  if (blob instanceof File) return blob;
+  const type = blob.type || fallback.type || "image/jpeg";
+  const ext = type.split("/")[1]?.split(";")[0] || "jpg";
+  const name = fallback.name.replace(/\.[^.]+$/, "") + "." + ext;
+  return new File([blob], name, { type, lastModified: Date.now() });
 }
 
 const CATEGORIES = ["For You", "Trending", "Sports", "Music", "Tech", "Style", "Food", "Travel"];
@@ -453,7 +466,7 @@ export function CreationEngine({
   }
 
   function attachPhoto(file: File, replaceIndex?: number) {
-    console.log("[attach] photo", file.name, file.type, file.size);
+    console.log("[attach] photo", file.name, file.type || "(no type)", file.size, "ext:", extOf(file) || "(none)");
     if (file.size > IMAGE_MAX_BYTES) {
       setError(sizeError("image"));
       return;
@@ -467,20 +480,64 @@ export function CreationEngine({
       setError(`A post can carry at most ${MAX_PHOTO_COUNT} photos.`);
       return;
     }
+    setError(null);
 
-    // Build the display URL: try createImageBitmap → canvas → JPEG first so that
-    // formats the WebView can decode (HEIF, AVIF, BMP…) are always displayable
-    // even when <img src={blobUrl}> would silently fail.
-    // The original file is always kept for upload regardless of what happens here.
+    // Preliminary URL uses whatever the file already declares (type or extension).
+    // We do NOT default to image/jpeg for unknown formats — the async IIFE sniffs
+    // magic bytes first and swaps in a correctly-typed URL within ~300 ms.
+    const prelimUrl = typedBlobUrl(file);
+
+    if (replaceIndex !== undefined) {
+      revokePhotoUrl(replaceIndex);
+      setPhotos((prev) => { const next = [...prev]; next[replaceIndex] = file; return next; });
+      setPhotoUrls((prev) => { const next = [...prev]; next[replaceIndex] = prelimUrl; return next; });
+      setActivePhoto(replaceIndex);
+    } else {
+      setPhotos((prev) => [...prev, file]);
+      setPhotoUrls((prev) => [...prev, prelimUrl]);
+      setActivePhoto((prev) => (photos.length === 0 ? 0 : prev));
+    }
+
     void (async () => {
-      let displayUrl: string;
+      // Track the live preliminary URL for this slot — may be swapped by the
+      // sniff step below before canvas decode finishes.
+      let activePrelim = prelimUrl;
+
+      // ── Step 0: magic-byte sniff ─────────────────────────────────────────
+      // Only needed when file has no MIME type AND no extension (common Android
+      // gallery pattern). Reads 16 bytes, 500 ms max. Identifies JPEG/PNG/WebP/
+      // GIF/BMP/TIFF/HEIC/AVIF from their actual header bytes — no guessing.
+      const needsSniff = !file.type && !extOf(file);
+      const sniffedMime: string | null = needsSniff ? await sniffImageMime(file) : null;
+      console.log("[attach] sniff:", needsSniff ? (sniffedMime ?? "unknown") : "skipped (type/ext known)");
+
+      if (sniffedMime) {
+        // Real format identified — swap preliminary URL to a correctly-typed blob
+        // so Android WebView renders it immediately while canvas decode runs.
+        const sniffedUrl = URL.createObjectURL(new Blob([file], { type: sniffedMime }));
+        setPhotoUrls((prev) => {
+          const idx = prev.indexOf(activePrelim);
+          if (idx === -1) { URL.revokeObjectURL(sniffedUrl); return prev; }
+          const next = [...prev];
+          next[idx] = sniffedUrl;
+          URL.revokeObjectURL(activePrelim);
+          return next;
+        });
+        activePrelim = sniffedUrl;
+      }
+
+      // ── Step 1: canvas decode → legitimate JPEG ──────────────────────────
+      // createImageBitmap (3 s) and canvas.toBlob (8 s) are both guarded —
+      // either can hang silently on Android WebView for certain formats/sizes.
+      let upgradedUrl: string | null = null;
       try {
         const bitmap = await Promise.race<ImageBitmap>([
           createImageBitmap(file),
           new Promise<never>((_, reject) =>
-            window.setTimeout(() => reject(new Error("bitmap timeout")), 8000),
+            window.setTimeout(() => reject(new Error("bitmap timeout")), 3000),
           ),
         ]);
+        console.log("[attach] bitmap decoded", bitmap.width, "×", bitmap.height);
         const MAX_PX = 2048;
         const scale = Math.min(1, MAX_PX / Math.max(bitmap.width || 1, bitmap.height || 1));
         const canvas = document.createElement("canvas");
@@ -490,40 +547,82 @@ export function CreationEngine({
         if (ctx) {
           ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
           bitmap.close();
-          const blob = await new Promise<Blob | null>((res) =>
-            canvas.toBlob(res, "image/jpeg", 0.92),
-          );
-          displayUrl = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file);
+          // canvas.toBlob produces image/jpeg — always correct since it re-encodes
+          // the already-decoded pixels, regardless of the original file format.
+          const blob = await Promise.race<Blob | null>([
+            new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.92)),
+            new Promise<null>((res) => window.setTimeout(() => res(null), 8_000)),
+          ]);
+          if (blob) {
+            upgradedUrl = URL.createObjectURL(blob);
+            console.log("[attach] canvas JPEG ready", blob.size, "bytes");
+          } else {
+            console.log("[attach] toBlob timed out — falling through to arrayBuffer");
+          }
         } else {
           bitmap.close();
-          displayUrl = URL.createObjectURL(file);
         }
-      } catch {
-        // createImageBitmap not supported or format can't be decoded — fall back
-        // to a direct blob URL; the <img> onError fallback handles any residual
-        // display failures gracefully.
-        displayUrl = URL.createObjectURL(file);
+      } catch (e) {
+        console.log("[attach] bitmap decode failed:", String(e));
       }
 
-      setError(null);
-      if (replaceIndex !== undefined) {
-        revokePhotoUrl(replaceIndex);
-        setPhotos((prev) => {
-          const next = [...prev];
-          next[replaceIndex] = file;
-          return next;
-        });
-        setPhotoUrls((prev) => {
-          const next = [...prev];
-          next[replaceIndex] = displayUrl;
-          return next;
-        });
-        setActivePhoto(replaceIndex);
-        return;
+      // ── Step 2: arrayBuffer fallback ─────────────────────────────────────
+      // Runs when createImageBitmap fails OR toBlob times out.
+      //
+      // KEY FIX: once we have the full bytes in memory, run sniffMimeFromBytes
+      // synchronously on them — no timeout, no guessing. This is the definitive
+      // format check. If it still returns null (truly unrecognised binary), we
+      // fall back to image/jpeg as last resort rather than leaving the blob
+      // untyped, which causes Android WebView to reject it in <img> every time.
+      if (!upgradedUrl) {
+        try {
+          const ab = await Promise.race<ArrayBuffer>([
+            file.arrayBuffer(),
+            new Promise<never>((_, reject) =>
+              window.setTimeout(() => reject(new Error("arrayBuffer timeout")), 8000),
+            ),
+          ]);
+
+          // Synchronous magic-byte check on the in-memory bytes — definitive.
+          const inMemoryMime = sniffMimeFromBytes(new Uint8Array(ab.slice(0, 16)));
+          const hexBytes = Array.from(new Uint8Array(ab.slice(0, 16)))
+            .map((x) => x.toString(16).padStart(2, "0")).join(" ");
+          console.log("[attach] ab bytes:", hexBytes, "→ in-memory sniff:", inMemoryMime ?? "unknown");
+
+          // MIME priority: early async sniff → in-memory sniff → file.type →
+          // last resort image/jpeg (most Android gallery images are JPEG).
+          // We NEVER leave the type empty: an untyped blob fires onError on
+          // Android WebView just like a no-type preliminary URL does.
+          const mime = sniffedMime ?? inMemoryMime ?? file.type ?? "image/jpeg";
+          console.log("[attach] arrayBuffer ready, mime:", mime, "size:", ab.byteLength);
+          upgradedUrl = URL.createObjectURL(new Blob([ab], { type: mime }));
+
+          // Also replace the entry in photos[] with a typed File so that
+          // bakeOrOriginal → createImageBitmap(typedFile) can decode it at
+          // publish time. Without this, publish gets the original no-MIME File
+          // and createImageBitmap hangs for the full 20-second deadline.
+          const typedFile = new File([ab], file.name || "image", { type: mime });
+          setPhotos((prev) => {
+            const idx = prev.indexOf(file);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = typedFile;
+            return next;
+          });
+        } catch (e) {
+          console.log("[attach] arrayBuffer failed:", String(e));
+        }
       }
-      setPhotos((prev) => [...prev, file]);
-      setPhotoUrls((prev) => [...prev, displayUrl]);
-      setActivePhoto((prev) => (photos.length === 0 ? 0 : prev));
+
+      if (!upgradedUrl) return;
+      setPhotoUrls((prev) => {
+        const idx = prev.indexOf(activePrelim);
+        if (idx === -1) { URL.revokeObjectURL(upgradedUrl!); return prev; }
+        const next = [...prev];
+        next[idx] = upgradedUrl!;
+        URL.revokeObjectURL(activePrelim);
+        return next;
+      });
     })();
   }
 
@@ -540,7 +639,13 @@ export function CreationEngine({
     setError(null);
     const selection = ++videoSelectionRef.current;
     setVideoFile(file);
-    const blobUrl = URL.createObjectURL(file);
+    // Android content:// picks with no MIME type and no extension produce a
+    // no-type blob URL that the WebView video element can't decode — it has no
+    // codec hint and fails immediately. Default to video/mp4 (the most common
+    // Android gallery container) so the player at least attempts decode.
+    const blobUrl = (!file.type && !extOf(file))
+      ? URL.createObjectURL(new Blob([file], { type: "video/mp4" }))
+      : typedBlobUrl(file);
     setVideoUrl(blobUrl);
     setVideoThumbnail(null);
     setVideoPosterUrl(null);
@@ -552,11 +657,13 @@ export function CreationEngine({
       if (selection !== videoSelectionRef.current) return;
       setVideoMeta(meta);
       setVideoProbeDone(true);
-      // If probe returns null the codec is unsupported — try static frame extraction
-      // so VideoStep can show a real thumbnail instead of a black screen.
-      if (!meta) {
-        void tryExtractPreviewFrame(file).then((url) => setProxyFrameUrl(url));
-      }
+    });
+    // Always extract a static proxy frame so VideoStep always has a fallback
+    // thumbnail when the display <video> fires onError (codec unsupported).
+    // This runs concurrently with the probe — no extra wait time.
+    void tryExtractPreviewFrame(file).then((url) => {
+      if (selection !== videoSelectionRef.current || !url) return;
+      setProxyFrameUrl(url);
     });
     void captureVideoThumbnail(file).then((thumbnail) => {
       if (selection !== videoSelectionRef.current || !thumbnail) return;
@@ -737,6 +844,23 @@ export function CreationEngine({
       return;
     }
 
+    // On Android/Capacitor the JS auto-refresh timer pauses in background,
+    // so the token can be expired by publish time. Refresh once here so both
+    // the storage upload and the posts INSERT use a valid authenticated token.
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const expiresAt = session.expires_at ?? 0;
+          if (expiresAt - Math.floor(Date.now() / 1000) < 60) {
+            await supabase.auth.refreshSession();
+          }
+        }
+      } catch {
+        // non-fatal — carry on with whatever token is available
+      }
+    }
+
     setBusy(true);
     setError(null);
     setStep("publishing");
@@ -801,17 +925,20 @@ export function CreationEngine({
           const current = selection[i]!;
           const extraCss =
             [preset.extra, photoAdjustmentFilter].filter(Boolean).join(" ") || undefined;
-          const baked = await bakeOrOriginal(current, (file) =>
-            applyFilterAndTransformToFile(
-              file,
-              preset.settings,
-              extraCss,
-              intensity / 100,
-              rotate,
-              flip,
+          const baked = asUploadFile(
+            await bakeOrOriginal(current, (file) =>
+              applyFilterAndTransformToFile(
+                file,
+                preset.settings,
+                extraCss,
+                intensity / 100,
+                rotate,
+                flip,
+              ),
             ),
+            current,
           );
-          const withFilter = baked instanceof File ? baked : current;
+          const withFilter = baked;
           // Second canvas pass: bake text + sticker overlays on top of filter result
           const withOverlays =
             photoOverlays.length > 0
@@ -978,7 +1105,10 @@ export function CreationEngine({
                   return [meta, ...chips];
                 })()
               : [],
-            story_background: kind === "story" ? (textBody.trim() ? textBg : null) : null,
+            story_background:
+              kind === "story" && photos.length === 0 && !videoFile
+                ? (textBody.trim() ? textBg : null)
+                : null,
           }
         : basePost;
 
@@ -1029,57 +1159,28 @@ export function CreationEngine({
 
   return (
     <>
+      {/* ── Instagram-style dark hub sheet ── */}
+      <InstagramHubSheet
+        open={open && step === "hub" && !camera}
+        onClose={onClose}
+        onPick={(kind) => pick(kind as Exclude<CreateKind, "more">)}
+      />
+
       <Sheet
-        open={open && !camera}
+        open={open && step !== "hub" && !camera}
         onClose={() => {
           if (!busy) onClose();
         }}
-        title={
-          step === "hub" ? "Create" : step === "success" && schedule ? "Scheduled" : TITLES[step]
-        }
+        title={step === "success" && schedule ? "Scheduled" : TITLES[step]}
       >
         {/* Back button for all non-root steps */}
-        {step !== "hub" && step !== "publishing" && step !== "success" && (
+        {step !== "publishing" && step !== "success" && (
           <button
             onClick={() => setStep("hub")}
             className="mb-3 rounded-full bg-secondary px-4 py-1.5 text-xs font-semibold text-foreground"
           >
             ← All options
           </button>
-        )}
-
-        {/* ── HUB ── Instagram/TikTok-style 2×N grid */}
-        {step === "hub" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              {createActions
-                .filter(({ kind: k }) => k !== "more")
-                .map(({ kind: k, label, hint, Icon }) => (
-                  <HubCard
-                    key={k}
-                    icon={Icon}
-                    label={label}
-                    hint={hint}
-                    accent={HUB_ACCENTS[k] ?? "#6b7280"}
-                    onClick={() => pick(k as Exclude<CreateKind, "more">)}
-                  />
-                ))}
-            </div>
-            {/* Drafts row */}
-            <button
-              onClick={() => setStep("drafts")}
-              className="press flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-left"
-            >
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted">
-                <FolderOpen className="size-5 text-muted-foreground" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-semibold">Drafts</span>
-                <span className="text-xs text-muted-foreground">Resume unfinished posts</span>
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-            </button>
-          </div>
         )}
 
         {/* ── PHOTO ── */}
@@ -1622,25 +1723,38 @@ export function CreationEngine({
                 className="mx-auto mb-4 size-20 rounded-2xl object-cover"
               />
             )}
-            <Loader2
-              className="mx-auto size-8 animate-spin [animation-duration:0.9s] text-brand"
-              strokeWidth={2.5}
-            />
-            <p className="mt-3 text-[15px] font-semibold">Publishing your {kind}…</p>
+            {progress >= 100 ? (
+              <span className="animate-scale-in mx-auto grid size-12 place-items-center rounded-full bg-brand">
+                <Check className="size-6 text-brand-foreground" />
+              </span>
+            ) : (
+              <Loader2
+                className="mx-auto size-8 animate-spin [animation-duration:0.9s] text-brand"
+                strokeWidth={2.5}
+              />
+            )}
+            <p className="mt-3 text-[15px] font-semibold">
+              {stage === "trim"
+                ? "Re-encoding clip…"
+                : progress >= 100
+                  ? "Done!"
+                  : `Publishing your ${kind}…`}
+            </p>
             <div
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={progress}
               aria-label="Publish progress"
-              className="mx-auto mt-4 h-1.5 w-56 overflow-hidden rounded-full bg-secondary"
+              className="mx-auto mt-4 h-2 w-56 overflow-hidden rounded-full bg-secondary"
             >
               <div
                 className="h-full rounded-full bg-brand transition-[width] duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+            <p className="mt-2 text-3xl font-bold tabular-nums text-brand">{progress}%</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               {stage === "trim"
                 ? "Re-encoding clip (trim/speed)…"
                 : progress >= 100
@@ -1649,7 +1763,7 @@ export function CreationEngine({
                     ? "Saving post…"
                     : progress >= 65
                       ? "Upload complete — processing media…"
-                      : `Uploading media · ${progress}%`}
+                      : "Uploading media…"}
             </p>
           </div>
         )}
@@ -1864,3 +1978,208 @@ export function CreationEngine({
 }
 
 export { AtSign, Clock, FolderOpen, Link2, MapPin, Mic, Music, RefreshCw, Users };
+
+/* ─── Instagram-style dark Create hub sheet ─────────────────────────────── */
+/* Fixed-size SVG icon wrappers — explicit width/height prevent any stretching */
+const IgIcons: Record<string, React.FC> = {
+  photo: () => (
+    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <path d="M21 15l-5-5L5 21"/>
+    </svg>
+  ),
+  video: () => (
+    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="14" height="12" rx="2"/>
+      <path d="M22 8l-4 4 4 4V8z"/>
+    </svg>
+  ),
+  story: () => (
+    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M12 8v4M12 16h.01"/>
+    </svg>
+  ),
+  text: () => (
+    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
+    </svg>
+  ),
+  live: () => (
+    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="2"/>
+      <path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/>
+    </svg>
+  ),
+};
+
+const IG_HUB_ITEMS: { kind: Exclude<CreateKind, "more">; label: string }[] = [
+  { kind: "photo", label: "Photo" },
+  { kind: "video", label: "Video" },
+  { kind: "story", label: "Story" },
+  { kind: "text",  label: "Text"  },
+  { kind: "live",  label: "Live"  },
+];
+
+function InstagramHubSheet({
+  open,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPick: (kind: Exclude<CreateKind, "more">) => void;
+}) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const drag = React.useRef({ startY: 0, dy: 0, dragging: false, moved: false });
+
+  function setPanelShift(dy: number | null) {
+    const el = panelRef.current;
+    if (!el) return;
+    if (dy === null) { el.style.transition = ""; el.style.transform = ""; }
+    else { el.style.transition = "none"; el.style.transform = `translateY(${Math.max(0, dy)}px)`; }
+  }
+  function onDragStart(e: React.PointerEvent) {
+    drag.current = { startY: e.clientY, dy: 0, dragging: true, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onDragMove(e: React.PointerEvent) {
+    const d = drag.current;
+    if (!d.dragging) return;
+    d.dy = e.clientY - d.startY;
+    if (Math.abs(d.dy) > 8) d.moved = true;
+    setPanelShift(d.dy);
+  }
+  function onDragEnd() {
+    const d = drag.current;
+    if (!d.dragging) return;
+    d.dragging = false;
+    setPanelShift(null);
+    if (d.moved && d.dy > 100) onClose();
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-label="Create">
+      {/* Backdrop scrim */}
+      <button
+        aria-label="Close"
+        className="absolute inset-0 animate-scrim-in"
+        style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(3px)" }}
+        onClick={onClose}
+      />
+
+      {/* Sheet panel */}
+      <div
+        ref={panelRef}
+        className="absolute inset-x-0 bottom-0 animate-sheet-in"
+        style={{
+          background: "var(--background)",
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          paddingBottom: "max(env(safe-area-inset-bottom, 0px), 20px)",
+        }}
+      >
+        {/* Drag handle + title — touch target for swipe-down */}
+        <div
+          className="touch-none select-none"
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+          style={{ paddingTop: 12, paddingBottom: 8 }}
+        >
+          {/* Handle bar */}
+          <div
+            style={{
+              width: 36,
+              height: 4,
+              borderRadius: 2,
+              background: "var(--muted-foreground)",
+              margin: "0 auto 14px",
+            }}
+          />
+          {/* Title */}
+          <p
+            style={{
+              textAlign: "center",
+              color: "var(--foreground)",
+              fontSize: 22,
+              fontWeight: 600,
+              lineHeight: 1,
+              marginBottom: 4,
+            }}
+          >
+            Create
+          </p>
+        </div>
+
+        {/* Category list */}
+        <div style={{ marginTop: 6 }}>
+          {IG_HUB_ITEMS.map(({ kind, label }, i) => {
+            const IconComp = IgIcons[kind];
+            return (
+              <React.Fragment key={kind}>
+                <button
+                  onClick={() => onPick(kind)}
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    width: "100%",
+                    height: 62,
+                    paddingLeft: 22,
+                    paddingRight: 22,
+                    gap: 20,
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {/* Fixed-size icon slot — prevents any stretching */}
+                  <span
+                    style={{
+                      width: 28,
+                      height: 28,
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "var(--foreground)",
+                    }}
+                  >
+                    {IconComp && <IconComp />}
+                  </span>
+                  {/* Label */}
+                  <span
+                    style={{
+                      color: "var(--foreground)",
+                      fontSize: 19,
+                      fontWeight: 500,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {label}
+                  </span>
+                </button>
+                {/* Divider between rows — not after the last row */}
+                {i < IG_HUB_ITEMS.length - 1 && (
+                  <div
+                    style={{
+                      height: 1,
+                      background: "var(--border)",
+                      marginLeft: 22,
+                      marginRight: 22,
+                    }}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

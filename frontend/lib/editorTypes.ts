@@ -129,6 +129,7 @@ export interface EditorProject {
   captions: CaptionSegment[];
   globalFilter: FilterPreset;
   globalAdjust: AdjustValues;
+  bgColor: string;
 }
 
 export const EMPTY_PROJECT: EditorProject = {
@@ -140,6 +141,7 @@ export const EMPTY_PROJECT: EditorProject = {
   captions: [],
   globalFilter: "none",
   globalAdjust: { ...DEFAULT_ADJUST },
+  bgColor: "#000000",
 };
 
 /** Compute total project duration from clips (respecting trim + speed). */

@@ -181,20 +181,20 @@ export function ProfileScreen() {
 
   return (
     <AppShell title="Profile">
-      <div className="animate-gradient-pan h-28 bg-gradient-to-r from-brand via-fuchsia-500 to-brand sm:h-36" />
+      <div className="animate-gradient-pan h-32 bg-gradient-to-r from-brand via-fuchsia-500 to-brand sm:h-40" />
 
       <div className="animate-fade-up px-4">
-        <div className="-mt-10 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
+        <div className="-mt-12 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
           <span className="relative">
             {shownAvatar && !ownAvatarFailed ? (
               <img
                 src={shownAvatar}
                 alt={shownName}
                 onError={() => setOwnAvatarFailed(true)}
-                className="animate-scale-in size-20 rounded-2xl border-4 border-background object-cover"
+                className="animate-scale-in size-24 rounded-2xl border-4 border-background object-cover object-top"
               />
             ) : (
-              <span className="animate-scale-in grid size-20 place-items-center rounded-2xl border-4 border-background bg-brand text-2xl font-bold text-brand-foreground">
+              <span className="animate-scale-in grid size-24 place-items-center rounded-2xl border-4 border-background bg-brand text-3xl font-bold text-brand-foreground">
                 {shownName.slice(0, 1).toUpperCase()}
               </span>
             )}
@@ -226,7 +226,7 @@ export function ProfileScreen() {
         </div>
 
         <div className="mt-3 flex items-center gap-1.5">
-          <h2 className="min-w-0 break-words text-xl font-bold tracking-tight text-foreground">
+          <h2 className="min-w-0 break-words text-2xl font-bold tracking-tight text-foreground">
             {shownName}
           </h2>
           {(myProfile?.verified || isPremiumActive(myProfile?.premium_until)) && (
@@ -246,10 +246,10 @@ export function ProfileScreen() {
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-2xl bg-secondary py-3 text-center">
-            <p className="text-base font-bold text-foreground">
+            <p className="text-lg font-bold text-foreground">
               {compact.format(stats?.posts ?? 0)}
             </p>
-            <p className="text-[10px] font-medium tracking-wider text-muted-foreground">POSTS</p>
+            <p className="text-xs font-medium tracking-wider text-muted-foreground">POSTS</p>
           </div>
           {(["followers", "following"] as const).map((kind) =>
             myProfile?.username ? (
@@ -259,19 +259,19 @@ export function ProfileScreen() {
                 params={{ username: myProfile.username }}
                 className="rounded-2xl bg-secondary py-3 text-center"
               >
-                <p className="text-base font-bold text-foreground">
+                <p className="text-lg font-bold text-foreground">
                   {compact.format(
                     (kind === "followers" ? stats?.followers : stats?.following) ?? 0,
                   )}
                 </p>
-                <p className="text-[10px] font-medium tracking-wider text-muted-foreground">
+                <p className="text-xs font-medium tracking-wider text-muted-foreground">
                   {kind.toUpperCase()}
                 </p>
               </Link>
             ) : (
               <div key={kind} className="rounded-2xl bg-secondary py-3 text-center">
-                <p className="text-base font-bold text-foreground">0</p>
-                <p className="text-[10px] font-medium tracking-wider text-muted-foreground">
+                <p className="text-lg font-bold text-foreground">0</p>
+                <p className="text-xs font-medium tracking-wider text-muted-foreground">
                   {kind.toUpperCase()}
                 </p>
               </div>
