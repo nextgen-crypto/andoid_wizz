@@ -80,11 +80,7 @@ describe("projectDuration", () => {
 // ─── clipProjectStart ─────────────────────────────────────────────────────────
 
 describe("clipProjectStart", () => {
-  const clips = [
-    makeClip("a", 10),
-    makeClip("b", 5),
-    makeClip("c", 8),
-  ];
+  const clips = [makeClip("a", 10), makeClip("b", 5), makeClip("c", 8)];
 
   it("returns 0 for the first clip", () => {
     expect(clipProjectStart(clips, 0)).toBe(0);

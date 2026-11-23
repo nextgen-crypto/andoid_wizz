@@ -1,5 +1,6 @@
 {
   "include": ["frontend/**/*.ts", "frontend/**/*.tsx", "backend/**/*.ts", "vite.config.ts", "eslint.config.js"],
+  "exclude": ["backend/supabase/functions/**"],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",

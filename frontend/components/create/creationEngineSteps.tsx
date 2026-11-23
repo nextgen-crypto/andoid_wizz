@@ -40,7 +40,20 @@ import type { PhotoOverlay, TextOverlay, StickerOverlay } from "@/frontend/lib/o
 import { captureVideoFrame } from "@/frontend/lib/videoEdit";
 import { cn } from "@/lib/utils";
 
-export { AtSign, Clock, FolderOpen, Link2, MapPin, Mic, MicOff, Music, RefreshCw, Users, Share2, Square };
+export {
+  AtSign,
+  Clock,
+  FolderOpen,
+  Link2,
+  MapPin,
+  Mic,
+  MicOff,
+  Music,
+  RefreshCw,
+  Users,
+  Share2,
+  Square,
+};
 export type { Track };
 export type { PhotoOverlay, TextOverlay, StickerOverlay };
 
@@ -48,24 +61,101 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3] as const;
 
 // Text overlay colors
 const TEXT_COLORS = [
-  "#ffffff", "#000000", "#ffee00", "#ff3366",
-  "#00ccff", "#66ff88", "#ff9900", "#cc44ff",
+  "#ffffff",
+  "#000000",
+  "#ffee00",
+  "#ff3366",
+  "#00ccff",
+  "#66ff88",
+  "#ff9900",
+  "#cc44ff",
 ] as const;
 
 // Sticker emoji grid (4 rows × 10 = 40 emojis)
 const EMOJI_GRID = [
-  "😍","🥰","😂","🤩","😎","🥳","😅","💀","🤣","😜",
-  "❤️","💕","💯","🔥","✨","🌟","💫","⭐","💥","🎯",
-  "🎉","🎵","🎶","💃","🕺","👑","🌈","🦋","🎊","🏆",
-  "💪","👏","🙌","🫶","💬","📸","🌊","🏄","🚀","💎",
+  "😍",
+  "🥰",
+  "😂",
+  "🤩",
+  "😎",
+  "🥳",
+  "😅",
+  "💀",
+  "🤣",
+  "😜",
+  "❤️",
+  "💕",
+  "💯",
+  "🔥",
+  "✨",
+  "🌟",
+  "💫",
+  "⭐",
+  "💥",
+  "🎯",
+  "🎉",
+  "🎵",
+  "🎶",
+  "💃",
+  "🕺",
+  "👑",
+  "🌈",
+  "🦋",
+  "🎊",
+  "🏆",
+  "💪",
+  "👏",
+  "🙌",
+  "🫶",
+  "💬",
+  "📸",
+  "🌊",
+  "🏄",
+  "🚀",
+  "💎",
 ] as const;
 
 export const TRACKS: Track[] = [
-  { id: "t1", title: "Midnight Drive",  creator: "Neon Coast",  duration: "0:29", durationSec: 29, bars: [3, 6, 9, 5, 8, 4, 7, 10, 6, 5, 8, 3] },
-  { id: "t2", title: "Soft Morning",    creator: "Ayo Beats",    duration: "0:15", durationSec: 15, bars: [4, 5, 6, 7, 5, 4, 6, 8,  5, 4, 3, 5] },
-  { id: "t3", title: "Street Pulse",    creator: "DJ Mara",      duration: "0:22", durationSec: 22, bars: [8, 4, 9, 3, 10, 5, 7, 4, 9, 6, 5, 8] },
-  { id: "t4", title: "Golden Hour",     creator: "Luna Waves",   duration: "0:18", durationSec: 18, bars: [5, 7, 4, 8, 6, 9, 5, 7,  4, 6, 8, 5] },
-  { id: "t5", title: "Original audio",  creator: "You",          duration: "0:00", durationSec: 0,  bars: [2, 3, 2, 4, 3, 2, 3, 4,  2, 3, 2, 3] },
+  {
+    id: "t1",
+    title: "Midnight Drive",
+    creator: "Neon Coast",
+    duration: "0:29",
+    durationSec: 29,
+    bars: [3, 6, 9, 5, 8, 4, 7, 10, 6, 5, 8, 3],
+  },
+  {
+    id: "t2",
+    title: "Soft Morning",
+    creator: "Ayo Beats",
+    duration: "0:15",
+    durationSec: 15,
+    bars: [4, 5, 6, 7, 5, 4, 6, 8, 5, 4, 3, 5],
+  },
+  {
+    id: "t3",
+    title: "Street Pulse",
+    creator: "DJ Mara",
+    duration: "0:22",
+    durationSec: 22,
+    bars: [8, 4, 9, 3, 10, 5, 7, 4, 9, 6, 5, 8],
+  },
+  {
+    id: "t4",
+    title: "Golden Hour",
+    creator: "Luna Waves",
+    duration: "0:18",
+    durationSec: 18,
+    bars: [5, 7, 4, 8, 6, 9, 5, 7, 4, 6, 8, 5],
+  },
+  {
+    id: "t5",
+    title: "Original audio",
+    creator: "You",
+    duration: "0:00",
+    durationSec: 0,
+    bars: [2, 3, 2, 4, 3, 2, 3, 4, 2, 3, 2, 3],
+  },
 ];
 
 function fmtTime(secs: number): string {
@@ -212,7 +302,9 @@ export function PhotoStep({
           </span>
           <span className="text-left">
             <span className="block font-semibold">Gallery</span>
-            <span className="text-xs text-muted-foreground">Pick from your photos · up to {maxPhotos}</span>
+            <span className="text-xs text-muted-foreground">
+              Pick from your photos · up to {maxPhotos}
+            </span>
           </span>
           <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground" />
         </button>
@@ -328,7 +420,9 @@ function PhotoPreview({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   // Reset error state when the photo URL is upgraded (preliminary → canvas JPEG).
-  useEffect(() => { setImgFailed(false); }, [photoUrl]);
+  useEffect(() => {
+    setImgFailed(false);
+  }, [photoUrl]);
   // Overlay drag state
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; ox: number; oy: number } | null>(null);
@@ -360,7 +454,11 @@ function PhotoPreview({
         <img
           src={photoUrl}
           alt="Edit preview"
-          style={{ filter: photoFilter, transform: photoTransform, display: imgFailed ? "none" : undefined }}
+          style={{
+            filter: photoFilter,
+            transform: photoTransform,
+            display: imgFailed ? "none" : undefined,
+          }}
           className="size-full object-cover transition-transform"
           draggable={false}
           onLoad={() => {
@@ -429,11 +527,19 @@ function PhotoPreview({
                 const el = containerRef.current;
                 if (!el) return;
                 const rect = el.getBoundingClientRect();
-                const x = Math.max(0.04, Math.min(0.96, (e.clientX - rect.left - dragRef.current.ox) / rect.width));
-                const y = Math.max(0.04, Math.min(0.96, (e.clientY - rect.top - dragRef.current.oy) / rect.height));
+                const x = Math.max(
+                  0.04,
+                  Math.min(0.96, (e.clientX - rect.left - dragRef.current.ox) / rect.width),
+                );
+                const y = Math.max(
+                  0.04,
+                  Math.min(0.96, (e.clientY - rect.top - dragRef.current.oy) / rect.height),
+                );
                 setOverlays(overlays.map((o) => (o.id === ov.id ? { ...o, x, y } : o)));
               }}
-              onPointerUp={() => { dragRef.current = null; }}
+              onPointerUp={() => {
+                dragRef.current = null;
+              }}
             >
               {/* Delete button (only when selected) */}
               {isSelected && (
@@ -571,7 +677,11 @@ function PhotoPreview({
         <div className="mt-3">
           <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
             {filterPresets.map((p) => (
-              <button key={p.id} onClick={() => setPresetId(p.id)} className="w-[72px] shrink-0 text-center">
+              <button
+                key={p.id}
+                onClick={() => setPresetId(p.id)}
+                className="w-[72px] shrink-0 text-center"
+              >
                 {imgFailed ? (
                   <span
                     className={cn(
@@ -603,7 +713,9 @@ function PhotoPreview({
             ))}
           </div>
           <label className="mt-3 flex items-center gap-3">
-            <span className="w-16 shrink-0 text-[11px] text-muted-foreground">Strength {intensity}%</span>
+            <span className="w-16 shrink-0 text-[11px] text-muted-foreground">
+              Strength {intensity}%
+            </span>
             <input
               type="range"
               min={0}
@@ -622,17 +734,17 @@ function PhotoPreview({
         <div className="mt-3 space-y-1.5">
           {(
             [
-              ["brightness",  "Brightness",  -100, 100],
-              ["contrast",    "Contrast",    -100, 100],
-              ["saturation",  "Saturation",  -100, 100],
-              ["temperature", "Warmth",      -100, 100],
-              ["exposure",    "Exposure",    -100, 100],
-              ["highlights",  "Highlights",  -50,  50],
-              ["shadows",     "Shadows",     -50,  50],
-              ["tint",        "Tint",        -50,  50],
-              ["sharpness",   "Sharpness",   0,    100],
-              ["vignette",    "Vignette",    0,    100],
-              ["fade",        "Fade",        0,    100],
+              ["brightness", "Brightness", -100, 100],
+              ["contrast", "Contrast", -100, 100],
+              ["saturation", "Saturation", -100, 100],
+              ["temperature", "Warmth", -100, 100],
+              ["exposure", "Exposure", -100, 100],
+              ["highlights", "Highlights", -50, 50],
+              ["shadows", "Shadows", -50, 50],
+              ["tint", "Tint", -50, 50],
+              ["sharpness", "Sharpness", 0, 100],
+              ["vignette", "Vignette", 0, 100],
+              ["fade", "Fade", 0, 100],
             ] as [keyof PhotoAdjustments, string, number, number][]
           ).map(([k, label, min, max]) => (
             <label key={k} className="flex items-center gap-2">
@@ -661,13 +773,15 @@ function PhotoPreview({
             <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Rotate</p>
             <div className="flex gap-2">
               <button
-                onClick={() => setRotate((((rotate - 90) % 360 + 360) % 360) as 0 | 90 | 180 | 270)}
+                onClick={() =>
+                  setRotate(((((rotate - 90) % 360) + 360) % 360) as 0 | 90 | 180 | 270)
+                }
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-secondary py-3 text-xs font-semibold"
               >
                 <RotateCcw className="size-4" /> CCW
               </button>
               <button
-                onClick={() => setRotate((((rotate + 90) % 360) as 0 | 90 | 180 | 270))}
+                onClick={() => setRotate(((rotate + 90) % 360) as 0 | 90 | 180 | 270)}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-secondary py-3 text-xs font-semibold"
               >
                 <RotateCw className="size-4" /> CW
@@ -699,7 +813,10 @@ function PhotoPreview({
           </div>
           {(rotate !== 0 || flip.h || flip.v) && (
             <button
-              onClick={() => { setRotate(0); setFlip({ h: false, v: false }); }}
+              onClick={() => {
+                setRotate(0);
+                setFlip({ h: false, v: false });
+              }}
               className="w-full rounded-full border border-border py-2 text-xs font-semibold text-muted-foreground"
             >
               Reset transforms
@@ -737,7 +854,8 @@ function PhotoPreview({
               </label>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-muted-foreground">
-                  Original <span className="font-semibold text-foreground">{formatBytes(rawPhotoSize)}</span>
+                  Original{" "}
+                  <span className="font-semibold text-foreground">{formatBytes(rawPhotoSize)}</span>
                 </span>
                 <span className="text-muted-foreground">
                   Upload{" "}
@@ -817,7 +935,11 @@ function PhotoPreview({
                     onClick={() => setTextBg(bg)}
                     className={cn(
                       "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                      bg === "dark" ? "bg-black/60 text-white" : bg === "light" ? "bg-white/90 text-black" : "bg-background",
+                      bg === "dark"
+                        ? "bg-black/60 text-white"
+                        : bg === "light"
+                          ? "bg-white/90 text-black"
+                          : "bg-background",
                       textBg === bg ? "ring-1 ring-brand" : "",
                     )}
                   >
@@ -834,7 +956,8 @@ function PhotoPreview({
                   kind: "text",
                   id: `t-${Date.now()}`,
                   text: textInput.trim(),
-                  x: 0.5, y: 0.38,
+                  x: 0.5,
+                  y: 0.38,
                   color: textColor,
                   fontSize: textSize,
                   bold: textBold,
@@ -861,7 +984,8 @@ function PhotoPreview({
                       kind: "sticker",
                       id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                       emoji,
-                      x: 0.5, y: 0.5,
+                      x: 0.5,
+                      y: 0.5,
                       scale: "md",
                     };
                     setOverlays([...overlays, newOv]);
@@ -882,7 +1006,10 @@ function PhotoPreview({
               </p>
               <ul className="space-y-1">
                 {overlays.map((ov) => (
-                  <li key={ov.id} className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
+                  <li
+                    key={ov.id}
+                    className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2"
+                  >
                     <span className="text-base leading-none">
                       {ov.kind === "sticker" ? ov.emoji : "T"}
                     </span>
@@ -1008,7 +1135,7 @@ export function VideoStep({
   // Sync music volume (0-100 → 0-1)
   useEffect(() => {
     player.setVolume(musicVolume / 100);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [musicVolume]);
 
   // Sync original-audio volume to video element
@@ -1039,7 +1166,7 @@ export function VideoStep({
   const videoFilterCss =
     [
       videoAdjust.brightness ? `brightness(${(1 + videoAdjust.brightness / 100).toFixed(3)})` : "",
-      videoAdjust.contrast   ? `contrast(${(1 + videoAdjust.contrast / 100).toFixed(3)})` : "",
+      videoAdjust.contrast ? `contrast(${(1 + videoAdjust.contrast / 100).toFixed(3)})` : "",
       videoAdjust.saturation ? `saturate(${(1 + videoAdjust.saturation / 100).toFixed(3)})` : "",
     ]
       .filter(Boolean)
@@ -1073,7 +1200,7 @@ export function VideoStep({
   // Derived trim in seconds
   const dur = duration ?? 0;
   const trimStartSec = dur > 0 ? (trim[0] / 100) * dur : 0;
-  const trimEndSec   = dur > 0 ? (trim[1] / 100) * dur : 0;
+  const trimEndSec = dur > 0 ? (trim[1] / 100) * dur : 0;
 
   if (!videoUrl) {
     return (
@@ -1140,11 +1267,7 @@ export function VideoStep({
 
         {/* Proxy frame: show a static thumbnail extracted from unsupported codecs */}
         {loadFailed && proxyFrameUrl && (
-          <img
-            src={proxyFrameUrl}
-            alt="Video preview frame"
-            className="size-full object-cover"
-          />
+          <img src={proxyFrameUrl} alt="Video preview frame" className="size-full object-cover" />
         )}
 
         {/* Full failure: codec unsupported + no proxy frame */}
@@ -1165,7 +1288,10 @@ export function VideoStep({
         {!loadFailed && (
           <button
             aria-label={playing ? "Pause" : "Play"}
-            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 grid size-14 place-items-center rounded-full bg-black/50 transition-opacity"
             style={{ opacity: playing ? 0 : 1 }}
           >
@@ -1241,9 +1367,13 @@ export function VideoStep({
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>Clip range</span>
             {dur > 0 ? (
-              <span className="tabular-nums">{fmtTime(trimStartSec)} – {fmtTime(trimEndSec)}</span>
+              <span className="tabular-nums">
+                {fmtTime(trimStartSec)} – {fmtTime(trimEndSec)}
+              </span>
             ) : (
-              <span className="tabular-nums">{trim[0]}% – {trim[1]}%</span>
+              <span className="tabular-nums">
+                {trim[0]}% – {trim[1]}%
+              </span>
             )}
           </div>
           {/* Waveform visual */}
@@ -1253,7 +1383,10 @@ export function VideoStep({
               return (
                 <span
                   key={i}
-                  className={cn("flex-1 rounded-sm transition-colors", active ? "bg-brand" : "bg-border")}
+                  className={cn(
+                    "flex-1 rounded-sm transition-colors",
+                    active ? "bg-brand" : "bg-border",
+                  )}
                   style={{ height: `${40 + ((i * 53) % 60)}%` }}
                 />
               );
@@ -1322,7 +1455,9 @@ export function VideoStep({
           />
           {!muted && (
             <label className="flex items-center gap-3 px-2">
-              <span className="w-20 shrink-0 text-xs text-muted-foreground">Clip vol {origVolume}%</span>
+              <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                Clip vol {origVolume}%
+              </span>
               <input
                 type="range"
                 min={0}
@@ -1340,9 +1475,9 @@ export function VideoStep({
           <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
             {TRACKS.map((t) => {
               const isSelected = trackId === t.id;
-              const isPlaying  = player.playingId === t.id;
-              const isLoading  = player.loading && isSelected;
-              const hasTone    = t.durationSec > 0;
+              const isPlaying = player.playingId === t.id;
+              const isLoading = player.loading && isSelected;
+              const hasTone = t.durationSec > 0;
               return (
                 <li key={t.id} className="flex flex-col gap-1.5 px-3 py-2.5">
                   <div className="flex items-center gap-3">
@@ -1353,7 +1488,9 @@ export function VideoStep({
                       onClick={() => void player.toggle(t)}
                       className={cn(
                         "grid size-8 shrink-0 place-items-center rounded-full transition-colors",
-                        isSelected ? "bg-brand text-brand-foreground" : "bg-secondary text-foreground",
+                        isSelected
+                          ? "bg-brand text-brand-foreground"
+                          : "bg-secondary text-foreground",
                         (!hasTone || isLoading) && "opacity-50",
                       )}
                     >
@@ -1429,7 +1566,9 @@ export function VideoStep({
 
           {trackId && (
             <label className="flex items-center gap-3 px-2">
-              <span className="w-20 shrink-0 text-xs text-muted-foreground">Music vol {musicVolume}%</span>
+              <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                Music vol {musicVolume}%
+              </span>
               <input
                 type="range"
                 min={0}
@@ -1447,11 +1586,13 @@ export function VideoStep({
       {/* ── Adjust tab ── */}
       {tab === "adjust" && (
         <div className="mt-3 rounded-2xl bg-secondary p-4 space-y-2">
-          <p className="text-[11px] text-muted-foreground">Colour adjustments (preview only — not baked into upload)</p>
+          <p className="text-[11px] text-muted-foreground">
+            Colour adjustments (preview only — not baked into upload)
+          </p>
           {(
             [
               ["brightness", "Brightness"],
-              ["contrast",   "Contrast"],
+              ["contrast", "Contrast"],
               ["saturation", "Saturation"],
             ] as [keyof VideoAdjust, string][]
           ).map(([k, label]) => (
@@ -1471,7 +1612,9 @@ export function VideoStep({
               </span>
             </label>
           ))}
-          {(videoAdjust.brightness !== 0 || videoAdjust.contrast !== 0 || videoAdjust.saturation !== 0) && (
+          {(videoAdjust.brightness !== 0 ||
+            videoAdjust.contrast !== 0 ||
+            videoAdjust.saturation !== 0) && (
             <button
               onClick={() => setVideoAdjust({ brightness: 0, contrast: 0, saturation: 0 })}
               className="text-[11px] text-muted-foreground underline"
@@ -1539,7 +1682,7 @@ export function VideoStep({
 
 const STORY_DURATIONS = [3, 5, 7, 10] as const;
 const STORY_TRANSITIONS = [
-  { id: "cut",  label: "Cut" },
+  { id: "cut", label: "Cut" },
   { id: "fade", label: "Fade" },
   { id: "slide", label: "Slide" },
 ] as const;
@@ -1669,7 +1812,10 @@ export function StoryStep({
             className="size-full object-cover"
           />
         ) : textBody.trim() ? (
-          <div className="grid size-full place-items-center p-5" style={{ backgroundColor: textBg }}>
+          <div
+            className="grid size-full place-items-center p-5"
+            style={{ backgroundColor: textBg }}
+          >
             <p className="text-center text-sm font-bold leading-snug text-white">{textBody}</p>
           </div>
         ) : (

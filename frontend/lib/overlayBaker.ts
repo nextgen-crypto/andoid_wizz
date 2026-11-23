@@ -9,9 +9,9 @@ export interface TextOverlay {
   kind: "text";
   id: string;
   text: string;
-  x: number;      // 0–1
-  y: number;      // 0–1
-  color: string;  // CSS color string
+  x: number; // 0–1
+  y: number; // 0–1
+  color: string; // CSS color string
   fontSize: "sm" | "md" | "lg";
   bold: boolean;
   bg: "none" | "dark" | "light";
@@ -42,12 +42,7 @@ function stickerPx(canvasH: number, scale: StickerOverlay["scale"]): number {
 
 /* ── Canvas baking ── */
 
-function drawTextOverlay(
-  ctx: CanvasRenderingContext2D,
-  ov: TextOverlay,
-  w: number,
-  h: number,
-) {
+function drawTextOverlay(ctx: CanvasRenderingContext2D, ov: TextOverlay, w: number, h: number) {
   const px = textPx(h, ov.fontSize);
   ctx.font = `${ov.bold ? "bold " : ""}${px}px sans-serif`;
   ctx.textAlign = "center";
@@ -93,32 +88,30 @@ function drawStickerOverlay(
  * Bake an array of overlays on top of `file` and return a new JPEG File.
  * Falls back to the original file on any error so the upload never blocks.
  */
-export async function applyOverlaysToFile(
-  file: File,
-  overlays: PhotoOverlay[],
-): Promise<File> {
+export async function applyOverlaysToFile(file: File, overlays: PhotoOverlay[]): Promise<File> {
   if (!overlays.length) return file;
   try {
     const bitmap = await createImageBitmap(file);
     const MAX = 2048;
     const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
-    canvas.width  = Math.round(bitmap.width  * scale);
+    canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
     const ctx = canvas.getContext("2d");
-    if (!ctx) { bitmap.close?.(); return file; }
+    if (!ctx) {
+      bitmap.close?.();
+      return file;
+    }
 
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
 
     for (const ov of overlays) {
-      if (ov.kind === "text")    drawTextOverlay(ctx, ov, canvas.width, canvas.height);
+      if (ov.kind === "text") drawTextOverlay(ctx, ov, canvas.width, canvas.height);
       if (ov.kind === "sticker") drawStickerOverlay(ctx, ov, canvas.width, canvas.height);
     }
 
-    const blob = await new Promise<Blob | null>((res) =>
-      canvas.toBlob(res, "image/jpeg", 0.92),
-    );
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.92));
     if (!blob) return file;
     return new File([blob], file.name.replace(/\.\w+$/, "") + "-overlaid.jpg", {
       type: "image/jpeg",

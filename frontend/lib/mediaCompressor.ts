@@ -27,7 +27,10 @@ export async function estimateCompressedSize(
     canvas.width = Math.round((bitmap.width || 800) * scale);
     canvas.height = Math.round((bitmap.height || 800) * scale);
     const ctx = canvas.getContext("2d");
-    if (!ctx) { bitmap.close?.(); return file.size; }
+    if (!ctx) {
+      bitmap.close?.();
+      return file.size;
+    }
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
     const blob = await Promise.race<Blob | null>([
@@ -45,11 +48,7 @@ export async function estimateCompressedSize(
  * Returns the original file unchanged when quality >= 100 or on any error.
  * Caps the longest edge at maxPx to avoid oversized outputs.
  */
-export async function compressPhoto(
-  file: File,
-  quality: number,
-  maxPx = 2048,
-): Promise<File> {
+export async function compressPhoto(file: File, quality: number, maxPx = 2048): Promise<File> {
   if (quality >= 100) return file;
   try {
     const bitmap = await Promise.race<ImageBitmap>([
@@ -63,7 +62,10 @@ export async function compressPhoto(
     canvas.width = Math.round((bitmap.width || 800) * scale);
     canvas.height = Math.round((bitmap.height || 800) * scale);
     const ctx = canvas.getContext("2d");
-    if (!ctx) { bitmap.close?.(); return file; }
+    if (!ctx) {
+      bitmap.close?.();
+      return file;
+    }
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
     // Guard toBlob — on some Android WebViews it never calls back for large

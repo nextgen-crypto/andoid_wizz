@@ -25,7 +25,9 @@ function Tab({
       {({ isActive }) => (
         <span className="relative">
           <Icon
-            className={isActive ? "animate-pop size-[26px] text-brand" : "size-[26px] text-muted-foreground"}
+            className={
+              isActive ? "animate-pop size-[26px] text-brand" : "size-[26px] text-muted-foreground"
+            }
           />
           {isActive && (
             <span className="animate-scale-in absolute -bottom-2 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-brand" />
@@ -50,7 +52,9 @@ export function BottomNav() {
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ kind?: CreateKind; trackId?: string; sourceUser?: string }>).detail;
+      const detail = (
+        e as CustomEvent<{ kind?: CreateKind; trackId?: string; sourceUser?: string }>
+      ).detail;
       setInitialKind(detail?.kind ?? null);
       setInitialTrackId(detail?.trackId ?? null);
       setInitialSourceUser(detail?.sourceUser ?? null);

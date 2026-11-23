@@ -853,6 +853,7 @@ export type Database = {
           created_at: string;
           id: string;
           is_read: boolean;
+          receiver_id: string | null;
           sender_id: string;
         };
         Insert: {
@@ -861,6 +862,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_read?: boolean;
+          receiver_id?: string | null;
           sender_id: string;
         };
         Update: {
@@ -869,6 +871,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_read?: boolean;
+          receiver_id?: string | null;
           sender_id?: string;
         };
         Relationships: [
@@ -1156,6 +1159,38 @@ export type Database = {
           verified?: boolean;
         };
         Relationships: [];
+      };
+      push_tokens: {
+        Row: {
+          created_at: string;
+          id: string;
+          platform: string;
+          token: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          platform?: string;
+          token: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          platform?: string;
+          token?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       reports: {
         Row: {

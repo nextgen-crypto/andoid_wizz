@@ -1,13 +1,7 @@
-import {
-  useEffect, useRef, useState, useCallback,
-} from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, Volume2, VolumeX } from "lucide-react";
 import { useEditorStore } from "@/frontend/store/editorStore";
-import {
-  projectDuration,
-  clipProjectStart,
-  type EditorClip,
-} from "@/frontend/lib/editorTypes";
+import { projectDuration, clipProjectStart, type EditorClip } from "@/frontend/lib/editorTypes";
 import { cn } from "@/lib/utils";
 
 const TRACK_H = 52;
@@ -42,10 +36,7 @@ function TimeRuler({ zoom, offset }: { zoom: number; offset: number }) {
             style={{ left: x, paddingLeft: 3 }}
           >
             {fmt(t)}
-            <span
-              className="absolute top-0 left-0 w-px bg-white/15"
-              style={{ height: RULER_H }}
-            />
+            <span className="absolute top-0 left-0 w-px bg-white/15" style={{ height: RULER_H }} />
           </span>
         );
       })}
@@ -72,24 +63,23 @@ function ClipTile({
   onTrimEnd: (delta: number) => void;
 }) {
   const handleDrag = useCallback(
-    (side: "start" | "end") =>
-      (e: React.PointerEvent) => {
-        e.stopPropagation();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        let lastX = e.clientX;
-        const onMove = (ev: PointerEvent) => {
-          const dx = ev.clientX - lastX;
-          lastX = ev.clientX;
-          if (side === "start") onTrimStart(dx);
-          else onTrimEnd(dx);
-        };
-        const onUp = () => {
-          window.removeEventListener("pointermove", onMove);
-          window.removeEventListener("pointerup", onUp);
-        };
-        window.addEventListener("pointermove", onMove);
-        window.addEventListener("pointerup", onUp);
-      },
+    (side: "start" | "end") => (e: React.PointerEvent) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      let lastX = e.clientX;
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - lastX;
+        lastX = ev.clientX;
+        if (side === "start") onTrimStart(dx);
+        else onTrimEnd(dx);
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
     [onTrimStart, onTrimEnd],
   );
 
@@ -103,18 +93,20 @@ function ClipTile({
       onClick={onSelect}
     >
       {/* Thumbnails strip */}
-      {clip.thumbnails.length > 0
-        ? clip.thumbnails.map((url, i) => (
-            <img
-              key={i}
-              src={url}
-              alt=""
-              draggable={false}
-              className="h-full shrink-0 object-cover"
-              style={{ width: Math.max(32, width / Math.max(1, clip.thumbnails.length)) }}
-            />
-          ))
-        : <div className="size-full bg-gradient-to-r from-white/5 to-white/10" />}
+      {clip.thumbnails.length > 0 ? (
+        clip.thumbnails.map((url, i) => (
+          <img
+            key={i}
+            src={url}
+            alt=""
+            draggable={false}
+            className="h-full shrink-0 object-cover"
+            style={{ width: Math.max(32, width / Math.max(1, clip.thumbnails.length)) }}
+          />
+        ))
+      ) : (
+        <div className="size-full bg-gradient-to-r from-white/5 to-white/10" />
+      )}
 
       {/* Duration badge */}
       {selected && (
@@ -281,14 +273,19 @@ export function Timeline({
   const trackW = Math.max(containerW, totalDur * zoom + containerW);
 
   return (
-    <div className="flex flex-col bg-black select-none" style={{ minHeight: RULER_H + TRACK_H + 80 }}>
+    <div
+      className="flex flex-col bg-black select-none"
+      style={{ minHeight: RULER_H + TRACK_H + 80 }}
+    >
       {/* Ruler + tracks container */}
       <div
         ref={containerRef}
         className="relative flex-1 overflow-hidden"
         onPointerDown={startScrub}
         onPointerMove={moveScrub}
-        onPointerUp={() => { scrubbing.current = false; }}
+        onPointerUp={() => {
+          scrubbing.current = false;
+        }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
       >
@@ -354,7 +351,10 @@ export function Timeline({
           <div className="mt-1 flex items-center gap-1">
             {/* Spacer matching speaker icon width */}
             <div className="size-8 shrink-0" />
-            <div className="relative flex-1" style={{ height: 36, minWidth: Math.max(0, totalDur * zoom) }}>
+            <div
+              className="relative flex-1"
+              style={{ height: 36, minWidth: Math.max(0, totalDur * zoom) }}
+            >
               <SoundTrackRow zoom={zoom} offset={offset} onAdd={onAddSound} />
             </div>
           </div>

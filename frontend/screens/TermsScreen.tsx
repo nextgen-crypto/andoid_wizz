@@ -15,10 +15,10 @@ export function TermsScreen() {
       <p className="mt-1 text-sm text-muted-foreground">Effective November 6, 2026</p>
 
       <p className="mt-6 text-sm leading-6 text-muted-foreground">
-        These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of WIZZ, including
-        the mobile app, web app, and any related services (collectively, the &ldquo;Service&rdquo;).
-        By creating an account or using the Service you agree to these Terms. If you do not agree,
-        do not use the Service.
+        These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of WIZZ,
+        including the mobile app, web app, and any related services (collectively, the
+        &ldquo;Service&rdquo;). By creating an account or using the Service you agree to these
+        Terms. If you do not agree, do not use the Service.
       </p>
 
       <Section title="1. Eligibility">
@@ -34,8 +34,8 @@ export function TermsScreen() {
         <p>
           You are responsible for maintaining the confidentiality of your login credentials and for
           all activity that occurs under your account. Notify us immediately if you suspect
-          unauthorised access. We may suspend or terminate accounts that violate these Terms or
-          that we believe have been compromised.
+          unauthorised access. We may suspend or terminate accounts that violate these Terms or that
+          we believe have been compromised.
         </p>
         <p>
           You may not create an account on behalf of someone else, impersonate any person, or
@@ -59,8 +59,8 @@ export function TermsScreen() {
           <li>contains malicious code or attempts to interfere with the Service.</li>
         </ul>
         <p>
-          We may remove Content that violates these Terms and may report it to law-enforcement
-          where required.
+          We may remove Content that violates these Terms and may report it to law-enforcement where
+          required.
         </p>
       </Section>
 
@@ -68,12 +68,20 @@ export function TermsScreen() {
         <p>You agree not to:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>use the Service for any unlawful purpose;</li>
-          <li>attempt to gain unauthorised access to any part of the Service or its infrastructure;</li>
-          <li>scrape, crawl, or use automated tools to extract data without our written permission;</li>
+          <li>
+            attempt to gain unauthorised access to any part of the Service or its infrastructure;
+          </li>
+          <li>
+            scrape, crawl, or use automated tools to extract data without our written permission;
+          </li>
           <li>sell, transfer, or sublicence your account;</li>
-          <li>manipulate engagement metrics (likes, followers, views) through inauthentic means;</li>
-          <li>use the Blend (watch-together) feature to stream or share content you do not have the
-            rights to redistribute.</li>
+          <li>
+            manipulate engagement metrics (likes, followers, views) through inauthentic means;
+          </li>
+          <li>
+            use the Blend (watch-together) feature to stream or share content you do not have the
+            rights to redistribute.
+          </li>
         </ul>
       </Section>
 
@@ -145,10 +153,10 @@ export function TermsScreen() {
 
       <Section title="11. Governing law">
         <p>
-          These Terms are governed by and construed in accordance with the laws of England and Wales.
-          Any disputes shall be subject to the exclusive jurisdiction of the courts of England and
-          Wales, except where mandatory consumer-protection laws in your country of residence give
-          you the right to bring proceedings locally.
+          These Terms are governed by and construed in accordance with the laws of England and
+          Wales. Any disputes shall be subject to the exclusive jurisdiction of the courts of
+          England and Wales, except where mandatory consumer-protection laws in your country of
+          residence give you the right to bring proceedings locally.
         </p>
       </Section>
 

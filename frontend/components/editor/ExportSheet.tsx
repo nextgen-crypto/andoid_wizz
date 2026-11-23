@@ -5,7 +5,13 @@ import { cn } from "@/lib/utils";
 
 type ExportState = "idle" | "rendering" | "done" | "error";
 
-export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: (url: string) => void }) {
+export function ExportSheet({
+  onClose,
+  onPost,
+}: {
+  onClose: () => void;
+  onPost: (url: string) => void;
+}) {
   const { project } = useEditorStore();
   const [state, setState] = useState<ExportState>("idle");
   const [progress, setProgress] = useState(0);
@@ -37,7 +43,11 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
           cropScale: c.cropScale,
         })),
         soundTrack: project.soundTrack
-          ? { src: project.soundTrack.src, startOffset: project.soundTrack.startOffset, volume: project.soundTrack.volume }
+          ? {
+              src: project.soundTrack.src,
+              startOffset: project.soundTrack.startOffset,
+              volume: project.soundTrack.volume,
+            }
           : null,
         textLayers: project.textLayers,
         stickers: project.stickers,
@@ -48,7 +58,10 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
 
       // Simulate progress while waiting for the server
       const ticker = setInterval(() => {
-        if (ac.signal.aborted) { clearInterval(ticker); return; }
+        if (ac.signal.aborted) {
+          clearInterval(ticker);
+          return;
+        }
         setProgress((p) => Math.min(p + 3, 90));
       }, 400);
 
@@ -65,11 +78,15 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
           signal: ac.signal,
         });
         if (resp.ok) {
-          const { id } = await resp.json() as { id: string };
+          const { id } = (await resp.json()) as { id: string };
           while (!ac.signal.aborted) {
             await new Promise((r) => setTimeout(r, 1500));
             const poll = await fetch(`/api/render/${id}`, { signal: ac.signal });
-            const status = await poll.json() as { status: string; progress: number; outputUrl?: string };
+            const status = (await poll.json()) as {
+              status: string;
+              progress: number;
+              outputUrl?: string;
+            };
             setProgress(status.progress ?? 90);
             if (status.status === "done" && status.outputUrl) {
               outputUrl = status.outputUrl;
@@ -114,7 +131,10 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
 
       <div className="flex w-full items-center justify-between">
         <p className="text-lg font-bold text-white">Export</p>
-        <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10">
+        <button
+          onClick={onClose}
+          className="grid size-8 place-items-center rounded-full bg-white/10"
+        >
           <X className="size-4 text-white" />
         </button>
       </div>
@@ -122,13 +142,16 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
       {state === "idle" && (
         <div className="w-full space-y-3 text-sm text-white/60">
           <div className="flex justify-between rounded-xl bg-[#2C2C2E] px-4 py-3">
-            <span>Resolution</span><span className="text-white">1080 × 1920</span>
+            <span>Resolution</span>
+            <span className="text-white">1080 × 1920</span>
           </div>
           <div className="flex justify-between rounded-xl bg-[#2C2C2E] px-4 py-3">
-            <span>Frame rate</span><span className="text-white">30 fps</span>
+            <span>Frame rate</span>
+            <span className="text-white">30 fps</span>
           </div>
           <div className="flex justify-between rounded-xl bg-[#2C2C2E] px-4 py-3">
-            <span>Format</span><span className="text-white">H.264 + AAC MP4</span>
+            <span>Format</span>
+            <span className="text-white">H.264 + AAC MP4</span>
           </div>
           <button
             onClick={startExport}
@@ -168,7 +191,10 @@ export function ExportSheet({ onClose, onPost }: { onClose: () => void; onPost: 
           >
             Post now
           </button>
-          <button onClick={onClose} className="w-full rounded-full bg-white/10 py-3 text-sm text-white/70">
+          <button
+            onClick={onClose}
+            className="w-full rounded-full bg-white/10 py-3 text-sm text-white/70"
+          >
             Done
           </button>
         </div>

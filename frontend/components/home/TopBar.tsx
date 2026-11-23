@@ -403,7 +403,7 @@ export function TopBar() {
   // Google OAuth picture is intentionally excluded — the initial letter shows
   // by default until the user edits their profile photo.
   const accountAvatar = myProfile?.avatar_url ?? null;
-  const accountInitial = (accountName).slice(0, 1).toUpperCase() || "W";
+  const accountInitial = accountName.slice(0, 1).toUpperCase() || "W";
 
   async function signOut() {
     close();
@@ -453,7 +453,11 @@ export function TopBar() {
               <MessageBadge userId={user?.id ?? null} />
             </button>
             {session ? (
-              <button onClick={() => setOpen("account")} aria-label="Your account" className="relative ml-1">
+              <button
+                onClick={() => setOpen("account")}
+                aria-label="Your account"
+                className="relative ml-1"
+              >
                 {accountAvatar ? (
                   <AvatarWithFallback
                     src={accountAvatar}

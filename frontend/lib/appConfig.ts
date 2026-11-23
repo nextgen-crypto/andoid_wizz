@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { AppConfig } from "@/frontend/components/admin/opStore";
+import type { Json } from "@/backend/integrations/supabase/types";
 
 /**
  * App-wide configuration (feature flags + maintenance mode).
@@ -64,7 +65,7 @@ export async function saveAppConfig(config: AppConfig, userId?: string | null): 
     const { error } = await supabase.from("app_settings").upsert(
       {
         key: SETTINGS_KEY,
-        value: config as unknown as Record<string, unknown>,
+        value: config as unknown as Json,
         updated_at: new Date().toISOString(),
         updated_by: userId ?? null,
       },

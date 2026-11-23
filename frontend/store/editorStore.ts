@@ -19,11 +19,11 @@ const AUTOSAVE_KEY = "wizz:editor:autosave";
 
 export interface EditorState {
   project: EditorProject;
-  history: EditorProject[];        // past states (oldest first)
-  future: EditorProject[];         // redo stack
-  playhead: number;                // seconds in project timeline
+  history: EditorProject[]; // past states (oldest first)
+  future: EditorProject[]; // redo stack
+  playhead: number; // seconds in project timeline
   playing: boolean;
-  zoom: number;                    // pixels per second for timeline
+  zoom: number; // pixels per second for timeline
   selectedClipId: string | null;
   activeSheet: ActiveSheet;
   dirty: boolean;
@@ -94,10 +94,7 @@ interface EditorActions {
 
 /* ─── Helper to push a mutated project into history ─────────────────────── */
 
-function pushHistory(
-  state: EditorState,
-  next: EditorProject,
-): Partial<EditorState> {
+function pushHistory(state: EditorState, next: EditorProject): Partial<EditorState> {
   const history = [...state.history, state.project].slice(-MAX_HISTORY);
   return { project: next, history, future: [], dirty: true };
 }
@@ -110,15 +107,14 @@ export const useEditorStore = create<EditorState & EditorActions>()((set, get) =
   future: [],
   playhead: 0,
   playing: false,
-  zoom: 60,        // 60px per second default
+  zoom: 60, // 60px per second default
   selectedClipId: null,
   activeSheet: null,
   dirty: false,
 
   /* ── Project mutations ── */
 
-  setClips: (clips) =>
-    set((s) => pushHistory(s, { ...s.project, clips })),
+  setClips: (clips) => set((s) => pushHistory(s, { ...s.project, clips })),
 
   addClip: (clip) =>
     set((s) => pushHistory(s, { ...s.project, clips: [...s.project.clips, clip] })),
@@ -173,13 +169,10 @@ export const useEditorStore = create<EditorState & EditorActions>()((set, get) =
       return pushHistory(s, { ...s.project, clips: next });
     }),
 
-  setSoundTrack: (soundTrack) =>
-    set((s) => pushHistory(s, { ...s.project, soundTrack })),
+  setSoundTrack: (soundTrack) => set((s) => pushHistory(s, { ...s.project, soundTrack })),
 
   addTextLayer: (l) =>
-    set((s) =>
-      pushHistory(s, { ...s.project, textLayers: [...s.project.textLayers, l] }),
-    ),
+    set((s) => pushHistory(s, { ...s.project, textLayers: [...s.project.textLayers, l] })),
 
   updateTextLayer: (id, patch) =>
     set((s) =>
@@ -198,9 +191,7 @@ export const useEditorStore = create<EditorState & EditorActions>()((set, get) =
     ),
 
   addSticker: (sticker) =>
-    set((s) =>
-      pushHistory(s, { ...s.project, stickers: [...s.project.stickers, sticker] }),
-    ),
+    set((s) => pushHistory(s, { ...s.project, stickers: [...s.project.stickers, sticker] })),
 
   updateSticker: (id, patch) =>
     set((s) =>
@@ -218,14 +209,11 @@ export const useEditorStore = create<EditorState & EditorActions>()((set, get) =
       }),
     ),
 
-  setGlobalFilter: (globalFilter) =>
-    set((s) => pushHistory(s, { ...s.project, globalFilter })),
+  setGlobalFilter: (globalFilter) => set((s) => pushHistory(s, { ...s.project, globalFilter })),
 
-  setGlobalAdjust: (globalAdjust) =>
-    set((s) => pushHistory(s, { ...s.project, globalAdjust })),
+  setGlobalAdjust: (globalAdjust) => set((s) => pushHistory(s, { ...s.project, globalAdjust })),
 
-  setBgColor: (bgColor) =>
-    set((s) => pushHistory(s, { ...s.project, bgColor })),
+  setBgColor: (bgColor) => set((s) => pushHistory(s, { ...s.project, bgColor })),
 
   /* ── Playback ── */
 

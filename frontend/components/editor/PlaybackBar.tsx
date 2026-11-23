@@ -11,10 +11,8 @@ function fmt(secs: number): string {
 }
 
 export function PlaybackBar({ onFullscreen }: { onFullscreen?: () => void }) {
-  const {
-    project, playhead, playing, selectedClipId,
-    setPlaying, undo, redo, canUndo, canRedo,
-  } = useEditorStore();
+  const { project, playhead, playing, selectedClipId, setPlaying, undo, redo, canUndo, canRedo } =
+    useEditorStore();
 
   const dur = projectDuration(project.clips);
 
@@ -32,7 +30,11 @@ export function PlaybackBar({ onFullscreen }: { onFullscreen?: () => void }) {
         onClick={() => setPlaying(!playing)}
         className="mx-auto grid size-10 place-items-center rounded-full bg-white/10 text-white active:scale-95"
       >
-        {playing ? <Pause className="size-5 fill-white" /> : <Play className="size-5 translate-x-0.5 fill-white" />}
+        {playing ? (
+          <Pause className="size-5 fill-white" />
+        ) : (
+          <Play className="size-5 translate-x-0.5 fill-white" />
+        )}
       </button>
 
       {/* Right controls */}

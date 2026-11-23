@@ -101,10 +101,13 @@ export function CropSheet({
     if (!natural || !stage.w || !initialTargetNorm || autoApplied) return;
     setAutoApplied(true);
     const activeAspect = forcedAspect ?? aspect;
-    const r = ASPECTS.find((a) => a.id === activeAspect)?.ratio ?? (natural.w / natural.h);
+    const r = ASPECTS.find((a) => a.id === activeAspect)?.ratio ?? natural.w / natural.h;
     let boxW = stage.w;
     let boxH = stage.w / r;
-    if (boxH > stage.h) { boxH = stage.h; boxW = stage.h * r; }
+    if (boxH > stage.h) {
+      boxH = stage.h;
+      boxW = stage.h * r;
+    }
     const base = Math.max(boxW / natural.w, boxH / natural.h);
     const dw = natural.w * base;
     const dh = natural.h * base;
@@ -224,7 +227,11 @@ export function CropSheet({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={circularPreview ? "Crop profile photo" : "Crop photo"}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={circularPreview ? "Crop profile photo" : "Crop photo"}
+    >
       <div className="space-y-3 pb-2">
         <div
           ref={stageRef}

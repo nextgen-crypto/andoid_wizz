@@ -1,15 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  Eye,
-  Loader2,
-  MessageCircle,
-  Plus,
-  Trash2,
-  Volume2,
-  VolumeX,
-  X,
-} from "lucide-react";
+import { Eye, Loader2, MessageCircle, Plus, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { imageUrl } from "@/backend/domain/media";
 import { neutralizeBrokenImage } from "@/frontend/lib/mediaFormat";
 import type { StoryItem } from "@/backend/services/feedService";
@@ -241,7 +232,11 @@ export function StoryRail({
             onClick={() => {
               if (hasMyStories) {
                 const firstMyIdx = visibleStories.findIndex((s) => s.author.id === userId);
-                if (firstMyIdx !== -1) { setActive(firstMyIdx); markSeen(visibleStories[firstMyIdx]!); return; }
+                if (firstMyIdx !== -1) {
+                  setActive(firstMyIdx);
+                  markSeen(visibleStories[firstMyIdx]!);
+                  return;
+                }
               }
               openCreate("story");
             }}
@@ -251,11 +246,7 @@ export function StoryRail({
             <span
               className={cn(
                 "relative block rounded-full p-[2.5px]",
-                hasMyStories
-                  ? myStoriesAllViewed
-                    ? "bg-border"
-                    : "story-ring"
-                  : "bg-transparent",
+                hasMyStories ? (myStoriesAllViewed ? "bg-border" : "story-ring") : "bg-transparent",
               )}
             >
               <img
@@ -329,7 +320,10 @@ export function StoryRail({
             {/* Segment progress bars */}
             <div className="flex gap-1.5 px-3 pt-2 pb-1">
               {visibleStories.map((item, i) => (
-                <span key={item.id} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/35">
+                <span
+                  key={item.id}
+                  className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/35"
+                >
                   <span
                     className="block h-full origin-left bg-white transition-transform"
                     style={{
@@ -430,7 +424,10 @@ export function StoryRail({
                 alt={story.caption || `${story.author.displayName}'s story`}
                 className="size-full object-cover"
                 onLoad={() => setMediaLoaded(true)}
-                onError={() => { setMediaError(true); setMediaLoaded(true); }}
+                onError={() => {
+                  setMediaError(true);
+                  setMediaLoaded(true);
+                }}
               />
             ) : story.mediaType === "video" && story.mediaUrl ? (
               <video
@@ -442,7 +439,10 @@ export function StoryRail({
                 muted={muted}
                 className="size-full object-contain"
                 onLoadedData={() => setMediaLoaded(true)}
-                onError={() => { setMediaError(true); setMediaLoaded(true); }}
+                onError={() => {
+                  setMediaError(true);
+                  setMediaLoaded(true);
+                }}
                 onTimeUpdate={(e) => {
                   const v = e.currentTarget;
                   if (v.duration > 0) setProgress(v.currentTime / v.duration);

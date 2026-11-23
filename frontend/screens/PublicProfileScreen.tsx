@@ -380,9 +380,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
               <p className="text-lg font-bold text-foreground">
                 {compact.format(stats?.followers ?? 0)}
               </p>
-              <p className="text-xs font-medium tracking-wider text-muted-foreground">
-                FOLLOWERS
-              </p>
+              <p className="text-xs font-medium tracking-wider text-muted-foreground">FOLLOWERS</p>
             </Link>
             <Link
               to="/u/$username/following"
@@ -392,9 +390,7 @@ export function PublicProfileScreen({ username }: { username: string }) {
               <p className="text-lg font-bold text-foreground">
                 {compact.format(stats?.following ?? 0)}
               </p>
-              <p className="text-xs font-medium tracking-wider text-muted-foreground">
-                FOLLOWING
-              </p>
+              <p className="text-xs font-medium tracking-wider text-muted-foreground">FOLLOWING</p>
             </Link>
           </div>
         )}
@@ -447,7 +443,9 @@ export function PublicProfileScreen({ username }: { username: string }) {
                         src={p.thumbnail_url || p.image_url!}
                         alt={p.caption || "Post"}
                         loading="lazy"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = "none";
+                        }}
                         className="aspect-square w-full bg-surface-strong object-cover"
                       />
                     ) : (

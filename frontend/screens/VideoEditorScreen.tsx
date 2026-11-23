@@ -14,9 +14,7 @@ import { SpeedSheet } from "@/frontend/components/editor/SpeedSheet";
 import { TextSheet } from "@/frontend/components/editor/TextSheet";
 import { ExportSheet } from "@/frontend/components/editor/ExportSheet";
 import { BackgroundSheet } from "@/frontend/components/editor/BackgroundSheet";
-import {
-  type EditorClip,
-} from "@/frontend/lib/editorTypes";
+import { type EditorClip } from "@/frontend/lib/editorTypes";
 import { generateVideoThumbnails } from "@/frontend/lib/videoEdit";
 import { typedBlobUrl } from "@/frontend/lib/mediaFormat";
 import { cn } from "@/lib/utils";
@@ -41,9 +39,7 @@ function SheetOverlay({
         aria-label="Close sheet"
       />
       {/* Sheet slides up from bottom */}
-      <div className="absolute inset-x-0 bottom-0 animate-sheet-in">
-        {children}
-      </div>
+      <div className="absolute inset-x-0 bottom-0 animate-sheet-in">{children}</div>
     </div>
   );
 }
@@ -63,9 +59,7 @@ function DiscardDialog({
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/70 px-8">
       <div className="w-full max-w-sm rounded-[28px] bg-[#1C1C1E] p-6">
         <p className="text-center text-lg font-bold text-white">Discard edits?</p>
-        <p className="mt-1 text-center text-sm text-white/60">
-          Your changes will be lost.
-        </p>
+        <p className="mt-1 text-center text-sm text-white/60">Your changes will be lost.</p>
         <div className="mt-5 flex flex-col gap-2">
           <button
             onClick={onDiscard}
@@ -92,8 +86,18 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
   const replaceInputRef = useRef<HTMLInputElement>(null);
 
   const {
-    project, playhead, activeSheet, selectedClipId, dirty,
-    addClip, updateClip, selectClip, openSheet, closeSheet, resetProject, autosave,
+    project,
+    playhead,
+    activeSheet,
+    selectedClipId,
+    dirty,
+    addClip,
+    updateClip,
+    selectClip,
+    openSheet,
+    closeSheet,
+    resetProject,
+    autosave,
   } = useEditorStore();
 
   /* ── Load initial file if provided ── */
@@ -115,7 +119,10 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
   const [showDiscard, setShowDiscard] = useState(false);
 
   function handleBack() {
-    if (dirty) { setShowDiscard(true); return; }
+    if (dirty) {
+      setShowDiscard(true);
+      return;
+    }
     router.history.back();
   }
 
@@ -123,7 +130,11 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
   function onAddFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-    files.forEach((f) => loadFileAsClip(f).then((c) => { if (c) addClip(c); }));
+    files.forEach((f) =>
+      loadFileAsClip(f).then((c) => {
+        if (c) addClip(c);
+      }),
+    );
     e.target.value = "";
   }
 
@@ -131,7 +142,14 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
     const file = e.target.files?.[0];
     if (!file || !selectedClipId) return;
     loadFileAsClip(file).then((c) => {
-      if (c) updateClip(selectedClipId, { file: c.file, src: c.src, nativeDuration: c.nativeDuration, trimEnd: c.nativeDuration, thumbnails: c.thumbnails });
+      if (c)
+        updateClip(selectedClipId, {
+          file: c.file,
+          src: c.src,
+          nativeDuration: c.nativeDuration,
+          trimEnd: c.nativeDuration,
+          thumbnails: c.thumbnails,
+        });
     });
     e.target.value = "";
   }
@@ -161,7 +179,6 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
         }
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isClipSelected = selectedClipId !== null;
@@ -213,9 +230,7 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
         style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)" }}
       >
         {isClipSelected ? (
-          <ClipToolbar
-            onReplace={() => replaceInputRef.current?.click()}
-          />
+          <ClipToolbar onReplace={() => replaceInputRef.current?.click()} />
         ) : (
           <MainToolbar onEditClip={selectClipUnderPlayhead} />
         )}
@@ -268,19 +283,33 @@ export function VideoEditorScreen({ initialFile }: { initialFile?: File | null }
         <BackgroundSheet onClose={closeSheet} />
       </SheetOverlay>
       {/* Stub sheets for AI tools */}
-      {(["magic","captions","overlay","effects","crop","volume","mask","opacity","voiceEffect","retouch"] as const).map(
-        (id) => (
-          <SheetOverlay key={id} open={activeSheet === id} onDismiss={closeSheet}>
-            <StubSheet name={id} onClose={closeSheet} />
-          </SheetOverlay>
-        ),
-      )}
+      {(
+        [
+          "magic",
+          "captions",
+          "overlay",
+          "effects",
+          "crop",
+          "volume",
+          "mask",
+          "opacity",
+          "voiceEffect",
+          "retouch",
+        ] as const
+      ).map((id) => (
+        <SheetOverlay key={id} open={activeSheet === id} onDismiss={closeSheet}>
+          <StubSheet name={id} onClose={closeSheet} />
+        </SheetOverlay>
+      ))}
 
       {/* ── Discard dialog ── */}
       <DiscardDialog
         open={showDiscard}
         onKeep={() => setShowDiscard(false)}
-        onDiscard={() => { resetProject(); router.history.back(); }}
+        onDiscard={() => {
+          resetProject();
+          router.history.back();
+        }}
       />
     </div>
   );
@@ -312,23 +341,35 @@ function StubSheet({ name, onClose }: { name: string; onClose: () => void }) {
         <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20" />
         <div className="flex items-center justify-between pt-4 pb-3">
           <p className="text-base font-bold text-white">Volume</p>
-          <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10">
+          <button
+            onClick={onClose}
+            className="grid size-8 place-items-center rounded-full bg-white/10"
+          >
             <span className="text-white text-xs font-bold">✓</span>
           </button>
         </div>
         <div className="space-y-4 pb-4">
           <div>
             <div className="mb-1 flex justify-between text-xs text-white/60">
-              <span>Clip audio</span><span>{Math.round(clip.volume * 100)}%</span>
+              <span>Clip audio</span>
+              <span>{Math.round(clip.volume * 100)}%</span>
             </div>
-            <input type="range" min={0} max={200} value={clip.volume * 100}
+            <input
+              type="range"
+              min={0}
+              max={200}
+              value={clip.volume * 100}
               onChange={(e) => updateClip(clip.id, { volume: Number(e.target.value) / 100 })}
-              className="w-full" style={{ accentColor: "#FE2C55" }} />
+              className="w-full"
+              style={{ accentColor: "#FE2C55" }}
+            />
           </div>
           <button
             onClick={() => updateClip(clip.id, { muted: !clip.muted })}
-            className={cn("w-full rounded-full py-2.5 text-sm font-semibold",
-              clip.muted ? "bg-[#FE2C55] text-white" : "bg-[#2C2C2E] text-white/70")}
+            className={cn(
+              "w-full rounded-full py-2.5 text-sm font-semibold",
+              clip.muted ? "bg-[#FE2C55] text-white" : "bg-[#2C2C2E] text-white/70",
+            )}
           >
             {clip.muted ? "Unmute clip" : "Mute clip"}
           </button>
@@ -344,17 +385,27 @@ function StubSheet({ name, onClose }: { name: string; onClose: () => void }) {
         <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20" />
         <div className="flex items-center justify-between pt-4 pb-3">
           <p className="text-base font-bold text-white">Opacity</p>
-          <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10">
+          <button
+            onClick={onClose}
+            className="grid size-8 place-items-center rounded-full bg-white/10"
+          >
             <span className="text-white text-xs font-bold">✓</span>
           </button>
         </div>
         <div className="pb-4">
           <div className="mb-1 flex justify-between text-xs text-white/60">
-            <span>Opacity</span><span>{Math.round(clip.opacity * 100)}%</span>
+            <span>Opacity</span>
+            <span>{Math.round(clip.opacity * 100)}%</span>
           </div>
-          <input type="range" min={0} max={100} value={clip.opacity * 100}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={clip.opacity * 100}
             onChange={(e) => updateClip(clip.id, { opacity: Number(e.target.value) / 100 })}
-            className="w-full" style={{ accentColor: "#FE2C55" }} />
+            className="w-full"
+            style={{ accentColor: "#FE2C55" }}
+          />
         </div>
       </div>
     );
@@ -365,7 +416,10 @@ function StubSheet({ name, onClose }: { name: string; onClose: () => void }) {
       <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20" />
       <div className="flex items-center justify-between pt-4 pb-4">
         <p className="text-base font-bold text-white">{label}</p>
-        <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10">
+        <button
+          onClick={onClose}
+          className="grid size-8 place-items-center rounded-full bg-white/10"
+        >
           <span className="text-white text-sm">✕</span>
         </button>
       </div>
@@ -386,11 +440,18 @@ async function loadFileAsClip(file: File): Promise<EditorClip | null> {
   // The main src blob URL — kept alive for the entire editor session.
   // NEVER revoke this until the editor unmounts.
   const src = typedBlobUrl(file);
-  console.log("[editor] loadFileAsClip", file.name, file.type, `${(file.size / 1024).toFixed(0)} KB`, src.slice(-30));
+  console.log(
+    "[editor] loadFileAsClip",
+    file.name,
+    file.type,
+    `${(file.size / 1024).toFixed(0)} KB`,
+    src.slice(-30),
+  );
 
   let duration = 0;
 
-  const isVideo = file.type.startsWith("video/") || /\.(mp4|m4v|mov|webm|ogv|3gp|mkv|avi|ts)$/i.test(file.name);
+  const isVideo =
+    file.type.startsWith("video/") || /\.(mp4|m4v|mov|webm|ogv|3gp|mkv|avi|ts)$/i.test(file.name);
   if (isVideo) {
     // Use a SEPARATE URL for the metadata probe so revoking the probe URL
     // never kills the main src that the <video> player will use.
@@ -406,19 +467,27 @@ async function loadFileAsClip(file: File): Promise<EditorClip | null> {
         settled = true;
         resolve(dur);
       };
-      v.addEventListener("loadedmetadata", () => {
-        console.log("[editor] probe OK dur:", v.duration);
-        done(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
-      }, { once: true });
-      v.addEventListener("error", () => {
-        console.log("[editor] probe FAIL code:", v.error?.code, v.error?.message);
-        done(0);
-      }, { once: true });
+      v.addEventListener(
+        "loadedmetadata",
+        () => {
+          console.log("[editor] probe OK dur:", v.duration);
+          done(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
+        },
+        { once: true },
+      );
+      v.addEventListener(
+        "error",
+        () => {
+          console.log("[editor] probe FAIL code:", v.error?.code, v.error?.message);
+          done(0);
+        },
+        { once: true },
+      );
       // 8-second safety valve in case events never fire (codec not supported)
       window.setTimeout(() => done(0), 8000);
       v.src = probeUrl;
     });
-    URL.revokeObjectURL(probeUrl);  // Safe: only revokes the probe copy
+    URL.revokeObjectURL(probeUrl); // Safe: only revokes the probe copy
     // If probe returned 0 (codec can't be detected), use a large fallback so
     // the clip is still editable; PreviewCanvas will fix the real duration
     // once loadedmetadata fires on the display video element.
@@ -436,7 +505,9 @@ async function loadFileAsClip(file: File): Promise<EditorClip | null> {
     } else {
       thumbnails = [src]; // image preview = the clip itself
     }
-  } catch { /* thumbnails is fine empty */ }
+  } catch {
+    /* thumbnails is fine empty */
+  }
 
   const clip: EditorClip = {
     id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
@@ -450,9 +521,18 @@ async function loadFileAsClip(file: File): Promise<EditorClip | null> {
     muted: false,
     filter: "none",
     adjust: {
-      brightness: 0, contrast: 0, saturation: 0, brilliance: 0,
-      sharpness: 0, highlight: 0, shadow: 0, temperature: 0,
-      tint: 0, fade: 0, vignette: 0, grain: 0,
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      brilliance: 0,
+      sharpness: 0,
+      highlight: 0,
+      shadow: 0,
+      temperature: 0,
+      tint: 0,
+      fade: 0,
+      vignette: 0,
+      grain: 0,
     },
     keyframes: [],
     cropX: 0,
@@ -463,4 +543,3 @@ async function loadFileAsClip(file: File): Promise<EditorClip | null> {
   };
   return clip;
 }
-

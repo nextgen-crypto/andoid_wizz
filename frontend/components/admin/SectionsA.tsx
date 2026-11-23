@@ -5,7 +5,11 @@ import {
   resolveAdminReport,
   type ResolveAction,
 } from "@/backend/api/admin.functions";
-import { fetchAdminCreators, adminSetPostStatus, type AdminCreator } from "@/backend/api/admin-console";
+import {
+  fetchAdminCreators,
+  adminSetPostStatus,
+  type AdminCreator,
+} from "@/backend/api/admin-console";
 import { TRACKS } from "@/frontend/components/create/creationEngine";
 import { Badge, Empty, Field, Panel, Select, inputCls } from "@/frontend/components/admin/ui";
 import { exportCsv, newId, type ActFn, type OpStore } from "@/frontend/components/admin/opStore";
@@ -28,15 +32,7 @@ const tz = (n: number) => `TZS ${n.toLocaleString()}`;
 /* ---------------------------------------------------------- CONTENT */
 
 type ContentTab =
-  | "posts"
-  | "videos"
-  | "shorts"
-  | "stories"
-  | "news"
-  | "comments"
-  | "tags"
-  | "audio"
-  | "live";
+  "posts" | "videos" | "shorts" | "stories" | "news" | "comments" | "tags" | "audio" | "live";
 
 const CONTENT_TABS: ContentTab[] = [
   "posts",
@@ -93,7 +89,11 @@ export function ContentSection({ m, ops, act }: SectionProps) {
     queryKey: ["admin-content", "posts"],
     staleTime: 30_000,
     retry: false,
-    queryFn: () => fetchPostsWhere([["content_kind", "post"], ["content_type", ""]]),
+    queryFn: () =>
+      fetchPostsWhere([
+        ["content_kind", "post"],
+        ["content_type", ""],
+      ]),
   });
   const videosQ = useQuery({
     queryKey: ["admin-content", "videos"],
@@ -143,8 +143,7 @@ export function ContentSection({ m, ops, act }: SectionProps) {
   });
   const names = new Map((m?.users ?? []).map((u) => [u.id, u.username]));
   const isHidden = (row: ContentRow) =>
-    row.status !== "published" ||
-    ops.hidden.some((h) => h.kind === "post" && h.refId === row.id);
+    row.status !== "published" || ops.hidden.some((h) => h.kind === "post" && h.refId === row.id);
 
   /** Hide = archive server-side, which drops the post out of every feed for
    *  every user; Restore puts it back. The old button only wrote to this
@@ -182,7 +181,8 @@ export function ContentSection({ m, ops, act }: SectionProps) {
                   {p.caption.slice(0, 80) || "Photo post"}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  @{names.get(p.author_id) ?? "?"} · {p.content_kind === "story" ? "story" : p.content_type || p.category || "post"} ·{" "}
+                  @{names.get(p.author_id) ?? "?"} ·{" "}
+                  {p.content_kind === "story" ? "story" : p.content_type || p.category || "post"} ·{" "}
                   {timeAgo(p.created_at)}
                 </span>
               </span>
@@ -215,26 +215,27 @@ export function ContentSection({ m, ops, act }: SectionProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
-        {CONTENT_TABS.map(
-          (t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={cn(
-                "rounded-full px-4 py-2 text-xs font-bold capitalize",
-                tab === t
-                  ? "bg-foreground text-background"
-                  : "bg-card text-muted-foreground border border-border",
-              )}
-            >
-              {t}
-            </button>
-          ),
-        )}
+        {CONTENT_TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "rounded-full px-4 py-2 text-xs font-bold capitalize",
+              tab === t
+                ? "bg-foreground text-background"
+                : "bg-card text-muted-foreground border border-border",
+            )}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
       {tab === "posts" && (
-        <Panel title={`Posts (${postsQ.data?.length ?? 0})`} hint="Live from the posts table · latest 50">
+        <Panel
+          title={`Posts (${postsQ.data?.length ?? 0})`}
+          hint="Live from the posts table · latest 50"
+        >
           {loading(postsQ) ?? renderRows(postsQ.data ?? [], ["admin-content", "posts"])}
         </Panel>
       )}

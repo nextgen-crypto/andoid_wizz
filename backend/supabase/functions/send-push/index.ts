@@ -105,11 +105,15 @@ Deno.serve(async (req: Request) => {
   if (!tokens?.length) return new Response("no tokens", { status: 200 });
 
   const title =
-    body.kind === "follow" ? "New follower"
-    : body.kind === "like" ? "Someone liked your post"
-    : body.kind === "comment" ? "New comment"
-    : body.kind === "blend_invite" ? "Blend invite"
-    : "New activity";
+    body.kind === "follow"
+      ? "New follower"
+      : body.kind === "like"
+        ? "Someone liked your post"
+        : body.kind === "comment"
+          ? "New comment"
+          : body.kind === "blend_invite"
+            ? "Blend invite"
+            : "New activity";
 
   const accessToken = await getOAuthToken(sa);
 

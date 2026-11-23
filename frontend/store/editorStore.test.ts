@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, it, expect } from "vitest";
 import { useEditorStore } from "./editorStore";
-import { DEFAULT_ADJUST, type EditorClip, type TextLayer, type StickerLayer } from "@/frontend/lib/editorTypes";
+import {
+  DEFAULT_ADJUST,
+  type EditorClip,
+  type TextLayer,
+  type StickerLayer,
+} from "@/frontend/lib/editorTypes";
 
 function makeClip(id: string, nativeDuration: number, opts?: Partial<EditorClip>): EditorClip {
   return {
@@ -30,7 +35,8 @@ function makeTextLayer(id: string, overrides?: Partial<TextLayer>): TextLayer {
   return {
     id,
     text: "Hello",
-    x: 0.5, y: 0.5,
+    x: 0.5,
+    y: 0.5,
     scale: 1,
     rotation: 0,
     color: "#fff",
@@ -51,7 +57,8 @@ function makeSticker(id: string, overrides?: Partial<StickerLayer>): StickerLaye
   return {
     id,
     emoji: "😍",
-    x: 0.5, y: 0.5,
+    x: 0.5,
+    y: 0.5,
     scale: 1,
     rotation: 0,
     startTime: 0,

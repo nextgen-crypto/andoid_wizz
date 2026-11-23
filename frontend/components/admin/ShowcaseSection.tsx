@@ -289,7 +289,11 @@ export function ShowcaseSection({ userId }: { userId: string | null }) {
               ? "Synced — active slides show in the app feed on every device"
               : "Offline — showing this browser's copy; the app won't see changes yet"
         }
-        right={<Badge tone={live === null ? "gray" : live ? "dark" : "red"}>{live ? "server" : "local"}</Badge>}
+        right={
+          <Badge tone={live === null ? "gray" : live ? "dark" : "red"}>
+            {live ? "server" : "local"}
+          </Badge>
+        }
       >
         {slides.length === 0 ? (
           <Empty text="No slides yet — build your first animated banner above." />

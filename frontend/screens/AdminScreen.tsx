@@ -154,10 +154,7 @@ export function AdminScreen() {
               />
               {connected ? "LIVE" : "…"}
             </span>
-            <Link
-              to="/"
-              className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold"
-            >
+            <Link to="/" className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold">
               ← App
             </Link>
           </div>

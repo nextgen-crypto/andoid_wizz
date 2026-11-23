@@ -21,7 +21,10 @@ export function SpeedSheet({ onClose }: { onClose: () => void }) {
       <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20" />
       <div className="flex items-center justify-between pt-4 pb-3">
         <p className="text-base font-bold text-white">Speed</p>
-        <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10">
+        <button
+          onClick={onClose}
+          className="grid size-8 place-items-center rounded-full bg-white/10"
+        >
           <Check className="size-4 text-white" />
         </button>
       </div>
@@ -34,9 +37,7 @@ export function SpeedSheet({ onClose }: { onClose: () => void }) {
             onClick={() => apply(p)}
             className={cn(
               "flex-1 rounded-full py-2 text-sm font-bold transition-colors",
-              Math.abs(speed - p) < 0.01
-                ? "bg-[#FE2C55] text-white"
-                : "bg-[#2C2C2E] text-white/70",
+              Math.abs(speed - p) < 0.01 ? "bg-[#FE2C55] text-white" : "bg-[#2C2C2E] text-white/70",
             )}
           >
             {p}×

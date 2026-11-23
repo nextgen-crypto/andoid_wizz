@@ -313,7 +313,6 @@ export function HomeScreen() {
   const [hiddenPromos, setHiddenPromos] = useState<string[]>([]);
   const livePromos = promotions.filter((p) => !hiddenPromos.includes(p.campaignId));
 
-
   return (
     <div
       className="mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background md:border-x md:border-border"

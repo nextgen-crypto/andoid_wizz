@@ -15,18 +15,18 @@ interface Param {
 }
 
 const PARAMS: Param[] = [
-  { key: "brightness",  label: "Brightness",  icon: "☀️", min: -100, max: 100 },
-  { key: "contrast",    label: "Contrast",    icon: "◐",  min: -100, max: 100 },
-  { key: "saturation",  label: "Saturation",  icon: "🎨", min: -100, max: 100 },
-  { key: "brilliance",  label: "Brilliance",  icon: "✨", min: -100, max: 100 },
-  { key: "sharpness",   label: "Sharpness",   icon: "🔍", min: 0,    max: 100 },
-  { key: "highlight",   label: "Highlight",   icon: "🔆", min: -100, max: 100 },
-  { key: "shadow",      label: "Shadow",      icon: "🌑", min: -100, max: 100 },
-  { key: "temperature", label: "Temp",        icon: "🌡",  min: -100, max: 100 },
-  { key: "tint",        label: "Tint",        icon: "💜", min: -100, max: 100 },
-  { key: "fade",        label: "Fade",        icon: "🌫", min: 0,    max: 100 },
-  { key: "vignette",    label: "Vignette",    icon: "⬤",  min: 0,    max: 100 },
-  { key: "grain",       label: "Grain",       icon: "⠿",  min: 0,    max: 100 },
+  { key: "brightness", label: "Brightness", icon: "☀️", min: -100, max: 100 },
+  { key: "contrast", label: "Contrast", icon: "◐", min: -100, max: 100 },
+  { key: "saturation", label: "Saturation", icon: "🎨", min: -100, max: 100 },
+  { key: "brilliance", label: "Brilliance", icon: "✨", min: -100, max: 100 },
+  { key: "sharpness", label: "Sharpness", icon: "🔍", min: 0, max: 100 },
+  { key: "highlight", label: "Highlight", icon: "🔆", min: -100, max: 100 },
+  { key: "shadow", label: "Shadow", icon: "🌑", min: -100, max: 100 },
+  { key: "temperature", label: "Temp", icon: "🌡", min: -100, max: 100 },
+  { key: "tint", label: "Tint", icon: "💜", min: -100, max: 100 },
+  { key: "fade", label: "Fade", icon: "🌫", min: 0, max: 100 },
+  { key: "vignette", label: "Vignette", icon: "⬤", min: 0, max: 100 },
+  { key: "grain", label: "Grain", icon: "⠿", min: 0, max: 100 },
 ];
 
 export function AdjustSheet({ onClose }: { onClose: () => void }) {
@@ -51,9 +51,7 @@ export function AdjustSheet({ onClose }: { onClose: () => void }) {
     } else {
       setGlobalAdjust(next);
       if (applyAll) {
-        useEditorStore
-          .getState()
-          .project.clips.forEach((c) => updateClip(c.id, { adjust: next }));
+        useEditorStore.getState().project.clips.forEach((c) => updateClip(c.id, { adjust: next }));
       }
     }
   }
@@ -131,9 +129,7 @@ export function AdjustSheet({ onClose }: { onClose: () => void }) {
               >
                 <span className="text-xl">{p.icon}</span>
                 <span className="text-[10px] font-semibold text-white">{p.label}</span>
-                {isDirty && (
-                  <span className="size-1.5 rounded-full bg-white" />
-                )}
+                {isDirty && <span className="size-1.5 rounded-full bg-white" />}
               </button>
             );
           })}
@@ -142,7 +138,10 @@ export function AdjustSheet({ onClose }: { onClose: () => void }) {
             onClick={() => {
               const auto: AdjustValues = {
                 ...DEFAULT_ADJUST,
-                brightness: 10, contrast: 8, saturation: 12, brilliance: 5,
+                brightness: 10,
+                contrast: 8,
+                saturation: 12,
+                brilliance: 5,
               };
               setLocal(auto);
               if (clip && !applyAll) updateClip(clip.id, { adjust: auto });

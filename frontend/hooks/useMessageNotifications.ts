@@ -112,7 +112,12 @@ export function useMessageNotifications(userId: string | null) {
       .channel(`notif:${userId}:${generation}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${userId}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `receiver_id=eq.${userId}`,
+        },
         async (payload) => {
           if (generation !== channelGeneration) return;
           const row = payload.new as { conversation_id: string; sender_id: string; body: string };

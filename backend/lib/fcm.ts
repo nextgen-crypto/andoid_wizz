@@ -12,7 +12,7 @@ let _tokenExpiry = 0;
 async function getOAuthToken(): Promise<string> {
   if (_cachedToken && Date.now() < _tokenExpiry - 60_000) return _cachedToken;
 
-  const saJson = process.env.FIREBASE_SA_JSON;
+  const saJson = process.env["FIREBASE_SA_JSON"];
   if (!saJson) throw new Error("FIREBASE_SA_JSON env var not set");
 
   const sa = JSON.parse(saJson) as ServiceAccount;
@@ -53,33 +53,30 @@ export async function sendFCM(
   body: string,
   data?: Record<string, string>,
 ): Promise<void> {
-  const saJson = process.env.FIREBASE_SA_JSON;
+  const saJson = process.env["FIREBASE_SA_JSON"];
   if (!saJson) return; // FCM not configured — skip silently
 
   const { project_id } = JSON.parse(saJson) as ServiceAccount;
   const accessToken = await getOAuthToken();
 
-  const resp = await fetch(
-    `https://fcm.googleapis.com/v1/projects/${project_id}/messages:send`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: {
-          token,
-          notification: { title, body },
-          android: {
-            priority: "high",
-            notification: { channel_id: "messages", sound: "default" },
-          },
-          data: data ?? {},
-        },
-      }),
+  const resp = await fetch(`https://fcm.googleapis.com/v1/projects/${project_id}/messages:send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      message: {
+        token,
+        notification: { title, body },
+        android: {
+          priority: "high",
+          notification: { channel_id: "messages", sound: "default" },
+        },
+        data: data ?? {},
+      },
+    }),
+  });
 
   if (!resp.ok) {
     console.error("FCM send failed:", await resp.text());
@@ -94,13 +91,16 @@ export async function sendFCMToUser(
   body: string,
   data?: Record<string, string>,
 ): Promise<void> {
-  if (!process.env.FIREBASE_SA_JSON) return;
+  if (!process.env["FIREBASE_SA_JSON"]) return;
 
-  const { data: rows } = (await (supabaseAdmin.from("push_tokens") as {
-    select: (c: string) => { eq: (...args: unknown[]) => Promise<{ data: { token: string }[] | null }> };
-  })
+  const { data: rows } = (await (
+    supabaseAdmin.from("push_tokens") as {
+      select: (c: string) => {
+        eq: (...args: unknown[]) => Promise<{ data: { token: string }[] | null }>;
+      };
+    }
+  )
     .select("token")
-    // @ts-ignore dynamic call
     .eq("user_id", userId)) as { data: { token: string }[] | null };
 
   if (!rows?.length) return;

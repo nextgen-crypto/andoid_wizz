@@ -15,8 +15,7 @@ import { getActiveConvId } from "@/frontend/hooks/useMessageNotifications";
  * crash is a native process death — not a catchable JS rejection. Vite bakes
  * this flag from the file's presence at build time.
  */
-const FCM_CONFIGURED =
-  typeof __WIZZ_FCM_CONFIGURED__ !== "undefined" && __WIZZ_FCM_CONFIGURED__;
+const FCM_CONFIGURED = typeof __WIZZ_FCM_CONFIGURED__ !== "undefined" && __WIZZ_FCM_CONFIGURED__;
 
 /** One registration for the lifetime of the WebView, not one per screen. */
 let configuredFor: string | null = null;
@@ -59,9 +58,7 @@ async function setupPush(userId: string, setupGeneration: number) {
       "pushNotificationReceived",
       async (notification) => {
         if (setupGeneration !== generation) return;
-        const data = notification.data as
-          | { type?: string; conversationId?: string }
-          | undefined;
+        const data = notification.data as { type?: string; conversationId?: string } | undefined;
         if (
           data?.type === "message" &&
           data.conversationId &&

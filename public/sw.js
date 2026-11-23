@@ -38,9 +38,7 @@ function shouldCache(request, url) {
 async function trimCache(cache) {
   const keys = await cache.keys();
   if (keys.length <= MAX_ENTRIES) return;
-  await Promise.all(
-    keys.slice(0, keys.length - MAX_ENTRIES).map((key) => cache.delete(key)),
-  );
+  await Promise.all(keys.slice(0, keys.length - MAX_ENTRIES).map((key) => cache.delete(key)));
 }
 
 self.addEventListener("install", (event) => {

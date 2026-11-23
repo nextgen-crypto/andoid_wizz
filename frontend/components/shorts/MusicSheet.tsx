@@ -41,14 +41,22 @@ export function MusicSheet({ open, onClose }: { open: boolean; onClose: () => vo
   function toggleSave(id: string) {
     setSaved((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      try {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
       return next;
     });
   }
 
   function handleUseSound(id: string) {
     player.pause();
-    try { localStorage.setItem("wizz:pending-track", id); } catch { /* ignore */ }
+    try {
+      localStorage.setItem("wizz:pending-track", id);
+    } catch {
+      /* ignore */
+    }
     onClose();
     openCreate("video");
   }
@@ -57,7 +65,10 @@ export function MusicSheet({ open, onClose }: { open: boolean; onClose: () => vo
     <div className="fixed inset-0 z-50 mx-auto w-full max-w-3xl" role="dialog" aria-label="Sounds">
       <button
         aria-label="Close sounds"
-        onClick={() => { player.pause(); onClose(); }}
+        onClick={() => {
+          player.pause();
+          onClose();
+        }}
         className="absolute inset-0 bg-black/40"
       />
       <div className="animate-sheet-in absolute inset-x-0 bottom-0 flex max-h-[72dvh] flex-col rounded-t-3xl border-t border-white/10 bg-black/70 backdrop-blur-xl">
@@ -68,7 +79,10 @@ export function MusicSheet({ open, onClose }: { open: boolean; onClose: () => vo
           </p>
           <button
             aria-label="Close sounds"
-            onClick={() => { player.pause(); onClose(); }}
+            onClick={() => {
+              player.pause();
+              onClose();
+            }}
             className="rounded-full p-1.5 hover:bg-white/10"
           >
             <X className="size-4 text-white" />
@@ -113,7 +127,7 @@ export function MusicSheet({ open, onClose }: { open: boolean; onClose: () => vo
           {pool.map((t) => {
             const isPlaying = player.playingId === t.id;
             const isLoading = player.loading && isPlaying;
-            const hasTone   = t.durationSec > 0;
+            const hasTone = t.durationSec > 0;
             return (
               <li key={t.id} className="flex flex-col gap-1 px-2 py-2.5">
                 <div className="flex items-center gap-3">
@@ -157,7 +171,9 @@ export function MusicSheet({ open, onClose }: { open: boolean; onClose: () => vo
                   </span>
 
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-white">{t.title}</span>
+                    <span className="block truncate text-sm font-semibold text-white">
+                      {t.title}
+                    </span>
                     <span className="block truncate text-xs text-white/60">
                       {t.creator} · {t.duration}
                     </span>

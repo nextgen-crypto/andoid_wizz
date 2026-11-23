@@ -40,14 +40,17 @@ async function nativeUpload(
   if (session) {
     const expiresAt = session.expires_at ?? 0;
     if (expiresAt - Math.floor(Date.now() / 1000) < 30) {
-      const { data } = await supabase.auth.refreshSession().catch(() => ({ data: { session: null } }));
+      const { data } = await supabase.auth
+        .refreshSession()
+        .catch(() => ({ data: { session: null } }));
       if (data.session) session = data.session;
     }
   }
   const accessToken = session?.access_token;
-  const projectUrl = (
-    (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ?? ""
-  ).replace(/\/$/, "");
+  const projectUrl = ((import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ?? "").replace(
+    /\/$/,
+    "",
+  );
   const publishableKey =
     (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ?? "";
 

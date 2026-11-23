@@ -12,10 +12,12 @@ export const savePushToken = createServerFn({ method: "POST" })
     if (!data.token) throw new Error("Missing FCM token.");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("push_tokens").upsert(
-      { user_id: userId, token: data.token, platform: data.platform },
-      { onConflict: "token" },
-    );
+    const { error } = await supabaseAdmin
+      .from("push_tokens")
+      .upsert(
+        { user_id: userId, token: data.token, platform: data.platform },
+        { onConflict: "token" },
+      );
     if (error) throw error;
     return { ok: true };
   });

@@ -32,13 +32,19 @@ async function fireHeadsUp(title: string, body: string) {
         importance: 4,
         vibration: true,
       });
-    } catch { /* already exists */ }
+    } catch {
+      /* already exists */
+    }
   }
   try {
     await LocalNotifications.schedule({
-      notifications: [{ id: _notifId++, title, body, channelId: "activity", smallIcon: "ic_notification" }],
+      notifications: [
+        { id: _notifId++, title, body, channelId: "activity", smallIcon: "ic_notification" },
+      ],
     });
-  } catch { /* non-fatal */ }
+  } catch {
+    /* non-fatal */
+  }
 }
 
 export interface AppNotification {
@@ -113,9 +119,14 @@ export function useNotifications(userId: string | null) {
       (payload) => {
         void queryClient.invalidateQueries({ queryKey: key });
         const row = payload.new as { kind: string; text: string };
-        const title = row.kind === "follow" ? "New follower" :
-                      row.kind === "like"   ? "Someone liked your post" :
-                      row.kind === "blend_invite" ? "Blend invite" : "New activity";
+        const title =
+          row.kind === "follow"
+            ? "New follower"
+            : row.kind === "like"
+              ? "Someone liked your post"
+              : row.kind === "blend_invite"
+                ? "Blend invite"
+                : "New activity";
         void fireHeadsUp(title, row.text.slice(0, 100));
       },
     );

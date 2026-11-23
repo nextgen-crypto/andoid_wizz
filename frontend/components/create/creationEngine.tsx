@@ -49,7 +49,11 @@ import {
   typedBlobUrl,
   type VideoMetadata,
 } from "@/frontend/lib/mediaFormat";
-import { canReencodeVideo, reencodeVideoClip, tryExtractPreviewFrame } from "@/frontend/lib/videoEdit";
+import {
+  canReencodeVideo,
+  reencodeVideoClip,
+  tryExtractPreviewFrame,
+} from "@/frontend/lib/videoEdit";
 import { applyOverlaysToFile, type PhotoOverlay } from "@/frontend/lib/overlayBaker";
 import { compressPhoto, estimateCompressedSize } from "@/frontend/lib/mediaCompressor";
 import { extractHashtags } from "@/frontend/lib/hashtags";
@@ -112,23 +116,31 @@ const HUB_ACCENTS: Partial<Record<string, string>> = {
 };
 
 export type PhotoAdjustments = {
-  brightness:  number;  // -100 .. 100
-  contrast:    number;  // -100 .. 100
-  saturation:  number;  // -100 .. 100
-  temperature: number;  // -100 .. 100  warm/cool via sepia + hue
-  exposure:    number;  // -100 .. 100  multiplicative brightness
-  highlights:  number;  // -50  .. 50   approx via brightness
-  shadows:     number;  // -50  .. 50   approx via brightness
-  tint:        number;  // -50  .. 50   green-magenta via hue-rotate
-  sharpness:   number;  //  0   .. 100  approx via contrast
-  vignette:    number;  //  0   .. 100  radial overlay (not CSS filter)
-  fade:        number;  //  0   .. 100  saturation wash-out
+  brightness: number; // -100 .. 100
+  contrast: number; // -100 .. 100
+  saturation: number; // -100 .. 100
+  temperature: number; // -100 .. 100  warm/cool via sepia + hue
+  exposure: number; // -100 .. 100  multiplicative brightness
+  highlights: number; // -50  .. 50   approx via brightness
+  shadows: number; // -50  .. 50   approx via brightness
+  tint: number; // -50  .. 50   green-magenta via hue-rotate
+  sharpness: number; //  0   .. 100  approx via contrast
+  vignette: number; //  0   .. 100  radial overlay (not CSS filter)
+  fade: number; //  0   .. 100  saturation wash-out
 };
 
 export const DEFAULT_ADJUST: PhotoAdjustments = {
-  brightness: 0, contrast: 0, saturation: 0, temperature: 0,
-  exposure: 0, highlights: 0, shadows: 0, tint: 0,
-  sharpness: 0, vignette: 0, fade: 0,
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  exposure: 0,
+  highlights: 0,
+  shadows: 0,
+  tint: 0,
+  sharpness: 0,
+  vignette: 0,
+  fade: 0,
 };
 
 function adjustmentFilterCss(a: PhotoAdjustments): string {
@@ -143,11 +155,11 @@ function adjustmentFilterCss(a: PhotoAdjustments): string {
 
   const parts: string[] = [];
   if (Math.abs(bright - 1) > 0.005) parts.push(`brightness(${bright.toFixed(3)})`);
-  if (Math.abs(cont  - 1) > 0.005) parts.push(`contrast(${cont.toFixed(3)})`);
-  if (Math.abs(sat   - 1) > 0.005) parts.push(`saturate(${sat.toFixed(3)})`);
-  if (a.temperature > 0)  parts.push(`sepia(${(a.temperature / 250).toFixed(3)})`);
-  if (a.temperature < 0)  parts.push(`hue-rotate(${(a.temperature / 2).toFixed(1)}deg)`);
-  if (a.tint !== 0)       parts.push(`hue-rotate(${(a.tint * 0.8).toFixed(1)}deg)`);
+  if (Math.abs(cont - 1) > 0.005) parts.push(`contrast(${cont.toFixed(3)})`);
+  if (Math.abs(sat - 1) > 0.005) parts.push(`saturate(${sat.toFixed(3)})`);
+  if (a.temperature > 0) parts.push(`sepia(${(a.temperature / 250).toFixed(3)})`);
+  if (a.temperature < 0) parts.push(`hue-rotate(${(a.temperature / 2).toFixed(1)}deg)`);
+  if (a.tint !== 0) parts.push(`hue-rotate(${(a.tint * 0.8).toFixed(1)}deg)`);
   if (Math.abs(hlNudge - 1) > 0.005) parts.push(`brightness(${hlNudge.toFixed(3)})`);
   return parts.join(" ");
 }
@@ -158,7 +170,7 @@ export const DEFAULT_VIDEO_ADJUST: VideoAdjust = { brightness: 0, contrast: 0, s
 function videoAdjustCss(a: VideoAdjust): string {
   const parts: string[] = [];
   if (a.brightness) parts.push(`brightness(${(1 + a.brightness / 100).toFixed(3)})`);
-  if (a.contrast)   parts.push(`contrast(${(1 + a.contrast / 100).toFixed(3)})`);
+  if (a.contrast) parts.push(`contrast(${(1 + a.contrast / 100).toFixed(3)})`);
   if (a.saturation) parts.push(`saturate(${(1 + a.saturation / 100).toFixed(3)})`);
   return parts.join(" ");
 }
@@ -219,9 +231,18 @@ let _capabilitiesCache: PostingCapabilities | null = null;
 // Full-schema fallback: assume all columns exist (migrations are applied in prod).
 // Used when every probe attempt fails so the user can still publish.
 const FULL_CAPABILITIES: PostingCapabilities = {
-  video: true, media: true, settings: true, full: true, types: true,
-  imagePaths: true, sharing: true, scheduling: true, stories: true,
-  likes: true, saves: true, integrity: true,
+  video: true,
+  media: true,
+  settings: true,
+  full: true,
+  types: true,
+  imagePaths: true,
+  sharing: true,
+  scheduling: true,
+  stories: true,
+  likes: true,
+  saves: true,
+  integrity: true,
 };
 
 const TITLES: Record<Step, string> = {
@@ -433,7 +454,10 @@ export function CreationEngine({
   // Debounced size estimation: re-runs whenever the active photo or quality slider changes.
   const activePhotoFile = photos[activePhoto] ?? null;
   useEffect(() => {
-    if (!activePhotoFile) { setEstimatedPhotoSize(0); return; }
+    if (!activePhotoFile) {
+      setEstimatedPhotoSize(0);
+      return;
+    }
     const id = window.setTimeout(() => {
       void estimateCompressedSize(activePhotoFile, photoQuality).then(setEstimatedPhotoSize);
     }, 350);
@@ -466,7 +490,14 @@ export function CreationEngine({
   }
 
   function attachPhoto(file: File, replaceIndex?: number) {
-    console.log("[attach] photo", file.name, file.type || "(no type)", file.size, "ext:", extOf(file) || "(none)");
+    console.log(
+      "[attach] photo",
+      file.name,
+      file.type || "(no type)",
+      file.size,
+      "ext:",
+      extOf(file) || "(none)",
+    );
     if (file.size > IMAGE_MAX_BYTES) {
       setError(sizeError("image"));
       return;
@@ -489,8 +520,16 @@ export function CreationEngine({
 
     if (replaceIndex !== undefined) {
       revokePhotoUrl(replaceIndex);
-      setPhotos((prev) => { const next = [...prev]; next[replaceIndex] = file; return next; });
-      setPhotoUrls((prev) => { const next = [...prev]; next[replaceIndex] = prelimUrl; return next; });
+      setPhotos((prev) => {
+        const next = [...prev];
+        next[replaceIndex] = file;
+        return next;
+      });
+      setPhotoUrls((prev) => {
+        const next = [...prev];
+        next[replaceIndex] = prelimUrl;
+        return next;
+      });
       setActivePhoto(replaceIndex);
     } else {
       setPhotos((prev) => [...prev, file]);
@@ -509,7 +548,10 @@ export function CreationEngine({
       // GIF/BMP/TIFF/HEIC/AVIF from their actual header bytes — no guessing.
       const needsSniff = !file.type && !extOf(file);
       const sniffedMime: string | null = needsSniff ? await sniffImageMime(file) : null;
-      console.log("[attach] sniff:", needsSniff ? (sniffedMime ?? "unknown") : "skipped (type/ext known)");
+      console.log(
+        "[attach] sniff:",
+        needsSniff ? (sniffedMime ?? "unknown") : "skipped (type/ext known)",
+      );
 
       if (sniffedMime) {
         // Real format identified — swap preliminary URL to a correctly-typed blob
@@ -517,7 +559,10 @@ export function CreationEngine({
         const sniffedUrl = URL.createObjectURL(new Blob([file], { type: sniffedMime }));
         setPhotoUrls((prev) => {
           const idx = prev.indexOf(activePrelim);
-          if (idx === -1) { URL.revokeObjectURL(sniffedUrl); return prev; }
+          if (idx === -1) {
+            URL.revokeObjectURL(sniffedUrl);
+            return prev;
+          }
           const next = [...prev];
           next[idx] = sniffedUrl;
           URL.revokeObjectURL(activePrelim);
@@ -586,8 +631,14 @@ export function CreationEngine({
           // Synchronous magic-byte check on the in-memory bytes — definitive.
           const inMemoryMime = sniffMimeFromBytes(new Uint8Array(ab.slice(0, 16)));
           const hexBytes = Array.from(new Uint8Array(ab.slice(0, 16)))
-            .map((x) => x.toString(16).padStart(2, "0")).join(" ");
-          console.log("[attach] ab bytes:", hexBytes, "→ in-memory sniff:", inMemoryMime ?? "unknown");
+            .map((x) => x.toString(16).padStart(2, "0"))
+            .join(" ");
+          console.log(
+            "[attach] ab bytes:",
+            hexBytes,
+            "→ in-memory sniff:",
+            inMemoryMime ?? "unknown",
+          );
 
           // MIME priority: early async sniff → in-memory sniff → file.type →
           // last resort image/jpeg (most Android gallery images are JPEG).
@@ -617,7 +668,10 @@ export function CreationEngine({
       if (!upgradedUrl) return;
       setPhotoUrls((prev) => {
         const idx = prev.indexOf(activePrelim);
-        if (idx === -1) { URL.revokeObjectURL(upgradedUrl!); return prev; }
+        if (idx === -1) {
+          URL.revokeObjectURL(upgradedUrl!);
+          return prev;
+        }
         const next = [...prev];
         next[idx] = upgradedUrl!;
         URL.revokeObjectURL(activePrelim);
@@ -643,9 +697,10 @@ export function CreationEngine({
     // no-type blob URL that the WebView video element can't decode — it has no
     // codec hint and fails immediately. Default to video/mp4 (the most common
     // Android gallery container) so the player at least attempts decode.
-    const blobUrl = (!file.type && !extOf(file))
-      ? URL.createObjectURL(new Blob([file], { type: "video/mp4" }))
-      : typedBlobUrl(file);
+    const blobUrl =
+      !file.type && !extOf(file)
+        ? URL.createObjectURL(new Blob([file], { type: "video/mp4" }))
+        : typedBlobUrl(file);
     setVideoUrl(blobUrl);
     setVideoThumbnail(null);
     setVideoPosterUrl(null);
@@ -849,7 +904,9 @@ export function CreationEngine({
     // the storage upload and the posts INSERT use a valid authenticated token.
     if (Capacitor.isNativePlatform()) {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         if (session) {
           const expiresAt = session.expires_at ?? 0;
           if (expiresAt - Math.floor(Date.now() / 1000) < 60) {
@@ -913,7 +970,9 @@ export function CreationEngine({
       if (photos.length > 0 && (kind === "photo" || kind === "story")) {
         const selection =
           kind === "story"
-            ? (capabilities.imagePaths ? photos.slice(0, MAX_STORY_SLIDES) : photos.slice(0, 1))
+            ? capabilities.imagePaths
+              ? photos.slice(0, MAX_STORY_SLIDES)
+              : photos.slice(0, 1)
             : photos;
         if (selection.length < photos.length) {
           toast(
@@ -1003,7 +1062,8 @@ export function CreationEngine({
             ? (videoMeta ?? (await probeVideoMetadata(videoFile)))
             : await probeVideoMetadata(uploadFile);
         if (!videoMeta) setVideoMeta(probedMeta);
-        const capturedThumbnail = coverFile ?? videoThumbnail ?? (await captureVideoThumbnail(videoFile));
+        const capturedThumbnail =
+          coverFile ?? videoThumbnail ?? (await captureVideoThumbnail(videoFile));
         const videoMime = resolveUploadMime(uploadFile, "video", uploadExt);
         videoPath = `${user.id}/video-${stamp}.${uploadExt}`;
         uploadedPaths.push(videoPath);
@@ -1093,21 +1153,24 @@ export function CreationEngine({
             content_kind: kind === "story" ? "story" : "post",
             story_expires_at:
               kind === "story" ? new Date(Date.now() + STORY_TTL_MS).toISOString() : null,
-            story_overlays: kind === "story"
-              ? (() => {
-                  const chips = storyOverlays;
-                  if (imagePaths.length === 0) return chips;
-                  const meta = `__meta__:${JSON.stringify({
-                    texts: slideTexts.slice(0, imagePaths.length),
-                    durations: slideDurations.slice(0, imagePaths.length).map((d) => d || 5),
-                    transition: storyTransition,
-                  })}`;
-                  return [meta, ...chips];
-                })()
-              : [],
+            story_overlays:
+              kind === "story"
+                ? (() => {
+                    const chips = storyOverlays;
+                    if (imagePaths.length === 0) return chips;
+                    const meta = `__meta__:${JSON.stringify({
+                      texts: slideTexts.slice(0, imagePaths.length),
+                      durations: slideDurations.slice(0, imagePaths.length).map((d) => d || 5),
+                      transition: storyTransition,
+                    })}`;
+                    return [meta, ...chips];
+                  })()
+                : [],
             story_background:
               kind === "story" && photos.length === 0 && !videoFile
-                ? (textBody.trim() ? textBg : null)
+                ? textBody.trim()
+                  ? textBg
+                  : null
                 : null,
           }
         : basePost;
@@ -1255,12 +1318,14 @@ export function CreationEngine({
             onRecord={() => setCamera("short")}
             onUpload={() => videoRef.current?.click()}
             onContinue={goComposer}
-            {...(videoFile ? {
-              onOpenEditor: () => {
-                setPendingEditorFile(videoFile);
-                void router.navigate({ to: "/editor" });
-              },
-            } : {})}
+            {...(videoFile
+              ? {
+                  onOpenEditor: () => {
+                    setPendingEditorFile(videoFile);
+                    void router.navigate({ to: "/editor" });
+                  },
+                }
+              : {})}
             error={error}
           />
         )}
@@ -1531,7 +1596,13 @@ export function CreationEngine({
                 <button
                   onClick={() =>
                     setStep(
-                      kind === "photo" ? "photo" : kind === "video" ? "video" : kind === "text" ? "text" : "story",
+                      kind === "photo"
+                        ? "photo"
+                        : kind === "video"
+                          ? "video"
+                          : kind === "text"
+                            ? "text"
+                            : "story",
                     )
                   }
                   className="ml-auto shrink-0 rounded-full bg-background px-3 py-1.5 text-xs font-semibold"
@@ -1583,7 +1654,9 @@ export function CreationEngine({
             </div>
 
             <label className="block">
-              <span className="text-xs font-semibold text-muted-foreground">Tags &amp; hashtags</span>
+              <span className="text-xs font-semibold text-muted-foreground">
+                Tags &amp; hashtags
+              </span>
               <span className="mt-1 flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3 py-2.5">
                 <AtSign className="size-4 shrink-0 text-muted-foreground" />
                 <input
@@ -1983,33 +2056,78 @@ export { AtSign, Clock, FolderOpen, Link2, MapPin, Mic, Music, RefreshCw, Users 
 /* Fixed-size SVG icon wrappers — explicit width/height prevent any stretching */
 const IgIcons: Record<string, React.FC> = {
   photo: () => (
-    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="3"/>
-      <circle cx="8.5" cy="8.5" r="1.5"/>
-      <path d="M21 15l-5-5L5 21"/>
+    <svg
+      width={28}
+      height={28}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
     </svg>
   ),
   video: () => (
-    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="6" width="14" height="12" rx="2"/>
-      <path d="M22 8l-4 4 4 4V8z"/>
+    <svg
+      width={28}
+      height={28}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+      <path d="M22 8l-4 4 4 4V8z" />
     </svg>
   ),
   story: () => (
-    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M12 8v4M12 16h.01"/>
+    <svg
+      width={28}
+      height={28}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4M12 16h.01" />
     </svg>
   ),
   text: () => (
-    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
+    <svg
+      width={28}
+      height={28}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 7V4h16v3M9 20h6M12 4v16" />
     </svg>
   ),
   live: () => (
-    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="2"/>
-      <path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/>
+    <svg
+      width={28}
+      height={28}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14" />
     </svg>
   ),
 };
@@ -2018,8 +2136,8 @@ const IG_HUB_ITEMS: { kind: Exclude<CreateKind, "more">; label: string }[] = [
   { kind: "photo", label: "Photo" },
   { kind: "video", label: "Video" },
   { kind: "story", label: "Story" },
-  { kind: "text",  label: "Text"  },
-  { kind: "live",  label: "Live"  },
+  { kind: "text", label: "Text" },
+  { kind: "live", label: "Live" },
 ];
 
 function InstagramHubSheet({
@@ -2037,8 +2155,13 @@ function InstagramHubSheet({
   function setPanelShift(dy: number | null) {
     const el = panelRef.current;
     if (!el) return;
-    if (dy === null) { el.style.transition = ""; el.style.transform = ""; }
-    else { el.style.transition = "none"; el.style.transform = `translateY(${Math.max(0, dy)}px)`; }
+    if (dy === null) {
+      el.style.transition = "";
+      el.style.transform = "";
+    } else {
+      el.style.transition = "none";
+      el.style.transform = `translateY(${Math.max(0, dy)}px)`;
+    }
   }
   function onDragStart(e: React.PointerEvent) {
     drag.current = { startY: e.clientY, dy: 0, dragging: true, moved: false };

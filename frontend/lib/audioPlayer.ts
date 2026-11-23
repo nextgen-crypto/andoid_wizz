@@ -80,16 +80,19 @@ function encodeWav(buffer: AudioBuffer): ArrayBuffer {
     for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i));
   };
 
-  ws(0, "RIFF"); v.setUint32(4, 36 + dataLen, true);
-  ws(8, "WAVE"); ws(12, "fmt ");
-  v.setUint32(16, 16, true);   // chunk size
-  v.setUint16(20, 1, true);    // PCM
-  v.setUint16(22, 1, true);    // mono
+  ws(0, "RIFF");
+  v.setUint32(4, 36 + dataLen, true);
+  ws(8, "WAVE");
+  ws(12, "fmt ");
+  v.setUint32(16, 16, true); // chunk size
+  v.setUint16(20, 1, true); // PCM
+  v.setUint16(22, 1, true); // mono
   v.setUint32(24, sr, true);
   v.setUint32(28, sr * 2, true);
   v.setUint16(32, 2, true);
-  v.setUint16(34, 16, true);   // 16-bit
-  ws(36, "data"); v.setUint32(40, dataLen, true);
+  v.setUint16(34, 16, true); // 16-bit
+  ws(36, "data");
+  v.setUint32(40, dataLen, true);
 
   let off = 44;
   for (let i = 0; i < samples.length; i++) {
@@ -106,10 +109,7 @@ async function resolveUrl(track: Track): Promise<string | null> {
   if (toneCache.has(track.id)) return toneCache.get(track.id)!;
   try {
     if (typeof OfflineAudioContext === "undefined") return null;
-    const url = await generateTestTone(
-      track.durationSec,
-      TONE_FREQS[track.id] ?? 440,
-    );
+    const url = await generateTestTone(track.durationSec, TONE_FREQS[track.id] ?? 440);
     toneCache.set(track.id, url);
     return url;
   } catch {
@@ -144,10 +144,16 @@ export function useAudioPlayer(): PlayerState {
     audio.preload = "none";
     audioRef.current = audio;
 
-    const onTime   = () => setCurrentTime(audio.currentTime);
-    const onMeta   = () => setDuration(audio.duration || 0);
-    const onEnded  = () => { setPlayingId(null); setCurrentTime(0); };
-    const onError  = () => { setPlayingId(null); setLoading(false); };
+    const onTime = () => setCurrentTime(audio.currentTime);
+    const onMeta = () => setDuration(audio.duration || 0);
+    const onEnded = () => {
+      setPlayingId(null);
+      setCurrentTime(0);
+    };
+    const onError = () => {
+      setPlayingId(null);
+      setLoading(false);
+    };
 
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
@@ -176,7 +182,10 @@ export function useAudioPlayer(): PlayerState {
     setLoading(true);
     try {
       const url = await resolveUrl(track);
-      if (!url) { setLoading(false); return; }
+      if (!url) {
+        setLoading(false);
+        return;
+      }
       if (audio.src !== url) {
         audio.src = url;
         audio.load();

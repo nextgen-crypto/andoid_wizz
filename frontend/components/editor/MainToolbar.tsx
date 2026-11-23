@@ -1,7 +1,16 @@
 import {
-  Music, Type, Sparkles, WandSparkles, Captions, Layers,
-  Sliders, Filter, SlidersHorizontal, Zap,
-  Scissors, PaintBucket,
+  Music,
+  Type,
+  Sparkles,
+  WandSparkles,
+  Captions,
+  Layers,
+  Sliders,
+  Filter,
+  SlidersHorizontal,
+  Zap,
+  Scissors,
+  PaintBucket,
 } from "lucide-react";
 import type { ActiveSheet } from "@/frontend/store/editorStore";
 import { useEditorStore } from "@/frontend/store/editorStore";
@@ -14,22 +23,18 @@ const TOOLS: {
   needsSound?: boolean;
 }[] = [
   { id: "background", label: "Background", icon: PaintBucket },
-  { id: "filters",   label: "Filters",    icon: Filter },
-  { id: "adjust",    label: "Adjust",     icon: Sliders },
-  { id: "sound",     label: "Sound",      icon: Music },
-  { id: "text",      label: "Text",       icon: Type },
-  { id: "effects",   label: "Effects",    icon: Zap },
-  { id: "magic",     label: "Magic",      icon: WandSparkles },
-  { id: "captions",  label: "Captions",   icon: Captions },
-  { id: "overlay",   label: "Overlay",    icon: Layers },
+  { id: "filters", label: "Filters", icon: Filter },
+  { id: "adjust", label: "Adjust", icon: Sliders },
+  { id: "sound", label: "Sound", icon: Music },
+  { id: "text", label: "Text", icon: Type },
+  { id: "effects", label: "Effects", icon: Zap },
+  { id: "magic", label: "Magic", icon: WandSparkles },
+  { id: "captions", label: "Captions", icon: Captions },
+  { id: "overlay", label: "Overlay", icon: Layers },
   // "Edit" opens clip toolbar by selecting clip under playhead
 ];
 
-export function MainToolbar({
-  onEditClip,
-}: {
-  onEditClip: () => void;
-}) {
+export function MainToolbar({ onEditClip }: { onEditClip: () => void }) {
   const { openSheet, project, selectedClipId } = useEditorStore();
   const hasSoundTrack = !!project.soundTrack;
 

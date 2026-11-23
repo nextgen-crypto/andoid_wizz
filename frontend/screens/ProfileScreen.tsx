@@ -246,9 +246,7 @@ export function ProfileScreen() {
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-2xl bg-secondary py-3 text-center">
-            <p className="text-lg font-bold text-foreground">
-              {compact.format(stats?.posts ?? 0)}
-            </p>
+            <p className="text-lg font-bold text-foreground">{compact.format(stats?.posts ?? 0)}</p>
             <p className="text-xs font-medium tracking-wider text-muted-foreground">POSTS</p>
           </div>
           {(["followers", "following"] as const).map((kind) =>

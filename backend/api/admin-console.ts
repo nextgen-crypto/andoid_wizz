@@ -46,10 +46,7 @@ export const fetchAdminCreators = createServerFn({ method: "GET" })
           .select("id, username, display_name, avatar_url, verified")
           .order("created_at", { ascending: false })
           .limit(500),
-        db
-          .from("follows")
-          .select("follower_id, followee_id")
-          .limit(MAX_ROWS),
+        db.from("follows").select("follower_id, followee_id").limit(MAX_ROWS),
         db.from("posts").select("author_id, status").limit(MAX_ROWS),
       ]);
       if (profilesRes.error) throw profilesRes.error;
@@ -92,12 +89,10 @@ const ALLOWED_STATUS: AdminPostStatus[] = ["published", "archived", "deleted"];
  *  history and drops it out of every feed query. */
 export const adminSetPostStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (data: { id?: string; status?: AdminPostStatus } | undefined) => ({
-      id: data?.id ?? "",
-      status: (data?.status ?? "archived") as AdminPostStatus,
-    }),
-  )
+  .validator((data: { id?: string; status?: AdminPostStatus } | undefined) => ({
+    id: data?.id ?? "",
+    status: (data?.status ?? "archived") as AdminPostStatus,
+  }))
   .handler(async ({ context, data }): Promise<{ ok: boolean; status: AdminPostStatus }> => {
     await requireAdmin(context);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id)) {

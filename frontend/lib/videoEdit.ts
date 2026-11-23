@@ -225,7 +225,7 @@ export function tryExtractPreviewFrame(file: File): Promise<string | null> {
       try {
         const scale = Math.min(1, 960 / Math.max(w, h));
         const canvas = document.createElement("canvas");
-        canvas.width  = Math.round(w * scale);
+        canvas.width = Math.round(w * scale);
         canvas.height = Math.round(h * scale);
         const ctx = canvas.getContext("2d");
         if (!ctx) return done(null);
@@ -233,10 +233,14 @@ export function tryExtractPreviewFrame(file: File): Promise<string | null> {
         // A canvas that only contains transparent pixels means the draw failed.
         const sample = ctx.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data;
         if (sample[3] === 0) return done(null);
-        canvas.toBlob((blob) => {
-          if (!blob) return done(null);
-          done(URL.createObjectURL(blob));
-        }, "image/jpeg", 0.80);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return done(null);
+            done(URL.createObjectURL(blob));
+          },
+          "image/jpeg",
+          0.8,
+        );
       } catch {
         done(null);
       }
@@ -269,7 +273,11 @@ export function generateVideoThumbnails(file: File, count: number): Promise<stri
     video.muted = true;
     const results: string[] = [];
     let settled = false;
-    const timer = window.setTimeout(() => { settled = true; cleanup(); resolve(results); }, 15_000);
+    const timer = window.setTimeout(() => {
+      settled = true;
+      cleanup();
+      resolve(results);
+    }, 15_000);
 
     const cleanup = () => {
       window.clearTimeout(timer);
@@ -278,20 +286,25 @@ export function generateVideoThumbnails(file: File, count: number): Promise<stri
       URL.revokeObjectURL(url);
     };
 
-    const drawFrame = (): Promise<string | null> => new Promise((res) => {
-      const w = video.videoWidth || 0;
-      const h = video.videoHeight || 0;
-      if (!w || !h) return res(null);
-      try {
-        const th = 72, tw = Math.round((w / h) * th);
-        const canvas = document.createElement("canvas");
-        canvas.width = tw; canvas.height = th;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return res(null);
-        ctx.drawImage(video, 0, 0, tw, th);
-        canvas.toBlob((blob) => res(blob ? URL.createObjectURL(blob) : null), "image/jpeg", 0.70);
-      } catch { res(null); }
-    });
+    const drawFrame = (): Promise<string | null> =>
+      new Promise((res) => {
+        const w = video.videoWidth || 0;
+        const h = video.videoHeight || 0;
+        if (!w || !h) return res(null);
+        try {
+          const th = 72,
+            tw = Math.round((w / h) * th);
+          const canvas = document.createElement("canvas");
+          canvas.width = tw;
+          canvas.height = th;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return res(null);
+          ctx.drawImage(video, 0, 0, tw, th);
+          canvas.toBlob((blob) => res(blob ? URL.createObjectURL(blob) : null), "image/jpeg", 0.7);
+        } catch {
+          res(null);
+        }
+      });
 
     const seekFrames = async (duration: number) => {
       const step = duration / (count + 1);
@@ -316,10 +329,19 @@ export function generateVideoThumbnails(file: File, count: number): Promise<stri
 
     video.onloadedmetadata = () => {
       const dur = video.duration;
-      if (!Number.isFinite(dur) || dur <= 0) { settled = true; cleanup(); resolve([]); return; }
+      if (!Number.isFinite(dur) || dur <= 0) {
+        settled = true;
+        cleanup();
+        resolve([]);
+        return;
+      }
       void seekFrames(dur);
     };
-    video.onerror = () => { settled = true; cleanup(); resolve([]); };
+    video.onerror = () => {
+      settled = true;
+      cleanup();
+      resolve([]);
+    };
     video.src = url;
   });
 }

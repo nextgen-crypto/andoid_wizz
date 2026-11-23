@@ -1,8 +1,24 @@
 import {
-  ChevronDown, Scissors, ImagePlus, Trash2, Gauge, Crop,
-  Zap, UserX, Image, Wand2, Volume2, RefreshCw,
-  SlidersHorizontal, Filter, FastForward, Camera,
-  CircleOff, EyeOff, Mic, Sliders,
+  ChevronDown,
+  Scissors,
+  ImagePlus,
+  Trash2,
+  Gauge,
+  Crop,
+  Zap,
+  UserX,
+  Image,
+  Wand2,
+  Volume2,
+  RefreshCw,
+  SlidersHorizontal,
+  Filter,
+  FastForward,
+  Camera,
+  CircleOff,
+  EyeOff,
+  Mic,
+  Sliders,
 } from "lucide-react";
 import { useEditorStore } from "@/frontend/store/editorStore";
 import { cn } from "@/lib/utils";
@@ -15,15 +31,9 @@ type ClipTool = {
   disabled?: boolean;
 };
 
-export function ClipToolbar({
-  onReplace,
-}: {
-  onReplace: () => void;
-}) {
-  const {
-    project, playhead, selectedClipId,
-    selectClip, openSheet, removeClip, splitClipAt,
-  } = useEditorStore();
+export function ClipToolbar({ onReplace }: { onReplace: () => void }) {
+  const { project, playhead, selectedClipId, selectClip, openSheet, removeClip, splitClipAt } =
+    useEditorStore();
   const clip = project.clips.find((c) => c.id === selectedClipId);
 
   function handleDelete() {
@@ -38,26 +48,31 @@ export function ClipToolbar({
   }
 
   const tools: ClipTool[] = [
-    { id: "split",       label: "Split",       icon: Scissors,       action: handleSplit },
-    { id: "replace",     label: "Replace",     icon: ImagePlus,      action: onReplace },
-    { id: "delete",      label: "Delete",      icon: Trash2,         action: handleDelete },
-    { id: "speed",       label: "Speed",       icon: Gauge,          action: () => openSheet("speed") },
-    { id: "crop",        label: "Crop",        icon: Crop,           action: () => openSheet("crop") },
-    { id: "effects",     label: "Effects",     icon: Zap,            action: () => openSheet("effects") },
-    { id: "cutout",      label: "Cutout",      icon: UserX,          action: () => {} },
-    { id: "background",  label: "Background",  icon: Image,          action: () => {} },
-    { id: "magic",       label: "Magic",       icon: Wand2,          action: () => openSheet("magic") },
-    { id: "volume",      label: "Volume",      icon: Volume2,        action: () => openSheet("volume") },
-    { id: "noise",       label: "Reduce noise",icon: RefreshCw,      action: () => {} },
-    { id: "rotate",      label: "Rotate",      icon: RefreshCw,      action: () => {} },
-    { id: "retouch",     label: "Retouch",     icon: SlidersHorizontal, action: () => openSheet("retouch") },
-    { id: "clip-filters",label: "Filters",     icon: Filter,         action: () => openSheet("filters") },
-    { id: "clip-adjust", label: "Adjust",      icon: Sliders,        action: () => openSheet("adjust") },
-    { id: "reverse",     label: "Reverse",     icon: FastForward,    action: () => {} },
-    { id: "freeze",      label: "Freeze",      icon: Camera,         action: () => {} },
-    { id: "mask",        label: "Mask",        icon: CircleOff,      action: () => openSheet("mask") },
-    { id: "opacity",     label: "Opacity",     icon: EyeOff,         action: () => openSheet("opacity") },
-    { id: "voice",       label: "Voice effect",icon: Mic,            action: () => openSheet("voiceEffect") },
+    { id: "split", label: "Split", icon: Scissors, action: handleSplit },
+    { id: "replace", label: "Replace", icon: ImagePlus, action: onReplace },
+    { id: "delete", label: "Delete", icon: Trash2, action: handleDelete },
+    { id: "speed", label: "Speed", icon: Gauge, action: () => openSheet("speed") },
+    { id: "crop", label: "Crop", icon: Crop, action: () => openSheet("crop") },
+    { id: "effects", label: "Effects", icon: Zap, action: () => openSheet("effects") },
+    { id: "cutout", label: "Cutout", icon: UserX, action: () => {} },
+    { id: "background", label: "Background", icon: Image, action: () => {} },
+    { id: "magic", label: "Magic", icon: Wand2, action: () => openSheet("magic") },
+    { id: "volume", label: "Volume", icon: Volume2, action: () => openSheet("volume") },
+    { id: "noise", label: "Reduce noise", icon: RefreshCw, action: () => {} },
+    { id: "rotate", label: "Rotate", icon: RefreshCw, action: () => {} },
+    {
+      id: "retouch",
+      label: "Retouch",
+      icon: SlidersHorizontal,
+      action: () => openSheet("retouch"),
+    },
+    { id: "clip-filters", label: "Filters", icon: Filter, action: () => openSheet("filters") },
+    { id: "clip-adjust", label: "Adjust", icon: Sliders, action: () => openSheet("adjust") },
+    { id: "reverse", label: "Reverse", icon: FastForward, action: () => {} },
+    { id: "freeze", label: "Freeze", icon: Camera, action: () => {} },
+    { id: "mask", label: "Mask", icon: CircleOff, action: () => openSheet("mask") },
+    { id: "opacity", label: "Opacity", icon: EyeOff, action: () => openSheet("opacity") },
+    { id: "voice", label: "Voice effect", icon: Mic, action: () => openSheet("voiceEffect") },
   ];
 
   return (
@@ -85,7 +100,12 @@ export function ClipToolbar({
           )}
         >
           <t.icon className={cn("size-5 text-white", t.id === "delete" && "text-red-400")} />
-          <span className={cn("text-[11px] font-semibold text-white", t.id === "delete" && "text-red-400")}>
+          <span
+            className={cn(
+              "text-[11px] font-semibold text-white",
+              t.id === "delete" && "text-red-400",
+            )}
+          >
             {t.label}
           </span>
         </button>

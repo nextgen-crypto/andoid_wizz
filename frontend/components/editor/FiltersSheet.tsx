@@ -5,17 +5,17 @@ import { type FilterPreset, adjustToCssFilter, DEFAULT_ADJUST } from "@/frontend
 import { cn } from "@/lib/utils";
 
 const PRESETS: { id: FilterPreset; label: string; color: string }[] = [
-  { id: "none",   label: "None",    color: "#3a3a3a" },
-  { id: "vivid",  label: "Vivid",   color: "#4a2060" },
-  { id: "warm",   label: "Warm",    color: "#6b3000" },
-  { id: "cool",   label: "Cool",    color: "#003060" },
-  { id: "bw",     label: "B&W",     color: "#1a1a1a" },
-  { id: "film",   label: "Film",    color: "#2a1a00" },
-  { id: "fade",   label: "Fade",    color: "#3a3a50" },
-  { id: "chrome", label: "Chrome",  color: "#202040" },
-  { id: "pro",    label: "Pro",     color: "#101020" },
-  { id: "matte",  label: "Matte",   color: "#2a2a30" },
-  { id: "golden", label: "Golden",  color: "#4a2a00" },
+  { id: "none", label: "None", color: "#3a3a3a" },
+  { id: "vivid", label: "Vivid", color: "#4a2060" },
+  { id: "warm", label: "Warm", color: "#6b3000" },
+  { id: "cool", label: "Cool", color: "#003060" },
+  { id: "bw", label: "B&W", color: "#1a1a1a" },
+  { id: "film", label: "Film", color: "#2a1a00" },
+  { id: "fade", label: "Fade", color: "#3a3a50" },
+  { id: "chrome", label: "Chrome", color: "#202040" },
+  { id: "pro", label: "Pro", color: "#101020" },
+  { id: "matte", label: "Matte", color: "#2a2a30" },
+  { id: "golden", label: "Golden", color: "#4a2a00" },
 ];
 
 export function FiltersSheet({ onClose }: { onClose: () => void }) {
@@ -64,7 +64,12 @@ export function FiltersSheet({ onClose }: { onClose: () => void }) {
                   filter: adjustToCssFilter(DEFAULT_ADJUST, p.id),
                 }}
               />
-              <span className={cn("text-[11px]", local === p.id ? "font-bold text-white" : "text-white/60")}>
+              <span
+                className={cn(
+                  "text-[11px]",
+                  local === p.id ? "font-bold text-white" : "text-white/60",
+                )}
+              >
                 {p.label}
               </span>
             </button>

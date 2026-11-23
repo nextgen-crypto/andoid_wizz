@@ -48,7 +48,10 @@ function fromRow(r: SlideRow): ShowcaseSlide {
   };
 }
 
-function toRow(s: ShowcaseSlide, sortOrder: number): Omit<SlideRow, "created_at"> & {
+function toRow(
+  s: ShowcaseSlide,
+  sortOrder: number,
+): Omit<SlideRow, "created_at"> & {
   created_at: string;
 } {
   return {

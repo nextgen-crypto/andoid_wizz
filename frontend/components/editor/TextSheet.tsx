@@ -4,9 +4,18 @@ import { useEditorStore } from "@/frontend/store/editorStore";
 import { type TextLayer, projectDuration } from "@/frontend/lib/editorTypes";
 import { cn } from "@/lib/utils";
 
-const COLORS = ["#ffffff","#000000","#ffee00","#ff3366","#00ccff","#66ff88","#ff9900","#cc44ff"];
+const COLORS = [
+  "#ffffff",
+  "#000000",
+  "#ffee00",
+  "#ff3366",
+  "#00ccff",
+  "#66ff88",
+  "#ff9900",
+  "#cc44ff",
+];
 const FONTS_SIZE = [18, 24, 32, 42] as const;
-const ANIMS = ["none","fade","slide","pop"] as const;
+const ANIMS = ["none", "fade", "slide", "pop"] as const;
 
 export function TextSheet({ onClose }: { onClose: () => void }) {
   const { project, playhead, addTextLayer } = useEditorStore();
@@ -48,7 +57,10 @@ export function TextSheet({ onClose }: { onClose: () => void }) {
       <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20" />
       <div className="flex items-center justify-between pt-4 pb-3">
         <p className="text-base font-bold text-white">Add Text</p>
-        <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10">
+        <button
+          onClick={onClose}
+          className="grid size-8 place-items-center rounded-full bg-white/10"
+        >
           <Check className="size-4 text-white" />
         </button>
       </div>
@@ -114,15 +126,15 @@ export function TextSheet({ onClose }: { onClose: () => void }) {
 
       {/* Background style */}
       <div className="mt-3 flex gap-2">
-        {(["none","dark","light"] as const).map((b) => (
+        {(["none", "dark", "light"] as const).map((b) => (
           <button
             key={b}
             onClick={() => setBg(b)}
             className={cn(
               "flex-1 rounded-full py-1.5 text-xs font-semibold transition-colors",
-              b === "dark"  ? "bg-black/60 text-white"  : "",
-              b === "light" ? "bg-white text-black"     : "",
-              b === "none"  ? "bg-[#2C2C2E] text-white/70" : "",
+              b === "dark" ? "bg-black/60 text-white" : "",
+              b === "light" ? "bg-white text-black" : "",
+              b === "none" ? "bg-[#2C2C2E] text-white/70" : "",
               bg === b && "ring-2 ring-[#FE2C55]",
             )}
           >

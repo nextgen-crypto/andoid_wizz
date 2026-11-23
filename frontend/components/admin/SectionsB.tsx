@@ -51,7 +51,7 @@ export function NotificationsSection({ ops, act }: SectionProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("announcements")
-        .select("id, title, message, audience, scheduled_for, status, created_at")
+        .select("id, title, message, status, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -72,8 +72,8 @@ export function NotificationsSection({ ops, act }: SectionProps) {
         id: a.id,
         title: a.title,
         message: a.message,
-        audience: a.audience,
-        schedule: a.scheduled_for ? new Date(a.scheduled_for).toLocaleString() : "Now",
+        audience: "All users",
+        schedule: "Now",
         status: a.status as "draft" | "scheduled" | "published",
       }))
     : ops.announcements;
@@ -101,10 +101,7 @@ export function NotificationsSection({ ops, act }: SectionProps) {
       const { error } = await supabase.from("announcements").insert({
         title: title.trim(),
         message: message.trim(),
-        audience,
-        scheduled_for: schedule ? new Date(schedule).toISOString() : null,
         status,
-        created_by: user?.id ?? null,
       });
       if (error) throw error;
       setSync("synced");
@@ -133,7 +130,11 @@ export function NotificationsSection({ ops, act }: SectionProps) {
       <Panel
         title="Create announcement"
         hint={`${syncLabel} · published announcements appear in-app`}
-        right={<Badge tone={sync === "local" || !live ? "gray" : "dark"}>{live ? "server" : "local"}</Badge>}
+        right={
+          <Badge tone={sync === "local" || !live ? "gray" : "dark"}>
+            {live ? "server" : "local"}
+          </Badge>
+        }
       >
         <div className="space-y-2">
           <Field label="Title">
@@ -179,7 +180,9 @@ export function NotificationsSection({ ops, act }: SectionProps) {
               Save draft
             </button>
             <button
-              onClick={() => void save(schedule ? "scheduled" : "published", "Publish announcement")}
+              onClick={() =>
+                void save(schedule ? "scheduled" : "published", "Publish announcement")
+              }
               className="flex-1 rounded-full bg-foreground py-2.5 text-sm font-bold text-background"
             >
               {schedule ? "Schedule" : "Publish"}
@@ -189,7 +192,9 @@ export function NotificationsSection({ ops, act }: SectionProps) {
       </Panel>
       <Panel
         title={`Outbox (${rows.length})`}
-        hint={liveQuery.isLoading ? "Loading…" : live ? "Published announcements" : "Local fallback"}
+        hint={
+          liveQuery.isLoading ? "Loading…" : live ? "Published announcements" : "Local fallback"
+        }
       >
         {liveQuery.isLoading ? (
           <Empty text="Loading announcements…" />

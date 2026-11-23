@@ -85,15 +85,7 @@ function PeerAvatar({
   );
 }
 
-function ReadReceipt({
-  isMine,
-  isRead,
-  time,
-}: {
-  isMine: boolean;
-  isRead: boolean;
-  time: string;
-}) {
+function ReadReceipt({ isMine, isRead, time }: { isMine: boolean; isRead: boolean; time: string }) {
   if (!isMine) return null;
   return (
     <span className="mt-0.5 flex items-center justify-end gap-0.5 text-[10px] text-white/60">
@@ -228,7 +220,11 @@ export function MessagesScreen() {
           {!m.mine && (
             <div className="w-7 shrink-0">
               {showAvatar && active && (
-                <PeerAvatar src={active.peer.avatar_url} name={active.peer.display_name} size="sm" />
+                <PeerAvatar
+                  src={active.peer.avatar_url}
+                  name={active.peer.display_name}
+                  size="sm"
+                />
               )}
             </div>
           )}
@@ -440,7 +436,12 @@ export function MessagesScreen() {
                 <span className="block truncate text-base font-bold">
                   {active.peer.display_name}
                 </span>
-                <span className={cn("block truncate text-xs", online ? "text-green-500 font-semibold" : "text-muted-foreground")}>
+                <span
+                  className={cn(
+                    "block truncate text-xs",
+                    online ? "text-green-500 font-semibold" : "text-muted-foreground",
+                  )}
+                >
                   {online ? "Active now" : `@${active.peer.username}`}
                 </span>
               </span>
@@ -457,14 +458,10 @@ export function MessagesScreen() {
                 <span className="grid size-14 place-items-center rounded-2xl bg-secondary">
                   <MessageCircle className="size-6 text-muted-foreground" />
                 </span>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  No messages yet — say hi 👋
-                </p>
+                <p className="mt-3 text-sm text-muted-foreground">No messages yet — say hi 👋</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5">
-                {renderMessages(activeMessages)}
-              </div>
+              <div className="flex flex-col gap-1.5">{renderMessages(activeMessages)}</div>
             )}
             {thread.sending && (
               <div className="mt-2 flex items-center gap-2 px-2">
@@ -515,7 +512,12 @@ export function MessagesScreen() {
                     <span className="block truncate text-sm font-bold">
                       {active.peer.display_name}
                     </span>
-                    <span className={cn("block truncate text-xs", online ? "text-green-500 font-semibold" : "text-muted-foreground")}>
+                    <span
+                      className={cn(
+                        "block truncate text-xs",
+                        online ? "text-green-500 font-semibold" : "text-muted-foreground",
+                      )}
+                    >
                       {online ? "Active now" : `@${active.peer.username}`}
                     </span>
                   </span>
@@ -530,9 +532,7 @@ export function MessagesScreen() {
                     No messages yet — say hi.
                   </p>
                 ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {renderMessages(activeMessages)}
-                  </div>
+                  <div className="flex flex-col gap-1.5">{renderMessages(activeMessages)}</div>
                 )}
                 <div ref={bottomRef} />
               </div>

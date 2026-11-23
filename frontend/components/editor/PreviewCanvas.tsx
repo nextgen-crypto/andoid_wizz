@@ -16,18 +16,18 @@ export function PreviewCanvas({ className }: { className?: string }) {
   const updateClip = useEditorStore((s) => s.updateClip);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef    = useRef<HTMLVideoElement | null>(null);
-  const rafRef      = useRef<number | null>(null);
-  const dragRef     = useRef<DragInfo | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const dragRef = useRef<DragInfo | null>(null);
 
   const updateTextLayer = useEditorStore((s) => s.updateTextLayer);
-  const updateSticker   = useEditorStore((s) => s.updateSticker);
+  const updateSticker = useEditorStore((s) => s.updateSticker);
 
-  const resolved    = clips.length ? resolvePlayhead(clips, playhead) : null;
-  const activeClip  = resolved ? clips[resolved.clipIndex] : null;
+  const resolved = clips.length ? resolvePlayhead(clips, playhead) : null;
+  const activeClip = resolved ? clips[resolved.clipIndex] : null;
   const selectedClip = clips.find((c) => c.id === selectedClipId);
 
-  const clipFilter  = activeClip
+  const clipFilter = activeClip
     ? adjustToCssFilter(activeClip.adjust, activeClip.filter)
     : adjustToCssFilter(globalAdjust, globalFilter);
 
@@ -66,16 +66,23 @@ export function PreviewCanvas({ className }: { className?: string }) {
   }, [playhead, playing, resolved?.clipTime]);
 
   /* ── Pointer drag handlers for overlay layers ── */
-  function startDrag(e: React.PointerEvent, kind: "text" | "sticker", id: string, x: number, y: number) {
+  function startDrag(
+    e: React.PointerEvent,
+    kind: "text" | "sticker",
+    id: string,
+    x: number,
+    y: number,
+  ) {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     dragRef.current = {
-      kind, id,
+      kind,
+      id,
       ox: e.clientX - rect.left - x * rect.width,
-      oy: e.clientY - rect.top  - y * rect.height,
+      oy: e.clientY - rect.top - y * rect.height,
     };
   }
 
@@ -84,10 +91,16 @@ export function PreviewCanvas({ className }: { className?: string }) {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const x = Math.max(0.02, Math.min(0.98, (e.clientX - rect.left - dragRef.current.ox) / rect.width));
-    const y = Math.max(0.02, Math.min(0.98, (e.clientY - rect.top  - dragRef.current.oy) / rect.height));
-    if (dragRef.current.kind === "text")    updateTextLayer(dragRef.current.id, { x, y });
-    else                                    updateSticker  (dragRef.current.id, { x, y });
+    const x = Math.max(
+      0.02,
+      Math.min(0.98, (e.clientX - rect.left - dragRef.current.ox) / rect.width),
+    );
+    const y = Math.max(
+      0.02,
+      Math.min(0.98, (e.clientY - rect.top - dragRef.current.oy) / rect.height),
+    );
+    if (dragRef.current.kind === "text") updateTextLayer(dragRef.current.id, { x, y });
+    else updateSticker(dragRef.current.id, { x, y });
   }
 
   const isTransparent = bgColor === "transparent";
@@ -102,13 +115,15 @@ export function PreviewCanvas({ className }: { className?: string }) {
       )}
       style={{
         aspectRatio: "9/16",
-        backgroundColor: isTransparent ? undefined : (bgColor || "#000000"),
+        backgroundColor: isTransparent ? undefined : bgColor || "#000000",
         backgroundImage: isTransparent
           ? "repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0 0 / 20px 20px"
           : undefined,
       }}
       onPointerMove={moveDrag}
-      onPointerUp={() => { dragRef.current = null; }}
+      onPointerUp={() => {
+        dragRef.current = null;
+      }}
     >
       {/* Video / image layer */}
       {activeClip ? (
@@ -142,7 +157,14 @@ export function PreviewCanvas({ className }: { className?: string }) {
           }}
           onError={(e) => {
             const v = e.currentTarget;
-            console.log("[preview] ERROR src:", v.src.slice(-60), "code:", v.error?.code, "msg:", v.error?.message);
+            console.log(
+              "[preview] ERROR src:",
+              v.src.slice(-60),
+              "code:",
+              v.error?.code,
+              "msg:",
+              v.error?.message,
+            );
           }}
         />
       ) : (
@@ -196,19 +218,21 @@ function TextLayerNode({
   onPointerDown: (e: React.PointerEvent) => void;
 }) {
   const bgStyle =
-    layer.bg === "dark"  ? "rgba(0,0,0,0.55)"   :
-    layer.bg === "light" ? "rgba(255,255,255,0.65)" :
-    "transparent";
+    layer.bg === "dark"
+      ? "rgba(0,0,0,0.55)"
+      : layer.bg === "light"
+        ? "rgba(255,255,255,0.65)"
+        : "transparent";
   return (
     <span
       style={{
         position: "absolute",
         left: `${layer.x * 100}%`,
-        top:  `${layer.y * 100}%`,
+        top: `${layer.y * 100}%`,
         transform: `translate(-50%,-50%) rotate(${layer.rotation}deg) scale(${layer.scale})`,
         fontSize: `${layer.fontSize}px`,
-        fontWeight: layer.bold   ? "bold"   : "normal",
-        fontStyle:  layer.italic ? "italic" : "normal",
+        fontWeight: layer.bold ? "bold" : "normal",
+        fontStyle: layer.italic ? "italic" : "normal",
         color: layer.color,
         backgroundColor: bgStyle,
         padding: "2px 8px",
@@ -237,7 +261,7 @@ function StickerNode({
       style={{
         position: "absolute",
         left: `${layer.x * 100}%`,
-        top:  `${layer.y * 100}%`,
+        top: `${layer.y * 100}%`,
         transform: `translate(-50%,-50%) rotate(${layer.rotation}deg) scale(${layer.scale})`,
         fontSize: "clamp(24px, 8vw, 48px)",
         lineHeight: 1,

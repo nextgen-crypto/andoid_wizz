@@ -40,7 +40,9 @@ export function ChildSafetyScreen() {
           <li>Child sexual abuse material (CSAM) or any sexualized depiction of a minor.</li>
           <li>Grooming, sexual solicitation, or sexual contact directed at a minor.</li>
           <li>Sextortion or threats involving intimate images of a minor.</li>
-          <li>Trading, promoting, or linking to CSAM or to any content that sexualizes children.</li>
+          <li>
+            Trading, promoting, or linking to CSAM or to any content that sexualizes children.
+          </li>
           <li>Any other content or conduct that sexually exploits or endangers children.</li>
         </ul>
       </Section>

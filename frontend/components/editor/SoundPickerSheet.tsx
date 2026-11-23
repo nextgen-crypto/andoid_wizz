@@ -7,20 +7,28 @@ import { cn } from "@/lib/utils";
 type Tab = "hot" | "for_you" | "favorites" | "recent";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "hot",       label: "Hot" },
-  { id: "for_you",   label: "For You" },
+  { id: "hot", label: "Hot" },
+  { id: "for_you", label: "For You" },
   { id: "favorites", label: "Favorites" },
-  { id: "recent",    label: "Recent" },
+  { id: "recent", label: "Recent" },
 ];
 
 const FAV_KEY = "wizz:editor:fav-sounds";
 const RECENT_KEY = "wizz:editor:recent-sounds";
 
 function loadIds(key: string): string[] {
-  try { return JSON.parse(localStorage.getItem(key) ?? "[]") as string[]; } catch { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
 }
 function saveIds(key: string, ids: string[]) {
-  try { localStorage.setItem(key, JSON.stringify(ids)); } catch {}
+  try {
+    localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Best-effort; failure is non-fatal.
+  }
 }
 
 export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
@@ -41,10 +49,11 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
   function getPool(): SoundTrackMeta[] {
     let pool = MOCK_SOUNDS;
     if (tab === "favorites") pool = pool.filter((s) => favs.includes(s.id));
-    if (tab === "recent")    pool = pool.filter((s) => recent.includes(s.id));
-    if (q) pool = pool.filter((s) =>
-      s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q),
-    );
+    if (tab === "recent") pool = pool.filter((s) => recent.includes(s.id));
+    if (q)
+      pool = pool.filter(
+        (s) => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q),
+      );
     return pool;
   }
 
@@ -74,7 +83,8 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
         osc.type = "sine";
         osc.frequency.value = hz;
         osc.connect(ctx.destination);
-        osc.start(0); osc.stop(3);
+        osc.start(0);
+        osc.stop(3);
         const buf = await ctx.startRendering();
         const ab = new AudioBuffer({ numberOfChannels: 1, length: buf.length, sampleRate: 44100 });
         ab.copyToChannel(buf.getChannelData(0), 0);
@@ -86,12 +96,14 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
         await a.play().catch(() => undefined);
         setPlayingId(sound.id);
         a.onended = () => setPlayingId(null);
-      } catch {}
+      } catch {
+        // Best-effort; failure is non-fatal.
+      }
     }
     setLoading(null);
   }
 
-  function useSound(sound: SoundTrackMeta) {
+  function applySound(sound: SoundTrackMeta) {
     audioRef.current?.pause();
     setPlayingId(null);
     const newRecent = [sound.id, ...recent.filter((r) => r !== sound.id)].slice(0, 20);
@@ -132,9 +144,7 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
               onClick={() => setTab(t.id)}
               className={cn(
                 "px-3 py-2 text-sm font-semibold transition-colors whitespace-nowrap",
-                tab === t.id
-                  ? "border-b-2 border-white text-white"
-                  : "text-white/50",
+                tab === t.id ? "border-b-2 border-white text-white" : "text-white/50",
               )}
             >
               {t.label}
@@ -152,7 +162,10 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
             />
           </div>
           <button
-            onClick={() => { audioRef.current?.pause(); onClose(); }}
+            onClick={() => {
+              audioRef.current?.pause();
+              onClose();
+            }}
             className="grid size-8 place-items-center rounded-full bg-white/10"
           >
             <X className="size-4 text-white" />
@@ -210,16 +223,20 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
               {isExpanded && (
                 <div className="flex items-center gap-3 px-3 pb-3">
                   <button
-                    onClick={(e) => { e.stopPropagation(); toggleFav(sound.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFav(sound.id);
+                    }}
                     className="flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white"
                   >
-                    <Bookmark
-                      className={cn("size-4", favs.includes(sound.id) && "fill-white")}
-                    />
+                    <Bookmark className={cn("size-4", favs.includes(sound.id) && "fill-white")} />
                     {favs.includes(sound.id) ? "Saved" : "Save"}
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); useSound(sound); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      applySound(sound);
+                    }}
                     className="flex-1 rounded-full bg-[#FE2C55] py-2 text-sm font-bold text-white"
                   >
                     Use
@@ -238,12 +255,21 @@ export function SoundPickerSheet({ onClose }: { onClose: () => void }) {
 function encodeWav(samples: Float32Array, sr: number): ArrayBuffer {
   const buf = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buf);
-  const write = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
-  write(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true);
-  write(8, "WAVEfmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true); view.setUint32(24, sr, true); view.setUint32(28, sr * 2, true);
-  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-  write(36, "data"); view.setUint32(40, samples.length * 2, true);
+  const write = (o: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i));
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  write(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sr, true);
+  view.setUint32(28, sr * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, samples.length * 2, true);
   for (let i = 0; i < samples.length; i++) {
     view.setInt16(44 + i * 2, Math.max(-32768, Math.min(32767, samples[i]! * 32767)), true);
   }

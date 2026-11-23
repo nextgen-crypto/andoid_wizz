@@ -9,14 +9,12 @@ import type { MyProfile } from "@/frontend/hooks/useMyProfile";
 import { supabase } from "@/integrations/supabase/client";
 
 /** Try the browser's Face Detection API (available on Android WebView / Chrome). */
-async function detectFaceCenter(
-  blobUrl: string,
-): Promise<{ x: number; y: number } | null> {
+async function detectFaceCenter(blobUrl: string): Promise<{ x: number; y: number } | null> {
   const FaceDetectorCtor = (window as unknown as Record<string, unknown>)["FaceDetector"] as
     | (new (opts?: unknown) => {
-        detect: (img: HTMLImageElement) => Promise<
-          { boundingBox: { x: number; y: number; width: number; height: number } }[]
-        >;
+        detect: (
+          img: HTMLImageElement,
+        ) => Promise<{ boundingBox: { x: number; y: number; width: number; height: number } }[]>;
       })
     | undefined;
   if (!FaceDetectorCtor) return null;
@@ -25,8 +23,14 @@ async function detectFaceCenter(
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       const timer = window.setTimeout(() => reject(new Error("timeout")), 5000);
-      el.onload = () => { window.clearTimeout(timer); resolve(el); };
-      el.onerror = () => { window.clearTimeout(timer); reject(new Error("error")); };
+      el.onload = () => {
+        window.clearTimeout(timer);
+        resolve(el);
+      };
+      el.onerror = () => {
+        window.clearTimeout(timer);
+        reject(new Error("error"));
+      };
       el.src = blobUrl;
     });
     const faces = await detector.detect(img);
@@ -34,8 +38,7 @@ async function detectFaceCenter(
     // Pick the largest face by bounding-box area
     const face = [...faces].sort(
       (a, b) =>
-        b.boundingBox.width * b.boundingBox.height -
-        a.boundingBox.width * a.boundingBox.height,
+        b.boundingBox.width * b.boundingBox.height - a.boundingBox.width * a.boundingBox.height,
     )[0]!;
     const bb = face.boundingBox;
     return {
@@ -107,7 +110,9 @@ export function EditProfileSheet({
       // Guard with a timeout — content:// arrayBuffer() can hang forever on some devices.
       const ab = await Promise.race<ArrayBuffer>([
         file.arrayBuffer(),
-        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("arrayBuffer timeout")), 5000)),
+        new Promise<never>((_, reject) =>
+          window.setTimeout(() => reject(new Error("arrayBuffer timeout")), 5000),
+        ),
       ]);
       const mime = file.type || "image/jpeg";
       const blob = new Blob([ab], { type: mime });

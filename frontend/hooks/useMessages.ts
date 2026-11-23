@@ -142,10 +142,7 @@ export function useConversations(userId: string | null) {
   return query;
 }
 
-export const messagesQueryOptions = (
-  conversationId: string | null,
-  userId: string | null,
-) =>
+export const messagesQueryOptions = (conversationId: string | null, userId: string | null) =>
   queryOptions({
     queryKey: ["messages", conversationId] as const,
     enabled: Boolean(conversationId && userId),
@@ -197,11 +194,15 @@ export function useMessages(conversationId: string | null, userId: string | null
       // middleware validates the JWT and returns Unauthorized if it's stale.
       if (Capacitor.isNativePlatform()) {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
           if (session && (session.expires_at ?? 0) - Math.floor(Date.now() / 1000) < 60) {
             await supabase.auth.refreshSession();
           }
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
       }
       await sendMessageFn({ data: { conversationId, body: text } });
     },

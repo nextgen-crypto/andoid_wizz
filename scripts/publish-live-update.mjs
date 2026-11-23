@@ -53,8 +53,7 @@ async function ensureBucket() {
   });
   if (create.ok) return;
   const createBody = await create.text();
-  const alreadyExists =
-    create.status === 409 || createBody.includes("BucketAlreadyExists");
+  const alreadyExists = create.status === 409 || createBody.includes("BucketAlreadyExists");
   if (!alreadyExists) {
     throw new Error(`Could not create ${BUCKET} bucket: ${createBody}`);
   }
@@ -74,19 +73,16 @@ async function ensureBucket() {
 }
 
 async function uploadObject(path, body, contentType, cacheControl) {
-  const response = await fetch(
-    `${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`,
-    {
-      method: "POST",
-      headers: {
-        ...headers,
-        "Content-Type": contentType,
-        "Cache-Control": cacheControl,
-        "x-upsert": "true",
-      },
-      body,
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      "Content-Type": contentType,
+      "Cache-Control": cacheControl,
+      "x-upsert": "true",
     },
-  );
+    body,
+  });
   if (!response.ok) {
     throw new Error(`Upload failed for ${path}: ${await response.text()}`);
   }
@@ -163,12 +159,7 @@ const manifest = {
 };
 
 await ensureBucket();
-await uploadObject(
-  zipName,
-  zip,
-  "application/zip",
-  "public, max-age=31536000, immutable",
-);
+await uploadObject(zipName, zip, "application/zip", "public, max-age=31536000, immutable");
 await uploadObject(
   "manifest.json",
   JSON.stringify(manifest, null, 2),
