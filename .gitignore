@@ -21,3 +21,4 @@ local.properties
 android/
 www/
 opencode.json
+.env*

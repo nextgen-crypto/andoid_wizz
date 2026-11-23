@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { CURRENT_USER_ID, creators, news, shorts, videos } from "../database/seed";
 import { cacheAside, TTL } from "../cache/redisCache";
 import { serverSupabase } from "../services/feedService";
+import { r2PublicUrl } from "../lib/r2";
 import type { Creator, LongVideo, NewsArticle, ShortVideo } from "../domain/types";
 
 export interface ShortItem {
@@ -35,11 +36,6 @@ const SYNTHETIC_DEMO_USER: Creator = {
   posts: 0,
 };
 const demoUser = byId.get(CURRENT_USER_ID) ?? creators[0] ?? SYNTHETIC_DEMO_USER;
-
-// Explore/profile responses are cached up to 300s; a 5-minute signature was
-// already dead by the time the cache served its tail. Keep URLs valid for a
-// full day so no cache layer can ever surface an expired link.
-const REAL_MEDIA_TTL = 24 * 60 * 60;
 
 /** Real user uploads filed as Shorts by the orientation classifier. */
 async function realShortItems(): Promise<ShortItem[]> {
@@ -170,13 +166,9 @@ async function hydrateRealVideoRows(
     ),
   ];
   const signed = new Map<string, string>();
-  if (paths.length > 0) {
-    const result = await supabase.storage
-      .from("post-images")
-      .createSignedUrls(paths, REAL_MEDIA_TTL);
-    for (const item of result.data ?? []) {
-      if (item.path && item.signedUrl && !item.error) signed.set(item.path, item.signedUrl);
-    }
+  for (const p of paths) {
+    const url = r2PublicUrl("post-images", p);
+    if (url) signed.set(p, url);
   }
   const authorIds = [...new Set(videos.map((row) => row.author_id))];
   const authors = new Map<

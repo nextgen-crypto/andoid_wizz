@@ -1,41 +1,26 @@
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveStoredMime } from "@/frontend/lib/mediaFormat";
+import {
+  getR2UploadUrl,
+  deleteR2Objects,
+} from "@/backend/api/r2Upload.functions";
 
-const TEN_YEARS = 60 * 60 * 24 * 365 * 10;
-/**
- * Client-minted media URLs must outlive the query caches that hold them
- * (React Query keeps data for 10 minutes after unmount). Five minutes was
- * shorter than the cache, so hydrated lists rendered expired links that
- * storage rejected with `InvalidJWT`.
- */
 export const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
 type UploadOptions = { contentType?: string; width?: number; upsert?: boolean };
 
-/**
- * Native (Android) upload path. The WebView's fetch implementation cannot
- * reliably stream binary blobs inside multipart/form-data bodies — the SDK's
- * default approach. We read the file into an ArrayBuffer and POST it as the
- * raw request body instead, which the native HTTP stack handles without issue.
- * Supabase Storage v1 accepts raw binary when Content-Type is a real file MIME.
- */
-async function nativeUpload(
-  bucket: string,
-  path: string,
-  file: File | Blob,
-  contentType: string | null | undefined,
-  opts?: UploadOptions,
-): Promise<void> {
-  const buffer = await file.arrayBuffer();
+/** Construct a public R2 URL from a bucket + path. Must match backend r2PublicUrl(). */
+function r2PublicUrl(bucket: string, path: string): string {
+  if (path.startsWith("http")) return path;
+  const base = (
+    (import.meta.env["VITE_R2_PUBLIC_URL"] as string | undefined) ?? ""
+  ).replace(/\/$/, "");
+  if (!base) return path;
+  return `${base}/${bucket}/${path}`;
+}
 
-  // On Android/Capacitor the JS auto-refresh timer pauses when the app is
-  // backgrounded, so the access token can silently expire while the app sits
-  // in the background. getSession() reads from localStorage and returns whatever
-  // is there — including stale tokens. When we detect an expired (or soon-to-
-  // expire) token we force a refresh before attempting the upload; otherwise
-  // Supabase falls back to the anon role, the authenticated-only INSERT policy
-  // does not apply, and the response is "permission denied for table objects".
+async function ensureFreshToken(): Promise<string | null> {
   let session = (await supabase.auth.getSession()).data.session;
   if (session) {
     const expiresAt = session.expires_at ?? 0;
@@ -46,16 +31,25 @@ async function nativeUpload(
       if (data.session) session = data.session;
     }
   }
-  const accessToken = session?.access_token;
-  const projectUrl = ((import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ?? "").replace(
-    /\/$/,
-    "",
-  );
-  const publishableKey =
-    (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ?? "";
+  return session?.access_token ?? null;
+}
 
-  const uploadUrl = `${projectUrl}/storage/v1/object/${bucket}/${path}`;
-  const mimeType = contentType ?? "application/octet-stream";
+/**
+ * Upload a file directly to Cloudflare R2 using a server-minted presigned PUT URL.
+ * Works on both native (Capacitor) and web since it's a plain PUT to an HTTPS URL.
+ */
+async function uploadToR2(
+  bucket: string,
+  path: string,
+  file: File | Blob,
+  contentType: string,
+  opts?: UploadOptions,
+): Promise<void> {
+  const { uploadUrl } = await getR2UploadUrl({
+    data: { bucket, path, contentType },
+  });
+
+  const buffer = await file.arrayBuffer();
 
   const MAX_ATTEMPTS = 3;
   let lastError: unknown;
@@ -65,23 +59,15 @@ async function nativeUpload(
     }
     try {
       const response = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          apikey: publishableKey,
-          "Content-Type": mimeType,
-          "x-upsert": opts?.upsert ? "true" : "false",
-          "cache-control": "3600",
-        },
+        method: "PUT",
+        headers: { "Content-Type": contentType },
         body: buffer,
       });
       if (response.ok) return;
       const msg = await response.text().catch(() => `HTTP ${response.status}`);
-      const statusCode = String(response.status);
-      const err = Object.assign(new Error(msg), { statusCode });
-      const isTransient = response.status >= 500;
+      const err = Object.assign(new Error(msg), { statusCode: String(response.status) });
       lastError = err;
-      if (!isTransient) throw err;
+      if (response.status < 500) throw err;
     } catch (err) {
       if (err === lastError) throw err;
       lastError = err instanceof Error ? err : new Error("Failed to fetch");
@@ -96,50 +82,12 @@ async function uploadObject(
   file: File | Blob,
   opts?: UploadOptions,
 ): Promise<void> {
-  const contentType = resolveStoredMime(path, file, opts?.contentType);
-
-  // On Android WebView, sending binary data via FormData in fetch is unreliable
-  // (a known Capacitor/WebView limitation). Use a raw ArrayBuffer POST instead.
-  if (Capacitor.isNativePlatform()) {
-    return nativeUpload(bucket, path, file, contentType, opts);
-  }
-
-  const uploadOptions =
-    contentType || opts?.upsert !== undefined
-      ? {
-          ...(contentType ? { contentType } : {}),
-          ...(opts?.upsert !== undefined ? { upsert: opts.upsert } : {}),
-        }
-      : undefined;
-
-  // Retry up to 3 times with exponential backoff (1s, 2s, 4s).
-  // Mobile networks often drop the connection mid-upload; a single retry
-  // succeeds in the vast majority of cases without alarming the user.
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    if (attempt > 0) {
-      await new Promise((r) => window.setTimeout(r, 1000 * 2 ** (attempt - 1)));
-    }
-    const { error } = await supabase.storage.from(bucket).upload(path, file, uploadOptions);
-    if (!error) return;
-    const msg = error.message?.toLowerCase() ?? "";
-    // Only retry transient network/server errors — not client errors like
-    // permission denied or duplicate path, which retrying can't fix.
-    const transient =
-      msg.includes("failed to fetch") ||
-      msg.includes("networkerror") ||
-      msg.includes("network request failed") ||
-      error.statusCode === "500" ||
-      error.statusCode === "503" ||
-      error.statusCode === "504";
-    lastError = error;
-    if (!transient) break;
-  }
-  throw lastError;
+  const contentType =
+    opts?.contentType ?? resolveStoredMime(path, file, undefined) ?? "application/octet-stream";
+  return uploadToR2(bucket, path, file, contentType, opts);
 }
 
-/** Store the canonical object path; URLs are minted only after post RLS. */
+/** Upload to R2 and return the stored path (not a URL — URL is derived at read time). */
 export async function uploadStoredObject(
   bucket: string,
   path: string,
@@ -151,8 +99,8 @@ export async function uploadStoredObject(
 }
 
 /**
- * Legacy upload + long-lived signed URL for schemas that do not yet expose
- * media-path columns. New posting-integrity rows never use this persistence.
+ * Upload to R2 and return the public URL immediately.
+ * Used by legacy callers that store the URL directly in image_url columns.
  */
 export async function uploadAndSign(
   bucket: string,
@@ -161,18 +109,10 @@ export async function uploadAndSign(
   opts?: UploadOptions,
 ): Promise<string> {
   await uploadObject(bucket, path, file, opts);
-  if (opts?.width) {
-    const transformed = await supabase.storage.from(bucket).createSignedUrl(path, TEN_YEARS, {
-      transform: { width: opts.width, quality: 75 },
-    });
-    if (!transformed.error) return transformed.data.signedUrl;
-  }
-  const signed = await supabase.storage.from(bucket).createSignedUrl(path, TEN_YEARS);
-  if (signed.error) throw signed.error;
-  return signed.data.signedUrl;
+  return r2PublicUrl(bucket, path);
 }
 
-/** Extract the object path from a plain or signed Supabase Storage URL. */
+/** Extract the object path from a plain URL or raw path. */
 export function storageObjectPath(bucket: string, value: string): string | null {
   if (!value) return null;
   if (!value.startsWith("http")) return value;
@@ -186,7 +126,7 @@ export function storageObjectPath(bucket: string, value: string): string | null 
   }
 }
 
-/** Best-effort cleanup after a failed database write or permanent post deletion. */
+/** Delete objects from R2 after post deletion or upload failure. */
 export async function removeStoredObjects(
   bucket: string,
   values: Array<string | null | undefined>,
@@ -200,6 +140,10 @@ export async function removeStoredObjects(
     ),
   ];
   if (paths.length === 0) return;
-  const { error } = await supabase.storage.from(bucket).remove(paths);
-  if (error) console.warn(`[storage] Could not remove ${paths.length} object(s)`, error.message);
+  await deleteR2Objects({ data: { bucket, paths } }).catch((err) =>
+    console.warn(`[r2] Could not remove ${paths.length} object(s)`, err),
+  );
 }
+
+// Re-export ensureFreshToken for callers that need a valid JWT for other purposes.
+export { ensureFreshToken };

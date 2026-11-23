@@ -170,33 +170,31 @@ export function serverSupabase(viewerClient?: SupabaseClient | null): SupabaseCl
  */
 const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
-async function signStoredMedia(
-  supabase: SupabaseClient,
-  path: string | null | undefined,
-  transform?: { width: number; quality: number },
-): Promise<string | null> {
+function r2PublicUrl(path: string | null | undefined): string | null {
   if (!path) return null;
-  const result = await supabase.storage
-    .from("post-images")
-    .createSignedUrl(path, MEDIA_URL_TTL_SECONDS, transform ? { transform } : undefined);
-  return result.error ? null : result.data.signedUrl;
+  if (path.startsWith("http")) return path;
+  const base = (process.env["VITE_R2_PUBLIC_URL"] ?? process.env["R2_PUBLIC_URL"] ?? "").replace(/\/$/, "");
+  if (!base) return path;
+  return `${base}/post-images/${path}`;
 }
 
-async function signStoredMediaBatch(
-  supabase: SupabaseClient,
+function signStoredMedia(
+  _supabase: SupabaseClient,
+  path: string | null | undefined,
+): Promise<string | null> {
+  return Promise.resolve(r2PublicUrl(path));
+}
+
+function signStoredMediaBatch(
+  _supabase: SupabaseClient,
   paths: string[],
 ): Promise<Map<string, string>> {
-  const uniquePaths = [...new Set(paths.filter(Boolean))];
-  if (uniquePaths.length === 0) return new Map();
-  const result = await supabase.storage
-    .from("post-images")
-    .createSignedUrls(uniquePaths, MEDIA_URL_TTL_SECONDS);
-  if (result.error || !result.data) return new Map();
-  return new Map(
-    result.data.flatMap((item) =>
-      item.path && item.signedUrl && !item.error ? [[item.path, item.signedUrl] as const] : [],
-    ),
-  );
+  const map = new Map<string, string>();
+  for (const p of [...new Set(paths.filter(Boolean))]) {
+    const url = r2PublicUrl(p);
+    if (url) map.set(p, url);
+  }
+  return Promise.resolve(map);
 }
 
 interface RealPostRow {

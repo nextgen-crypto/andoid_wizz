@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { r2PublicUrl } from "@/backend/lib/r2";
 
 const OBJECTIVES = [
   "reach",
@@ -16,10 +17,6 @@ const OBJECTIVES = [
 ] as const;
 
 const PACKAGES = ["starter", "growth", "business", "custom"] as const;
-// Ad creatives ride the same cached responses as feeds — match the feed
-// signed-URL lifetime so cached cards never render expired media.
-const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
-
 /** Default budgets (cents) + durations mirror ad_packages seed rows. */
 const PACKAGE_DEFAULTS: Record<string, { budget: number; days: number }> = {
   starter: { budget: 1000000, days: 1 },
@@ -286,20 +283,12 @@ export const fetchActivePromotions = createServerFn({ method: "GET" }).handler(
       const mediaPaths = [...postById.values()].flatMap((post) =>
         post.image_path ? [post.image_path] : [],
       );
-      const signedMedia =
-        mediaPaths.length > 0
-          ? new Map(
-              (
-                (
-                  await db.storage
-                    .from("post-images")
-                    .createSignedUrls(mediaPaths, MEDIA_URL_TTL_SECONDS)
-                ).data ?? []
-              ).flatMap((item) =>
-                item.path && item.signedUrl ? [[item.path, item.signedUrl] as const] : [],
-              ),
-            )
-          : new Map<string, string>();
+      const signedMedia = new Map<string, string>(
+        mediaPaths.flatMap((p) => {
+          const url = r2PublicUrl("post-images", p);
+          return url ? [[p, url] as const] : [];
+        }),
+      );
       const profById = new Map(
         (
           (profiles ?? []) as {
