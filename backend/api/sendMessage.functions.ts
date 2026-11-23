@@ -27,14 +27,27 @@ export const sendMessage = createServerFn({ method: "POST" })
         ? (conv as { user_a_id: string; user_b_id: string }).user_b_id
         : (conv as { user_a_id: string; user_b_id: string }).user_a_id;
 
-    // Insert message with receiver_id for realtime filtering
-    const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+    // Insert message. Try with receiver_id first (needed for realtime filtering);
+    // fall back without it if the column hasn't been migrated yet.
+    const withReceiver = await supabaseAdmin.from("messages").insert({
       conversation_id: data.conversationId,
       sender_id: senderId,
       receiver_id: receiverId,
       body: data.body,
     });
-    if (msgErr) throw msgErr;
+    if (withReceiver.error) {
+      const isSchemaErr =
+        withReceiver.error.code === "PGRST204" ||
+        withReceiver.error.message?.includes("receiver_id") ||
+        withReceiver.error.message?.includes("column");
+      if (!isSchemaErr) throw withReceiver.error;
+      const { error: fallbackErr } = await supabaseAdmin.from("messages").insert({
+        conversation_id: data.conversationId,
+        sender_id: senderId,
+        body: data.body,
+      });
+      if (fallbackErr) throw fallbackErr;
+    }
 
     // Send FCM push to receiver (non-blocking — don't fail the message on push error)
     void (async () => {

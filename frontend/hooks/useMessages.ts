@@ -35,6 +35,16 @@ function orderPair(a: string, b: string): [string, string] {
 
 /** Open (or find) the 1:1 conversation between two users. */
 export async function getOrCreateConversation(me: string, peer: string): Promise<string> {
+  // On Android the JWT timer pauses in background — refresh before any RLS-
+  // protected write so the INSERT policy (auth.uid() = user_a/b_id) can fire.
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && (session.expires_at ?? 0) - Math.floor(Date.now() / 1000) < 60) {
+        await supabase.auth.refreshSession();
+      }
+    } catch { /* non-fatal */ }
+  }
   const [userA, userB] = orderPair(me, peer);
   const { data: existing } = await supabase
     .from("conversations")
