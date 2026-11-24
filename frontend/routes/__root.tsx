@@ -20,6 +20,7 @@ import { AppBootSkeleton } from "@/frontend/components/AppBootSkeleton";
 import { useSession } from "@/frontend/hooks/useSession";
 import { usePushNotifications } from "@/frontend/hooks/usePushNotifications";
 import { useMessageNotifications } from "@/frontend/hooks/useMessageNotifications";
+import { usePlayStoreUpdate } from "@/frontend/hooks/usePlayStoreUpdate";
 import { queryPersistenceOptions } from "@/frontend/lib/offlineStorage";
 import appCss from "../styles.css?url";
 import { reportAppError } from "../lib/error-reporting";
@@ -137,6 +138,29 @@ function GlobalNotifications() {
   return null;
 }
 
+function PlayStoreUpdateBanner() {
+  const { updateAvailable, playStoreUrl } = usePlayStoreUpdate();
+  if (!updateAvailable) return null;
+  return (
+    <div className="fixed bottom-20 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl bg-brand px-4 py-3 shadow-lg">
+      <p className="text-sm font-semibold text-brand-foreground">
+        A new version of WIZZ is available!
+      </p>
+      <p className="mt-0.5 text-xs text-brand-foreground/80">
+        Update now for the latest features and fixes.
+      </p>
+      <a
+        href={playStoreUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2 inline-flex items-center justify-center rounded-full bg-white px-5 py-1.5 text-xs font-bold text-brand"
+      >
+        Update on Play Store
+      </a>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { loading: sessionLoading } = useSession();
@@ -157,6 +181,7 @@ function RootComponent() {
         {/* Show skeleton while auth session is resolving to avoid white flash. */}
         {sessionLoading ? <AppBootSkeleton /> : <Outlet />}
       </CommentsProvider>
+      <PlayStoreUpdateBanner />
       <Toaster position="top-center" />
     </PersistQueryClientProvider>
   );

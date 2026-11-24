@@ -355,15 +355,6 @@ export function AuthScreen() {
         Continue with Google
       </button>
 
-      <button
-        type="button"
-        onClick={magicLink}
-        disabled={busy}
-        className="mt-2 inline-flex items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-semibold text-foreground disabled:opacity-60"
-      >
-        Email me a sign-in link instead
-      </button>
-
       <p className="mt-6 text-center text-xs leading-relaxed text-muted-foreground">
         By continuing you agree to the WIZZ community guidelines and privacy policy.
       </p>
