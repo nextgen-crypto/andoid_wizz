@@ -1,10 +1,6 @@
-import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveStoredMime } from "@/frontend/lib/mediaFormat";
-import {
-  getR2UploadUrl,
-  deleteR2Objects,
-} from "@/backend/api/r2Upload.functions";
+import { deleteR2Objects, uploadFileViaServer } from "@/backend/api/r2Upload.functions";
 
 export const MEDIA_URL_TTL_SECONDS = 24 * 60 * 60;
 
@@ -13,9 +9,10 @@ type UploadOptions = { contentType?: string; width?: number; upsert?: boolean };
 /** Construct a public R2 URL from a bucket + path. Must match backend r2PublicUrl(). */
 function r2PublicUrl(bucket: string, path: string): string {
   if (path.startsWith("http")) return path;
-  const base = (
-    (import.meta.env["VITE_R2_PUBLIC_URL"] as string | undefined) ?? ""
-  ).replace(/\/$/, "");
+  const base = ((import.meta.env["VITE_R2_PUBLIC_URL"] as string | undefined) ?? "").replace(
+    /\/$/,
+    "",
+  );
   if (!base) return path;
   return `${base}/${bucket}/${path}`;
 }
@@ -35,8 +32,11 @@ async function ensureFreshToken(): Promise<string | null> {
 }
 
 /**
- * Upload a file directly to Cloudflare R2 using a server-minted presigned PUT URL.
- * Works on both native (Capacitor) and web since it's a plain PUT to an HTTPS URL.
+ * Upload a file to Cloudflare R2.
+ *
+ * On native (Android WebView origin = https://localhost) a presigned PUT hits a
+ * CORS block, so we route through a server function that uploads with its own
+ * credentials — no CORS involved. On web we use the presigned URL directly.
  */
 async function uploadToR2(
   bucket: string,
@@ -45,35 +45,16 @@ async function uploadToR2(
   contentType: string,
   opts?: UploadOptions,
 ): Promise<void> {
-  const { uploadUrl } = await getR2UploadUrl({
-    data: { bucket, path, contentType },
-  });
-
+  // Route every upload through the server function so the server's own
+  // R2 credentials are used — no CORS preflight from the browser, works
+  // identically on web and native.
   const buffer = await file.arrayBuffer();
-
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    if (attempt > 0) {
-      await new Promise((r) => window.setTimeout(r, 1000 * 2 ** (attempt - 1)));
-    }
-    try {
-      const response = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": contentType },
-        body: buffer,
-      });
-      if (response.ok) return;
-      const msg = await response.text().catch(() => `HTTP ${response.status}`);
-      const err = Object.assign(new Error(msg), { statusCode: String(response.status) });
-      lastError = err;
-      if (response.status < 500) throw err;
-    } catch (err) {
-      if (err === lastError) throw err;
-      lastError = err instanceof Error ? err : new Error("Failed to fetch");
-    }
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, bytes.length)));
   }
-  throw lastError;
+  await uploadFileViaServer({ data: { bucket, path, contentType, b64: btoa(binary) } });
 }
 
 async function uploadObject(
